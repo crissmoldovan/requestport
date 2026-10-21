@@ -1,0 +1,118 @@
+/* The retired order and the retired palette: imports the wrong way round, raw
+ * colours, raw lengths, and a pixel breakpoint. */
+@import "@cueplusplus/ui/styles.css";
+@import "tailwindcss";
+
+.legacy-panel {
+  background: #101315;
+  border-radius: 4px;
+  color: rgb(240, 238, 233);
+  padding: 12px;
+}
+
+.legacy-inset {
+  margin: -1px;
+  margin-left: -18px;
+  padding-inline: var(--gap-2rem);
+}
+
+.ui-callout {
+  background: var(--cue-bg-raised);
+}
+
+/* An unlayered `:root` that redeclares names the token layer publishes. Tailwind
+ * emits the bridge inside `@layer theme`, and an unlayered declaration beats
+ * every layer — so this one value replaces the density-scaled corner radius for
+ * every installed component that reads it, on every theme, while the rest of
+ * the scan sees nothing but one raw length. */
+:root {
+  --radius-control: 3px;
+}
+
+/* Three names the token layer publishes that the manifest's three lists never
+ * mention, redeclared on the one element the application does own. `body` is
+ * unlayered here, so each wins over the package's own `:root`, and every
+ * descendant inherits it: the pill radius flattens to a square, the hairline
+ * triples, and the document's sans face becomes the mono one — on all nine
+ * themes and every density. Every value is a token or a zero, so no colour rule
+ * and no geometry rule sees any of it. */
+body {
+  --cue-radius-full: 0;
+  --cue-border-width: var(--cue-space-1);
+  --cue-font-sans: var(--cue-font-mono);
+}
+
+/* The two bounded content widths section 5.2 permits as reviewed tuples. They
+ * are raw lengths, so the scan reports both — and a run that reviews one of
+ * them must report exactly the other. That is the only way the allowlist
+ * mechanism is falsifiable at all: a matcher that licensed everything and a
+ * matcher that licensed nothing look identical against an empty list. */
+:root {
+  --page-form: 42rem;
+  --page-administration: 48rem;
+}
+
+/* A second, hand-maintained theme block. Every value is a token, so nothing
+ * else in the scan objects to it — and it drifts from the package preset the
+ * moment the package ships a new one. */
+[data-theme="requestport"] {
+  --cue-bg: var(--cue-neutral-950);
+}
+
+/* Not a theme block: an ordinary component state attribute. */
+.legacy-panel[data-state="open"] {
+  display: block;
+}
+
+.legacy-nest {
+  background: #0b0e0f;
+
+  &:hover {
+    border-radius: 6px;
+  }
+}
+
+@media (max-width: 899px) {
+  .legacy-panel {
+    gap: 8px;
+  }
+}
+
+/* Tailwind v4's own way of declaring design tokens. The declarations sit at
+ * at-rule level rather than under a selector, which is the other door into the
+ * same room as the nested rule above: a raw ground colour and a raw rung, in
+ * the shipped stylesheet, under no selector at all. */
+@theme {
+  --color-ground: #101315;
+  --spacing-tight: 3px;
+}
+
+/* A brace inside a quoted value is text, not punctuation. A reader that let it
+ * rewrite the brace stack closed this rule at the `content` and dropped every
+ * declaration written after it — the raw ground colour below is the one that
+ * got away. */
+.legacy-quote::before {
+  content: "}";
+  color: #ff0000;
+}
+
+/* The other half of the same mistake: an opening brace in a value pushed a
+ * block nobody wrote, and what followed was reported against a selector nobody
+ * wrote either. */
+.legacy-quote::after {
+  content: "{";
+  padding: 7px;
+}
+
+/* A family name with an apostrophe in it: ordinary CSS, and a quote nothing
+ * closes. Without the newline recovery CSS itself specifies, the reader stayed
+ * inside that string to the end of the file — so this rule's raw colour and
+ * every rule after it left the scan on account of one apostrophe. */
+.legacy-stack {
+  font-family: Rock'nRoll, sans-serif;
+  color: #ff0000;
+}
+
+.legacy-tail {
+  padding: 6px;
+}

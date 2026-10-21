@@ -1,0 +1,749 @@
+{
+  "routes": "apps/web/src/app at 29a3aac6 (main, the merge of G.7a, #198)",
+  "normalisation": [],
+  "cases": [
+    {
+      "name": "an accepted start: 201",
+      "request": {
+        "method": "POST",
+        "url": "https://requestport.test/api/v1/imports/artifacts",
+        "headers": [
+          ["authorization", "Bearer golden-fake-credential"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"expectedVersion\":0,\"idempotencyKey\":\"golden-import-idempotency-0001\",\"action\":\"start\",\"repositoryUrl\":\"https://example.test/golden.git\",\"repositoryId\":\"018f0000-0000-7000-8000-00000000c106\",\"gitCommitSha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"dirty\":false,\"manifestSha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}"
+      },
+      "response": {
+        "status": 201,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"sourceId\":\"018f0000-0000-7000-8000-00000000c104\",\"snapshotId\":\"018f0000-0000-7000-8000-00000000c105\",\"version\":1}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "authenticate",
+            "args": ["api"]
+          },
+          {
+            "call": "rateLimit.consume",
+            "args": [
+              {
+                "environment": "test",
+                "endpointClass": "import_ingestion",
+                "principalFingerprint": "hmac(018f0000-0000-7000-8000-00000000b104 | 018f0000-0000-7000-8000-00000000b103)",
+                "limit": 60,
+                "windowSeconds": 60,
+                "cost": 1
+              }
+            ]
+          },
+          {
+            "call": "imports",
+            "args": [
+              "requireAgentAccess",
+              {
+                "organizationId": "018f0000-0000-7000-8000-00000000b101",
+                "projectId": "018f0000-0000-7000-8000-00000000b102",
+                "agentPrincipalId": "018f0000-0000-7000-8000-00000000b103",
+                "authorizationId": "018f0000-0000-7000-8000-00000000b104",
+                "delegatedByUserId": "b1-delegating-user"
+              }
+            ]
+          },
+          {
+            "call": "imports",
+            "args": [
+              "beginCapture",
+              {
+                "organizationId": "018f0000-0000-7000-8000-00000000b101",
+                "projectId": "018f0000-0000-7000-8000-00000000b102",
+                "actorId": "018f0000-0000-7000-8000-00000000b103",
+                "actorType": "agent",
+                "repositoryUrl": "https://example.test/golden.git",
+                "repositoryId": "018f0000-0000-7000-8000-00000000c106",
+                "gitCommitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "dirty": false,
+                "manifestSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "expectedVersion": 0,
+                "idempotencyKey": "golden-import-idempotency-0001",
+                "fingerprintSecret": "b1-characterisation-signing-material-0001"
+              }
+            ]
+          }
+        ],
+        "transactions": 1,
+        "metrics": [
+          {
+            "kind": "count",
+            "name": "rate_limit.decision_total",
+            "labels": {
+              "endpointClass": "import_ingestion",
+              "status": "allowed"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an accepted append: 200",
+      "request": {
+        "method": "POST",
+        "url": "https://requestport.test/api/v1/imports/artifacts",
+        "headers": [
+          ["authorization", "Bearer golden-fake-credential"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"expectedVersion\":1,\"idempotencyKey\":\"golden-import-idempotency-0001\",\"action\":\"append\",\"sourceId\":\"018f0000-0000-7000-8000-00000000c104\",\"snapshotId\":\"018f0000-0000-7000-8000-00000000c105\",\"artifacts\":[{\"relativePath\":\"notes/characterised.md\",\"mediaType\":\"text/markdown\",\"byteSize\":49,\"sha256\":\"41a6221c76c3c4bf973d166099a7e6f33c33accc38688875cc7128cb26e81561\",\"base64Bytes\":\"IyBDaGFyYWN0ZXJpc2VkCgpBbiBhcnRpZmFjdCB0aGUgZ29sZGVucyB1cGxvYWQuCg==\"}]}"
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"appended\":1,\"version\":2}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "authenticate",
+            "args": ["api"]
+          },
+          {
+            "call": "rateLimit.consume",
+            "args": [
+              {
+                "environment": "test",
+                "endpointClass": "import_ingestion",
+                "principalFingerprint": "hmac(018f0000-0000-7000-8000-00000000b104 | 018f0000-0000-7000-8000-00000000b103)",
+                "limit": 60,
+                "windowSeconds": 60,
+                "cost": 1
+              }
+            ]
+          },
+          {
+            "call": "imports",
+            "args": [
+              "requireAgentAccess",
+              {
+                "organizationId": "018f0000-0000-7000-8000-00000000b101",
+                "projectId": "018f0000-0000-7000-8000-00000000b102",
+                "agentPrincipalId": "018f0000-0000-7000-8000-00000000b103",
+                "authorizationId": "018f0000-0000-7000-8000-00000000b104",
+                "delegatedByUserId": "b1-delegating-user"
+              }
+            ]
+          },
+          {
+            "call": "imports",
+            "args": [
+              "appendCaptureArtifacts",
+              {
+                "organizationId": "018f0000-0000-7000-8000-00000000b101",
+                "projectId": "018f0000-0000-7000-8000-00000000b102",
+                "sourceId": "018f0000-0000-7000-8000-00000000c104",
+                "snapshotId": "018f0000-0000-7000-8000-00000000c105",
+                "artifacts": [
+                  {
+                    "relativePath": "notes/characterised.md",
+                    "mediaType": "text/markdown",
+                    "byteSize": 49,
+                    "sha256": "41a6221c76c3c4bf973d166099a7e6f33c33accc38688875cc7128cb26e81561",
+                    "exactBytes": {
+                      "$bytes": "IyBDaGFyYWN0ZXJpc2VkCgpBbiBhcnRpZmFjdCB0aGUgZ29sZGVucyB1cGxvYWQuCg=="
+                    },
+                    "secretScanStatus": "clear"
+                  }
+                ],
+                "actorId": "018f0000-0000-7000-8000-00000000b103",
+                "actorType": "agent",
+                "expectedVersion": 1,
+                "idempotencyKey": "golden-import-idempotency-0001",
+                "fingerprintSecret": "b1-characterisation-signing-material-0001"
+              }
+            ]
+          }
+        ],
+        "transactions": 1,
+        "metrics": [
+          {
+            "kind": "count",
+            "name": "rate_limit.decision_total",
+            "labels": {
+              "endpointClass": "import_ingestion",
+              "status": "allowed"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an accepted finalize: 200",
+      "request": {
+        "method": "POST",
+        "url": "https://requestport.test/api/v1/imports/artifacts",
+        "headers": [
+          ["authorization", "Bearer golden-fake-credential"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"expectedVersion\":2,\"idempotencyKey\":\"golden-import-idempotency-0001\",\"action\":\"finalize\",\"sourceId\":\"018f0000-0000-7000-8000-00000000c104\",\"snapshotId\":\"018f0000-0000-7000-8000-00000000c105\"}"
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"finalized\":true,\"version\":3}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "authenticate",
+            "args": ["api"]
+          },
+          {
+            "call": "rateLimit.consume",
+            "args": [
+              {
+                "environment": "test",
+                "endpointClass": "import_ingestion",
+                "principalFingerprint": "hmac(018f0000-0000-7000-8000-00000000b104 | 018f0000-0000-7000-8000-00000000b103)",
+                "limit": 60,
+                "windowSeconds": 60,
+                "cost": 1
+              }
+            ]
+          },
+          {
+            "call": "imports",
+            "args": [
+              "requireAgentAccess",
+              {
+                "organizationId": "018f0000-0000-7000-8000-00000000b101",
+                "projectId": "018f0000-0000-7000-8000-00000000b102",
+                "agentPrincipalId": "018f0000-0000-7000-8000-00000000b103",
+                "authorizationId": "018f0000-0000-7000-8000-00000000b104",
+                "delegatedByUserId": "b1-delegating-user"
+              }
+            ]
+          },
+          {
+            "call": "imports",
+            "args": [
+              "finalizeCapture",
+              {
+                "organizationId": "018f0000-0000-7000-8000-00000000b101",
+                "projectId": "018f0000-0000-7000-8000-00000000b102",
+                "sourceId": "018f0000-0000-7000-8000-00000000c104",
+                "snapshotId": "018f0000-0000-7000-8000-00000000c105",
+                "actorId": "018f0000-0000-7000-8000-00000000b103",
+                "actorType": "agent",
+                "correlationId": "018f0000-0000-7000-8000-00000000b1cc",
+                "expectedVersion": 2,
+                "idempotencyKey": "golden-import-idempotency-0001",
+                "fingerprintSecret": "b1-characterisation-signing-material-0001"
+              }
+            ]
+          }
+        ],
+        "transactions": 1,
+        "metrics": [
+          {
+            "kind": "count",
+            "name": "rate_limit.decision_total",
+            "labels": {
+              "endpointClass": "import_ingestion",
+              "status": "allowed"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an append with a blocked secret candidate: 422",
+      "request": {
+        "method": "POST",
+        "url": "https://requestport.test/api/v1/imports/artifacts",
+        "headers": [
+          ["authorization", "Bearer golden-fake-credential"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"expectedVersion\":1,\"idempotencyKey\":\"golden-import-idempotency-0001\",\"action\":\"append\",\"sourceId\":\"018f0000-0000-7000-8000-00000000c104\",\"snapshotId\":\"018f0000-0000-7000-8000-00000000c105\",\"artifacts\":[{\"relativePath\":\"notes/characterised.md\",\"mediaType\":\"text/markdown\",\"byteSize\":43,\"sha256\":\"291afd3ae66f473a5b12e3f1aeab850b80562c573ad1dcdc65bba64f946d5041\",\"base64Bytes\":\"cGFzc3dvcmQ6IGNoYXJhY3RlcmlzZWQtbm90LWEtc2VjcmV0LXZhbHVlCg==\"}]}"
+      },
+      "response": {
+        "status": 422,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"error\":\"validation_failed\",\"message\":\"The import capture input is invalid.\"}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "authenticate",
+            "args": ["api"]
+          },
+          {
+            "call": "rateLimit.consume",
+            "args": [
+              {
+                "environment": "test",
+                "endpointClass": "import_ingestion",
+                "principalFingerprint": "hmac(018f0000-0000-7000-8000-00000000b104 | 018f0000-0000-7000-8000-00000000b103)",
+                "limit": 60,
+                "windowSeconds": 60,
+                "cost": 1
+              }
+            ]
+          },
+          {
+            "call": "imports",
+            "args": [
+              "requireAgentAccess",
+              {
+                "organizationId": "018f0000-0000-7000-8000-00000000b101",
+                "projectId": "018f0000-0000-7000-8000-00000000b102",
+                "agentPrincipalId": "018f0000-0000-7000-8000-00000000b103",
+                "authorizationId": "018f0000-0000-7000-8000-00000000b104",
+                "delegatedByUserId": "b1-delegating-user"
+              }
+            ]
+          }
+        ],
+        "transactions": 1,
+        "metrics": [
+          {
+            "kind": "count",
+            "name": "rate_limit.decision_total",
+            "labels": {
+              "endpointClass": "import_ingestion",
+              "status": "allowed"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a declared body over 9 MiB: 413",
+      "request": {
+        "method": "POST",
+        "url": "https://requestport.test/api/v1/imports/artifacts",
+        "headers": [
+          ["authorization", "Bearer golden-fake-credential"],
+          ["content-length", "9437185"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"expectedVersion\":0,\"idempotencyKey\":\"golden-import-idempotency-0001\",\"action\":\"start\",\"repositoryUrl\":\"https://example.test/golden.git\",\"repositoryId\":\"018f0000-0000-7000-8000-00000000c106\",\"gitCommitSha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"dirty\":false,\"manifestSha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}"
+      },
+      "response": {
+        "status": 413,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"error\":\"request_too_large\"}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "authenticate",
+            "args": ["api"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "no bearer: 401 with the challenge",
+      "request": {
+        "method": "POST",
+        "url": "https://requestport.test/api/v1/imports/artifacts",
+        "headers": [
+          ["authorization", "Bearer golden-fake-credential"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"expectedVersion\":0,\"idempotencyKey\":\"golden-import-idempotency-0001\",\"action\":\"start\",\"repositoryUrl\":\"https://example.test/golden.git\",\"repositoryId\":\"018f0000-0000-7000-8000-00000000c106\",\"gitCommitSha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"dirty\":false,\"manifestSha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}"
+      },
+      "response": {
+        "status": 401,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"],
+          [
+            "www-authenticate",
+            "Bearer resource_metadata=\"https://requestport.test/.well-known/oauth-protected-resource/api/v1\""
+          ]
+        ],
+        "body": "{\"error\":\"unauthenticated\",\"message\":\"A valid agent credential is required.\"}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "authenticate",
+            "args": ["api"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "an opaque token: 401 asking for the resource indicator",
+      "request": {
+        "method": "POST",
+        "url": "https://requestport.test/api/v1/imports/artifacts",
+        "headers": [
+          ["authorization", "Bearer golden-fake-credential"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"expectedVersion\":0,\"idempotencyKey\":\"golden-import-idempotency-0001\",\"action\":\"start\",\"repositoryUrl\":\"https://example.test/golden.git\",\"repositoryId\":\"018f0000-0000-7000-8000-00000000c106\",\"gitCommitSha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"dirty\":false,\"manifestSha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}"
+      },
+      "response": {
+        "status": 401,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"],
+          [
+            "www-authenticate",
+            "Bearer error=\"invalid_token\", error_description=\"The credential presented is not an access token this resource can verify. Authorize again and send the resource indicator from resource_metadata on the authorization request and on every token request, refreshes included.\", resource_metadata=\"https://requestport.test/.well-known/oauth-protected-resource/api/v1\""
+          ]
+        ],
+        "body": "{\"error\":\"unauthenticated\",\"message\":\"The credential presented is not an access token this resource can verify. Authorize again and send the resource indicator from resource_metadata on the authorization request and on every token request, refreshes included.\"}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "authenticate",
+            "args": ["api"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "text/plain: 422",
+      "request": {
+        "method": "POST",
+        "url": "https://requestport.test/api/v1/imports/artifacts",
+        "headers": [
+          ["authorization", "Bearer golden-fake-credential"],
+          ["content-type", "text/plain"]
+        ],
+        "body": "{\"expectedVersion\":0,\"idempotencyKey\":\"golden-import-idempotency-0001\",\"action\":\"start\",\"repositoryUrl\":\"https://example.test/golden.git\",\"repositoryId\":\"018f0000-0000-7000-8000-00000000c106\",\"gitCommitSha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"dirty\":false,\"manifestSha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}"
+      },
+      "response": {
+        "status": 422,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"error\":\"validation_failed\",\"message\":\"The import capture input is invalid.\"}"
+      },
+      "admission": {
+        "calls": []
+      }
+    },
+    {
+      "name": "invalid JSON: 422",
+      "request": {
+        "method": "POST",
+        "url": "https://requestport.test/api/v1/imports/artifacts",
+        "headers": [
+          ["authorization", "Bearer golden-fake-credential"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{not json"
+      },
+      "response": {
+        "status": 422,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"error\":\"validation_failed\"}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "authenticate",
+            "args": ["api"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a payload the schema refuses: 422",
+      "request": {
+        "method": "POST",
+        "url": "https://requestport.test/api/v1/imports/artifacts",
+        "headers": [
+          ["authorization", "Bearer golden-fake-credential"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"expectedVersion\":0,\"idempotencyKey\":\"golden-import-idempotency-0001\",\"action\":\"replace\",\"repositoryUrl\":\"https://example.test/golden.git\",\"repositoryId\":\"018f0000-0000-7000-8000-00000000c106\",\"gitCommitSha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"dirty\":false,\"manifestSha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}"
+      },
+      "response": {
+        "status": 422,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"error\":\"validation_failed\"}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "authenticate",
+            "args": ["api"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a grant without import:write: 403",
+      "request": {
+        "method": "POST",
+        "url": "https://requestport.test/api/v1/imports/artifacts",
+        "headers": [
+          ["authorization", "Bearer golden-fake-credential"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"expectedVersion\":0,\"idempotencyKey\":\"golden-import-idempotency-0001\",\"action\":\"start\",\"repositoryUrl\":\"https://example.test/golden.git\",\"repositoryId\":\"018f0000-0000-7000-8000-00000000c106\",\"gitCommitSha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"dirty\":false,\"manifestSha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}"
+      },
+      "response": {
+        "status": 403,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"error\":\"forbidden\",\"message\":\"The credential is not permitted to capture imports.\"}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "authenticate",
+            "args": ["api"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a lane-bound grant: 403",
+      "request": {
+        "method": "POST",
+        "url": "https://requestport.test/api/v1/imports/artifacts",
+        "headers": [
+          ["authorization", "Bearer golden-fake-credential"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"expectedVersion\":0,\"idempotencyKey\":\"golden-import-idempotency-0001\",\"action\":\"start\",\"repositoryUrl\":\"https://example.test/golden.git\",\"repositoryId\":\"018f0000-0000-7000-8000-00000000c106\",\"gitCommitSha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"dirty\":false,\"manifestSha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}"
+      },
+      "response": {
+        "status": 403,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"error\":\"forbidden\",\"message\":\"The credential is not permitted to capture imports.\"}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "authenticate",
+            "args": ["api"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a grant bound to no project: refused",
+      "request": {
+        "method": "POST",
+        "url": "https://requestport.test/api/v1/imports/artifacts",
+        "headers": [
+          ["authorization", "Bearer golden-fake-credential"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"expectedVersion\":0,\"idempotencyKey\":\"golden-import-idempotency-0001\",\"action\":\"start\",\"repositoryUrl\":\"https://example.test/golden.git\",\"repositoryId\":\"018f0000-0000-7000-8000-00000000c106\",\"gitCommitSha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"dirty\":false,\"manifestSha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}"
+      },
+      "response": {
+        "status": 403,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"error\":\"forbidden\",\"message\":\"The credential is not permitted to capture imports.\"}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "authenticate",
+            "args": ["api"]
+          },
+          {
+            "call": "rateLimit.consume",
+            "args": [
+              {
+                "environment": "test",
+                "endpointClass": "import_ingestion",
+                "principalFingerprint": "hmac(018f0000-0000-7000-8000-00000000b104 | 018f0000-0000-7000-8000-00000000b103)",
+                "limit": 60,
+                "windowSeconds": 60,
+                "cost": 1
+              }
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "kind": "count",
+            "name": "rate_limit.decision_total",
+            "labels": {
+              "endpointClass": "import_ingestion",
+              "status": "allowed"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "the import_ingestion class refused: 429",
+      "request": {
+        "method": "POST",
+        "url": "https://requestport.test/api/v1/imports/artifacts",
+        "headers": [
+          ["authorization", "Bearer golden-fake-credential"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"expectedVersion\":0,\"idempotencyKey\":\"golden-import-idempotency-0001\",\"action\":\"start\",\"repositoryUrl\":\"https://example.test/golden.git\",\"repositoryId\":\"018f0000-0000-7000-8000-00000000c106\",\"gitCommitSha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"dirty\":false,\"manifestSha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}"
+      },
+      "response": {
+        "status": 429,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"],
+          ["retry-after", "42"]
+        ],
+        "body": "{\"error\":\"rate_limited\",\"message\":\"Too many import records. Retry later.\"}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "authenticate",
+            "args": ["api"]
+          },
+          {
+            "call": "rateLimit.consume",
+            "args": [
+              {
+                "environment": "test",
+                "endpointClass": "import_ingestion",
+                "principalFingerprint": "hmac(018f0000-0000-7000-8000-00000000b104 | 018f0000-0000-7000-8000-00000000b103)",
+                "limit": 60,
+                "windowSeconds": 60,
+                "cost": 1
+              }
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "kind": "count",
+            "name": "rate_limit.decision_total",
+            "labels": {
+              "endpointClass": "import_ingestion",
+              "status": "denied"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a repository that throws: 500",
+      "request": {
+        "method": "POST",
+        "url": "https://requestport.test/api/v1/imports/artifacts",
+        "headers": [
+          ["authorization", "Bearer golden-fake-credential"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"expectedVersion\":0,\"idempotencyKey\":\"golden-import-idempotency-0001\",\"action\":\"start\",\"repositoryUrl\":\"https://example.test/golden.git\",\"repositoryId\":\"018f0000-0000-7000-8000-00000000c106\",\"gitCommitSha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"dirty\":false,\"manifestSha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}"
+      },
+      "response": {
+        "status": 500,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"error\":\"unexpected_error\"}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "authenticate",
+            "args": ["api"]
+          },
+          {
+            "call": "rateLimit.consume",
+            "args": [
+              {
+                "environment": "test",
+                "endpointClass": "import_ingestion",
+                "principalFingerprint": "hmac(018f0000-0000-7000-8000-00000000b104 | 018f0000-0000-7000-8000-00000000b103)",
+                "limit": 60,
+                "windowSeconds": 60,
+                "cost": 1
+              }
+            ]
+          },
+          {
+            "call": "imports",
+            "args": [
+              "requireAgentAccess",
+              {
+                "organizationId": "018f0000-0000-7000-8000-00000000b101",
+                "projectId": "018f0000-0000-7000-8000-00000000b102",
+                "agentPrincipalId": "018f0000-0000-7000-8000-00000000b103",
+                "authorizationId": "018f0000-0000-7000-8000-00000000b104",
+                "delegatedByUserId": "b1-delegating-user"
+              }
+            ]
+          },
+          {
+            "call": "imports",
+            "args": [
+              "beginCapture",
+              {
+                "organizationId": "018f0000-0000-7000-8000-00000000b101",
+                "projectId": "018f0000-0000-7000-8000-00000000b102",
+                "actorId": "018f0000-0000-7000-8000-00000000b103",
+                "actorType": "agent",
+                "repositoryUrl": "https://example.test/golden.git",
+                "repositoryId": "018f0000-0000-7000-8000-00000000c106",
+                "gitCommitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "dirty": false,
+                "manifestSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "expectedVersion": 0,
+                "idempotencyKey": "golden-import-idempotency-0001",
+                "fingerprintSecret": "b1-characterisation-signing-material-0001"
+              }
+            ]
+          }
+        ],
+        "transactions": 1,
+        "metrics": [
+          {
+            "kind": "count",
+            "name": "rate_limit.decision_total",
+            "labels": {
+              "endpointClass": "import_ingestion",
+              "status": "allowed"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

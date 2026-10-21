@@ -1,0 +1,135 @@
+{
+  "routes": "apps/web/src/app at 29a3aac6 (main, the merge of G.7a, #198)",
+  "normalisation": [],
+  "cases": [
+    {
+      "name": "GET /api/health/live",
+      "request": {
+        "method": "GET",
+        "url": "https://requestport.test/api/health/live",
+        "headers": []
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"ok\":true}"
+      },
+      "admission": {
+        "calls": []
+      }
+    },
+    {
+      "name": "GET /api/health/ready, the storage ready: 200",
+      "request": {
+        "method": "GET",
+        "url": "https://requestport.test/api/health/ready",
+        "headers": []
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"ready\":true}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "storage.ready",
+            "args": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "GET /api/health/ready, the storage not ready: 503",
+      "request": {
+        "method": "GET",
+        "url": "https://requestport.test/api/health/ready",
+        "headers": []
+      },
+      "response": {
+        "status": 503,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"ready\":false}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "storage.ready",
+            "args": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "GET /api/health/ready, the storage silent past 2,000 ms: 503",
+      "request": {
+        "method": "GET",
+        "url": "https://requestport.test/api/health/ready",
+        "headers": []
+      },
+      "response": {
+        "status": 503,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"ready\":false}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "storage.ready",
+            "args": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "GET /api/health/ready, the web root refusing its storage: 503",
+      "request": {
+        "method": "GET",
+        "url": "https://requestport.test/api/health/ready",
+        "headers": []
+      },
+      "response": {
+        "status": 503,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"ready\":false}"
+      },
+      "admission": {
+        "calls": []
+      }
+    },
+    {
+      "name": "GET /api/health/ready in a process whose server configuration does not parse: 503",
+      "request": {
+        "method": "GET",
+        "url": "https://requestport.test/api/health/ready",
+        "headers": []
+      },
+      "response": {
+        "status": 503,
+        "headers": [
+          ["cache-control", "no-store"],
+          ["content-type", "application/json"]
+        ],
+        "body": "{\"ready\":false}"
+      },
+      "admission": {
+        "calls": []
+      }
+    }
+  ]
+}

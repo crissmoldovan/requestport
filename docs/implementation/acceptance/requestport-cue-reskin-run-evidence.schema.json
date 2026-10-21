@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://requestport.com/schemas/requestport-cue-reskin-run-evidence.schema.json",
+  "title": "RequestPort native CUE++ reskin acceptance run evidence",
+  "description": "What one accepted continuous-integration run of the deterministic acceptance did, keyed to the commit it ran against. It is the opposite of the case table beside it: the table says what is to be run and records no outcome, this document records outcomes and describes no case. It borrows exactly one thing from the table — the case identifier — and binds to the table by digest, so the two read together are the whole picture and neither can be edited into the other. This document is written only for a run whose every gate passed: it is the sealed evidence for an accepted application commit, so it declares no vocabulary for a failure and cannot record one. Why a run failed is read from that run's own logs, which the workflow and run identifiers address. It also carries no digest of itself, because no document can: the checksum belongs to the attestation the workflow produces over the uploaded file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "acceptedApplicationSha",
+    "artifacts",
+    "gates",
+    "kind",
+    "matrix",
+    "results",
+    "retentionDays",
+    "version",
+    "workflow"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./requestport-cue-reskin-run-evidence.schema.json"
+    },
+    "acceptedApplicationSha": {
+      "description": "The exact RequestPort application commit this run accepted, as a full 40-character git object name. Continuous integration sets it from the commit the run was dispatched for, which is why it must equal the workflow head below; an abbreviated name is refused because two commits can share a prefix.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "artifacts": {
+      "description": "Every file this run uploaded, each with the digest that makes it citable later. An entry without a digest names a file nobody can prove they are looking at, so the digest is required rather than optional. A run in which nothing failed uploads nothing and the list is empty; the retention below still applies to the evidence itself.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    },
+    "gates": {
+      "description": "The gates that passed, named from a closed set. Presence is the outcome: a gate that did not pass means no evidence document, so a gate cannot appear here with a result attached to it.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/gate"
+      }
+    },
+    "kind": {
+      "description": "The discriminator, so that neither this document nor the case table can be read as the other by a reader that only looked at the shape. The case table declares no such field.",
+      "const": "run-evidence"
+    },
+    "matrix": {
+      "description": "The case table this run answered, bound by content digest. Without the digest the identifiers below would mean whatever the table happens to say today.",
+      "$ref": "#/$defs/boundDocument"
+    },
+    "results": {
+      "description": "One entry per case the bound table declares — no more, no fewer. An entry is an identifier and an outcome, never a copy of the case: a case's theme, density, viewport, surface, state and owners live in the table, and restating them here would create a second place for them to disagree.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/result"
+      }
+    },
+    "retentionDays": {
+      "description": "How long the uploaded artifacts and this document are stored, in days. Bounded on both sides: zero would mean nothing was kept, and ninety is the longest an Actions artifact can live.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 90
+    },
+    "version": {
+      "const": 1
+    },
+    "workflow": {
+      "description": "Which run produced this document. Identifiers only: a reader reconstructs the address from the repository and the run identifier, and an address written down here would be one more string nothing verifies.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headSha",
+        "path",
+        "repository",
+        "runAttempt",
+        "runId"
+      ],
+      "properties": {
+        "headSha": {
+          "description": "The commit the run was dispatched for. It must equal the accepted application commit above — that equality is what 'keyed to the run's commit' means, and it is the one relation this schema cannot express on its own.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "path": {
+          "description": "The checked-in workflow file that ran the gates. It is pinned by the accepted application commit, which is the commit it was read from, so it needs no separate digest.",
+          "enum": [
+            ".github/workflows/ci.yml",
+            ".github/workflows/staging-acceptance.yml",
+            ".github/workflows/verify-reusable.yml"
+          ]
+        },
+        "repository": {
+          "const": "cueplusplus/requestport"
+        },
+        "runAttempt": {
+          "description": "Which attempt of that run this is. A rerun of the same commit is a different attempt, not a different document.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "runId": {
+          "description": "The Actions run identifier, as decimal digits. This is the address of the logs that explain anything this document deliberately does not say.",
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,19}$"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "sha256",
+        "sizeBytes"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/artifactName"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "artifactName": {
+      "description": "The closed set of files this run may upload. One member today: the browser runner keeps a trace and a final screenshot for a failing case and deletes a passing case's output directory, so this is the only file the acceptance produces that outlives the run. The set widens when the workflow starts uploading something else, and not before.",
+      "enum": [
+        "browser-failure-artifacts"
+      ]
+    },
+    "boundDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "const": "docs/implementation/acceptance/requestport-cue-reskin-matrix.json"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "gate": {
+      "description": "The gates the reusable verification workflow runs against one clean checkout, each named for the command that is its whole definition.",
+      "enum": [
+        "browser-acceptance",
+        "build",
+        "lint",
+        "migration-history",
+        "migration-race",
+        "typecheck",
+        "unit-tests"
+      ]
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempts",
+        "id",
+        "outcome"
+      ],
+      "properties": {
+        "attempts": {
+          "description": "How many times the runner ran this case. Bounded at two because continuous integration allows exactly one retry; a case that passed on its second attempt is a fact worth sealing, and a larger number would claim a run the runner cannot have made.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "id": {
+          "description": "The case identifier from the bound table. This is the one thing this document borrows from the table, and borrowing only the identifier is what keeps the two documents from becoming copies of each other.",
+          "type": "string",
+          "pattern": "^(?:appearance|route-state)-[0-9]{4}$"
+        },
+        "outcome": {
+          "description": "There is no third value. A skip is deterministic and its reason belongs to the case, not to the run: the table and the checked-in skip rules decide it, so recording a reason here would restate the catalogue. A failure produces no evidence document at all.",
+          "enum": [
+            "passed",
+            "skipped"
+          ]
+        }
+      }
+    }
+  }
+}

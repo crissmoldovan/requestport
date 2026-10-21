@@ -1,0 +1,40 @@
+{
+  "name": "@requestport/server",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./artifact-import": "./src/artifact-import.ts",
+    "./auth": "./src/auth.ts",
+    "./bearer-challenge": "./src/bearer-challenge.ts",
+    "./better-auth-errors": "./src/better-auth-errors.ts",
+    "./discovery": "./src/discovery.ts",
+    "./e2e-csp-fence": "./src/e2e-csp-fence.ts",
+    "./health": "./src/health.ts",
+    "./input-limits": "./src/input-limits.ts",
+    "./mcp": "./src/mcp.ts",
+    "./project-scope": "./src/project-scope.ts",
+    "./rate-limit": "./src/rate-limit.ts",
+    "./rest": "./src/rest.ts",
+    "./security-headers": "./src/security-headers.ts",
+    "./unauthorized": "./src/unauthorized.ts"
+  },
+  "scripts": {
+    "lint": "biome check src test",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@requestport/auth": "workspace:*",
+    "@requestport/core": "workspace:*",
+    "@requestport/db": "workspace:*",
+    "@requestport/domain": "workspace:*",
+    "@requestport/importer": "workspace:*",
+    "@requestport/mcp": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@requestport/config": "workspace:*",
+    "@types/node": "22.20.1"
+  }
+}

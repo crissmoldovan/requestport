@@ -1,0 +1,28 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../..",
+    "outDir": "dist/declarations",
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "jsx": "react-jsx",
+    "types": ["node", "react"]
+  },
+  "include": [
+    "../config/src/**/*.ts",
+    "../core/src/**/*.ts",
+    "../db/src/**/*.ts",
+    "../domain/src/**/*.ts",
+    "../importer/src/**/*.ts",
+    "../jobs/src/**/*.ts",
+    "../notifications/src/**/*.ts",
+    "../notifications/src/**/*.tsx",
+    "../webhooks/src/**/*.ts"
+  ],
+  "exclude": [
+    "../*/src/**/*.test.ts",
+    "../*/src/**/*.test.tsx",
+    "../*/src/**/test-support/**",
+    "../db/src/tenant-scope-sweep.exceptions.ts"
+  ]
+}

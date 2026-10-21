@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://requestport.com/schemas/requestport-cue-reskin-matrix.schema.json",
+  "title": "RequestPort native CUE++ reskin deterministic acceptance case table",
+  "description": "A static catalogue of the browser cases local acceptance must run. It records what is to be run and who owns each case's fixture and cleanup. It deliberately records no run result, workflow identifier, artifact reference or accepted commit: those belong to the separate run-evidence artifact a run produces.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "cases",
+    "engines",
+    "lanes",
+    "version",
+    "viewports"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./requestport-cue-reskin-matrix.schema.json"
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/case"
+      }
+    },
+    "engines": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/engine"
+      }
+    },
+    "lanes": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/lane"
+      }
+    },
+    "version": {
+      "const": 1
+    },
+    "viewports": {
+      "type": "array",
+      "minItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/viewport"
+      }
+    }
+  },
+  "$defs": {
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cleanupOwner",
+        "density",
+        "engine",
+        "fixtureOwner",
+        "id",
+        "lane",
+        "mode",
+        "pointer",
+        "scheme",
+        "state",
+        "surface",
+        "theme",
+        "viewport"
+      ],
+      "properties": {
+        "cleanupOwner": {
+          "enum": [
+            "browser-context",
+            "scenario-run"
+          ]
+        },
+        "density": {
+          "enum": [
+            "ultra-compact",
+            "normal",
+            "large"
+          ]
+        },
+        "engine": {
+          "$ref": "#/$defs/engine"
+        },
+        "fixtureOwner": {
+          "enum": [
+            "account-switch-and-sign-out",
+            "conflicting-write",
+            "console-hygiene",
+            "data-tables",
+            "fault-injection-scope",
+            "form-fields",
+            "global-error-boundary",
+            "horizontal-overflow",
+            "hydration-agreement",
+            "keyboard-focus",
+            "loading-boundary",
+            "long-values",
+            "member-denied",
+            "no-flash-prepaint",
+            "not-found-boundary",
+            "organization-inheritance",
+            "overlay-surfaces",
+            "preference-persistence",
+            "provider-unavailable",
+            "route-error-boundary",
+            "scenario-cleanup",
+            "seeded-owner-identity",
+            "seeded-project-data",
+            "sentinel-redaction"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^(?:appearance|route-state)-[0-9]{4}$"
+        },
+        "lane": {
+          "$ref": "#/$defs/lane"
+        },
+        "mode": {
+          "enum": [
+            "system",
+            "dark",
+            "light"
+          ]
+        },
+        "pointer": {
+          "description": "The pointer the case is driven with. A narrowed window still reports a mouse, so `(pointer: coarse)` — and every accommodation the token layer publishes behind it — is unreachable unless a case can ask for touch. Section 13 verifies mobile composition at the two narrow widths, and those are the coarse ones.",
+          "enum": [
+            "coarse",
+            "fine"
+          ]
+        },
+        "scheme": {
+          "enum": [
+            "dark",
+            "light"
+          ]
+        },
+        "state": {
+          "enum": [
+            "conflict",
+            "default",
+            "destructive",
+            "disabled",
+            "empty",
+            "error",
+            "loading",
+            "member_denied",
+            "not_found",
+            "pending",
+            "provider_unavailable",
+            "success"
+          ]
+        },
+        "surface": {
+          "enum": [
+            "boundary:error:(app)",
+            "boundary:error:(app)/settings/appearance",
+            "boundary:error:(auth)",
+            "boundary:error:root",
+            "boundary:global-error:root",
+            "boundary:loading:(app)",
+            "boundary:loading:(app)/settings/appearance",
+            "boundary:loading:(auth)",
+            "boundary:loading:oauth",
+            "boundary:not-found:(app)",
+            "boundary:not-found:(auth)",
+            "boundary:not-found:root",
+            "route:/",
+            "route:/activity",
+            "route:/agents",
+            "route:/agents/[agentId]",
+            "route:/auth-error",
+            "route:/docs/api",
+            "route:/docs/mcp",
+            "route:/imports",
+            "route:/imports/[runId]",
+            "route:/oauth/agent-consent",
+            "route:/questions",
+            "route:/questions/[questionId]/deliveries",
+            "route:/requests",
+            "route:/requests/[requestId]",
+            "route:/requests/new",
+            "route:/search",
+            "route:/settings/appearance",
+            "route:/settings/members",
+            "route:/settings/operations",
+            "route:/settings/operators",
+            "route:/settings/organization",
+            "route:/settings/projects",
+            "route:/settings/projects/[projectId]",
+            "route:/settings/projects/new",
+            "route:/settings/routing",
+            "route:/sign-in",
+            "route:/slack",
+            "route:/webhooks",
+            "route:/webhooks/[subscriptionId]"
+          ]
+        },
+        "theme": {
+          "enum": [
+            "requestport",
+            "cue",
+            "terminal",
+            "signal",
+            "venu",
+            "hivehub",
+            "dusk",
+            "luma",
+            "snuffle"
+          ]
+        },
+        "viewport": {
+          "$ref": "#/$defs/viewport"
+        }
+      }
+    },
+    "engine": {
+      "enum": [
+        "chromium",
+        "webkit"
+      ]
+    },
+    "lane": {
+      "enum": [
+        "appearance",
+        "route-state"
+      ]
+    },
+    "viewport": {
+      "description": "One declared viewport, as a pair. The height and the width are not independent axes: enumerating them separately would have admitted sixteen combinations where the table declares four, and a case could then claim a size no run was ever meant to take.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "height",
+        "width"
+      ],
+      "enum": [
+        {
+          "height": 844,
+          "width": 390
+        },
+        {
+          "height": 1024,
+          "width": 768
+        },
+        {
+          "height": 768,
+          "width": 1024
+        },
+        {
+          "height": 900,
+          "width": 1440
+        }
+      ],
+      "properties": {
+        "height": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

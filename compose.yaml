@@ -1,0 +1,93 @@
+# The local database stack: one PostgreSQL on 127.0.0.1:55432.
+#
+# Local development and `scripts/verify-locally.mjs` reach it with
+# `REQUESTPORT_DATABASE_DRIVER=pg` (node-postgres, the PostgreSQL wire protocol).
+# Until 2026-09-28 a second service, a WebSocket proxy, stood in front of it
+# for a serverless driver, which speaks WebSocket and which a plain
+# PostgreSQL refuses; Plan 13's Track E.2 moved local runs to pg and took the
+# proxy out of the stack. Its container was removed on 2026-09-30.
+#
+#   docker compose up -d       # bring it up
+#   docker compose ps          # what is running
+#   docker compose down        # put it away; named volume survives
+#
+# Run them here or in any directory below: `docker compose` looks for this file
+# in the working directory and each parent, unless COMPOSE_FILE or
+# COMPOSE_PROJECT_NAME is exported, which points it at another file or project.
+# `pnpm run clean --stack` runs the third in this directory with this file and
+# its project named on the command line (`--project-name requestport-local
+# --file compose.yaml`), and passes docker no COMPOSE_ variable.
+
+# Without this the compose project takes the directory's basename — which, in a
+# git worktree, is the worktree's name rather than the repository's. Two
+# checkouts of this repo would then own two different stacks on the same port.
+# Named here, every checkout drives the same one.
+name: requestport-local
+
+services:
+  # Keep the name `db`: renaming a service makes compose create a new
+  # container for it. (It was also the name the retired WebSocket proxy dialled.)
+  db:
+    image: postgres:17-alpine
+    # The scripts reach the server by this name, with `docker exec`
+    # (`LOCAL_DATABASE_CONTAINER` in scripts/create-track-worktree.mjs).
+    container_name: requestport-local-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: requestport_local
+      POSTGRES_USER: requestport
+      # Not a secret, and deliberately written in full rather than interpolated.
+      # It authenticates a throwaway database bound to 127.0.0.1 that holds only
+      # fixtures, and the value is meaningless anywhere else. Interpolation was
+      # the alternative and is worse than it looks: `${...}` here would resolve
+      # from the environment of whatever runs compose, and from a `.env` file
+      # beside this one, so the password would depend on who started the stack,
+      # while scripts/create-track-worktree.mjs writes this one into each
+      # track's `.env.local`.
+      POSTGRES_PASSWORD: requestport_local
+      # Store that password with one SCRAM iteration, not PostgreSQL's 4,096.
+      # It mattered for that serverless driver, which derives the SCRAM key in
+      # JavaScript, one awaited `crypto.subtle.sign` per iteration, on every new
+      # connection: at 4,096 that measured 167–332ms of CPU per connection and
+      # the database suites timed out on a busy host (2026-09-27). pg, which
+      # local runs use now, derives it with the platform's native PBKDF2, and
+      # measured side by side on 2026-09-28 (50 connections each, interleaved,
+      # load average 43–54) the iteration count barely moves it: pg 1.4ms of
+      # CPU per connection at 1 and 1.8ms at 4,096; that driver 2.4ms at 1 and
+      # 62.7ms at 4,096. It stays because it costs nothing and keeps that driver
+      # usable against this database through a proxy run by hand.
+      #
+      # It has to be an initdb argument: initdb stores this password before any
+      # server starts. Measured in a throwaway postgres:17-alpine container, this
+      # stores `SCRAM-SHA-256$1` and writes `scram_iterations = 1` into the new
+      # postgresql.conf, so later password changes use 1 too; a `command:` of
+      # `postgres -c scram_iterations=1` left the role at `SCRAM-SHA-256$4096`.
+      # initdb runs only on an empty volume, so this does nothing to an existing
+      # stack, whose role keeps the count it was stored with. To store it once
+      # with one iteration, with the stack up (the password does not change and
+      # nothing restarts):
+      #
+      #   docker exec requestport-local-db psql -U requestport -d requestport_local \
+      #     -c "SET scram_iterations = 1" \
+      #     -c "ALTER ROLE requestport PASSWORD 'requestport_local'"
+      #
+      # Editing this block makes the next `compose up` recreate this container;
+      # the named volume and its data survive.
+      POSTGRES_INITDB_ARGS: "-c scram_iterations=1"
+    ports:
+      # Loopback only. This database answers anything that reaches it.
+      - "127.0.0.1:55432:5432"
+    volumes:
+      # Named, so `compose down` keeps the data: `pnpm run clean --stack` runs
+      # `docker compose down` with no `--volumes`, and the hand-made container
+      # this replaces kept PGDATA on an anonymous volume that no name could
+      # bring back.
+      - requestport-local-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U requestport -d requestport_local"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  requestport-local-pgdata:

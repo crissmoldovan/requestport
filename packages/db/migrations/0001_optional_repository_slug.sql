@@ -1,0 +1,1 @@
+ALTER TABLE "project_repositories" ALTER COLUMN "repository_slug" DROP NOT NULL;

@@ -1,0 +1,29 @@
+{
+  "name": "@requestport/trigger",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "biome check src trigger.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@requestport/config": "workspace:*",
+    "@requestport/db": "workspace:*",
+    "@requestport/domain": "workspace:*",
+    "@requestport/jobs": "workspace:*",
+    "@requestport/notifications": "workspace:*",
+    "@requestport/importer": "workspace:*",
+    "@requestport/webhooks": "workspace:*",
+    "@slack/web-api": "8.0.0",
+    "@trigger.dev/sdk": "4.6.4",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@trigger.dev/build": "4.6.4",
+    "@types/node": "22.20.1",
+    "trigger.dev": "4.6.4"
+  }
+}

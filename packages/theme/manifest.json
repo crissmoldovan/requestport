@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "name": "requestport",
+  "package": "@requestport/theme",
+  "extends": "@cueplusplus/theme-base@^1",
+  "mode": "complete",
+  "supportsLight": true,
+  "colors": {
+    "dark": {
+      "bg": "#0a0d0e",
+      "sunken": "#07090a",
+      "surface-1": "#101416",
+      "surface-2": "#151a1d",
+      "surface-3": "#1a2024",
+      "fg": "#f0eee9",
+      "fg-muted": "#a3a6a8",
+      "fg-subtle": "#83888c",
+      "border": "#293034",
+      "border-strong": "#61686d",
+      "border-overlay": "#3f484e",
+      "accent": "#e66a45",
+      "accent-hover": "#f07a53",
+      "accent-fg": "#160d09",
+      "ok": "#63b482",
+      "busy": "#9a8cdb",
+      "warn": "#d6a65a",
+      "warn-fg": "#07090a",
+      "danger": "#dc6d69",
+      "danger-fg": "#07090a",
+      "info": "#6eb7d9",
+      "stream": "#7cc4e8",
+      "selection": "rgba(230,106,69,0.18)",
+      "focus": "#e66a45",
+      "data-ground": "#000000",
+      "scrim": "rgba(0,0,0,0.72)"
+    },
+    "light": {
+      "bg": "#f4f3ef",
+      "sunken": "#e7e6e1",
+      "surface-1": "#faf9f6",
+      "surface-2": "#ffffff",
+      "surface-3": "#deddd8",
+      "fg": "#1a1d1e",
+      "fg-muted": "#53595c",
+      "fg-subtle": "#5b6165",
+      "border": "#d0d2cf",
+      "border-strong": "#7f8689",
+      "border-overlay": "#aeb4b5",
+      "accent": "#a14026",
+      "accent-hover": "#963b23",
+      "accent-fg": "#ffffff",
+      "ok": "#247746",
+      "busy": "#604aaa",
+      "warn": "#8a5b00",
+      "warn-fg": "#f4f3ef",
+      "danger": "#aa2f2b",
+      "danger-fg": "#f4f3ef",
+      "info": "#1d6587",
+      "stream": "#15607f",
+      "selection": "rgba(161,64,38,0.18)",
+      "focus": "#a14026",
+      "data-ground": "#000000",
+      "scrim": "rgba(20,18,15,0.45)"
+    }
+  },
+  "fonts": {
+    "font-mono": "\"Geist Mono\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+  },
+  "densities": {
+    "adds": {},
+    "overrides": {}
+  },
+  "fontPairings": {
+    "adds": {},
+    "overrides": {}
+  },
+  "contrast": {
+    "passes": true,
+    "advisories": 0,
+    "waived": 0,
+    "digest": "sha256-b5c4c47001623a450ec95ce439ce0de191ecb49507b58478e5f36f2c6cafa309"
+  }
+}

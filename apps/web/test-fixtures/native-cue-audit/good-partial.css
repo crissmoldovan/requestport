@@ -1,0 +1,10 @@
+/* A fragment of a document that already opened with the published pair. It
+ * carries no preamble of its own on purpose: re-importing Tailwind and the
+ * CUE++ styles here would duplicate the whole token layer inside the sheet
+ * that imported it. */
+.app-frame > footer {
+  align-items: center;
+  display: flex;
+  gap: var(--cue-space-4);
+  min-height: var(--cue-chrome-statusbar);
+}

@@ -1,0 +1,188 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1786856053206,
+      "tag": "0000_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786856929151,
+      "tag": "0001_optional_repository_slug",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786858845762,
+      "tag": "0002_better_auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786860455774,
+      "tag": "0003_signup_eligibility_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786861401224,
+      "tag": "0004_signup_eligibility_post_lock_recheck",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786875659768,
+      "tag": "0005_invitation_membership_activation",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786969772338,
+      "tag": "0006_stale_ogun",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786970576400,
+      "tag": "0007_even_post",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786972192148,
+      "tag": "0008_short_cassandra_nova",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786972665735,
+      "tag": "0009_smooth_randall_flagg",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786978859747,
+      "tag": "0010_exotic_darwin",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786987081522,
+      "tag": "0011_wet_inhumans",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1786998572967,
+      "tag": "0012_next_deathstrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787016123249,
+      "tag": "0013_mean_hobgoblin",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1787249904267,
+      "tag": "0014_requestport_appearance",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1788725865999,
+      "tag": "0015_fluffy_dorian_gray",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1788730453867,
+      "tag": "0016_hot_randall",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790563755713,
+      "tag": "0017_better_auth_1_7_expand",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790645236722,
+      "tag": "0018_operator_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790653951069,
+      "tag": "0019_row_security_expand",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790754779213,
+      "tag": "0020_worker_row_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790760866934,
+      "tag": "0021_live_credential_locks",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791515308940,
+      "tag": "0022_better_auth_1_7_contract",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792117798713,
+      "tag": "0023_worker_execute_contract",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792346684549,
+      "tag": "0024_command_receipts_row_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792353780375,
+      "tag": "0025_row_security_contract",
+      "breakpoints": true
+    }
+  ]
+}

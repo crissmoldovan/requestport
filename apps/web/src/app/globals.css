@@ -1,0 +1,85 @@
+@import "tailwindcss";
+@import "@cueplusplus/ui/styles.css";
+@import "@requestport/theme/theme.css";
+@import "@cueplusplus/theme-cue/theme.css";
+@import "@cueplusplus/theme-terminal/theme.css";
+@import "@cueplusplus/theme-signal/theme.css";
+@import "@cueplusplus/theme-venu/theme.css";
+@import "@cueplusplus/theme-hivehub/theme.css";
+@import "@cueplusplus/theme-dusk/theme.css";
+@import "@cueplusplus/theme-luma/theme.css";
+@import "@cueplusplus/theme-snuffle/theme.css";
+
+/* The nine themes `src/lib/app-themes.ts` registers, and each must come after
+ * `@cueplusplus/ui/styles.css`. A theme's `[data-theme]` block and the blank
+ * base's bare `:root` tie at (0,1,0), so the one declared later wins: a theme
+ * imported first is painted over by the base. */
+
+/* Everything RequestPort owns, and each rule below is a surface no CUE++
+ * component owns.
+ *
+ * `<body>` is one of them. The provider stamps the appearance attributes on it
+ * and publishes the two Geist families through them, but it paints nothing —
+ * so ground, ink and the document's inherited type are the application's to
+ * declare, and every one of them resolves through a `--cue-*` token so the
+ * document follows the resolved theme, density and mode exactly as everything
+ * inside it does.
+ *
+ * The focus ring is the other. It is drawn over every component and owned by
+ * none of them, and the rule that declares its colour says why it has to be
+ * declared before the ring exists.
+ *
+ * Nothing else survives the reskin. Tailwind's own preflight owns the reset;
+ * `AppShell.Root` owns the viewport-tall frame, the single scroller and the
+ * navigation in both of its shapes; `PageShell` owns the content measure;
+ * `sr-only` is a Tailwind utility. The retired palette, the `.ui-*` recipes,
+ * the local icon geometry and the second type scale are gone with the package
+ * that needed them.
+ *
+ * Two constraints govern anything added back here. It resolves through a
+ * `--cue-*` token or a token-backed utility — a literal colour or length has no
+ * answer to a theme or a density. And it never *declares* a name the token
+ * layer publishes: Tailwind emits that layer inside `@layer theme`, an
+ * unlayered rule outranks every layer, and a single
+ * `:root { --radius-control: 3px }` here silently replaced the density-scaled
+ * corner radius for every installed component that read it.
+ * `src/app/styles.test.ts` and the native audit hold both constraints, and the
+ * same suite names the selectors this stylesheet may write at all. Writing a
+ * rule into Tailwind's own `base` layer is what keeps it beneath the utilities,
+ * so a `className` on an element still wins — and is the same reason it can
+ * never shadow the token layer by accident. */
+@layer base {
+  /* The focus ring's colour, declared before the ring exists.
+   *
+   * Every control chassis the package ships suppresses its outline at rest and
+   * repaints it on `:focus-visible` from the accent token — and carries a
+   * colour transition, whose property list in Tailwind v4 covers
+   * `outline-color`. So the ring's colour changes the instant focus lands, and
+   * animates from the value the element's outline already had. Nothing
+   * declared one, which makes it `currentColor`: the control's own ink. The
+   * ring is therefore drawn at full width and solid in the control's text
+   * colour for the whole transition, and on the primary action that ink is
+   * light-on-accent — a ring that starts invisible against a light ground, on
+   * exactly the control a keyboard user reaches first.
+   *
+   * The chassis is the package's and this stylesheet cannot edit it. Declaring
+   * the ring's own colour as the resting one leaves the change nothing to
+   * animate, so the indicator is its token colour in the frame it appears.
+   * `outline-color` draws nothing by itself, so this reaches every element
+   * without altering any of them until one takes focus — including the ones
+   * that fall back to the browser's own ring, which is then painted in the
+   * theme's focus colour too. `src/app/styles.test.ts` reads which colour that
+   * is out of the installed package, so this follows the ring the package
+   * draws rather than a memory of it. */
+  * {
+    outline-color: var(--cue-accent);
+  }
+
+  body {
+    background: var(--cue-bg);
+    color: var(--cue-fg);
+    font-family: var(--cue-font-sans);
+    font-size: var(--cue-text-body);
+    line-height: 1.45;
+  }
+}

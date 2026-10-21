@@ -1,0 +1,31 @@
+/* The published import order, then app-owned layout only: tokens for every
+ * colour, unit-free values for the shell grid, one app-owned custom property
+ * whose name the token layer does not publish, and one reviewed responsive
+ * threshold. */
+@import "tailwindcss";
+@import "@cueplusplus/ui/styles.css";
+@import "./good-partial.css";
+
+:root {
+  color-scheme: light dark;
+}
+
+.app-frame {
+  --app-frame-seam: var(--cue-border);
+  background: var(--cue-bg);
+  color: var(--cue-fg);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  height: 100dvh;
+}
+
+.app-frame > aside {
+  border-right: var(--cue-border-width) solid var(--app-frame-seam);
+  min-width: 0;
+}
+
+@media (min-width: 40rem) {
+  .app-frame {
+    grid-template-columns: min-content 1fr;
+  }
+}

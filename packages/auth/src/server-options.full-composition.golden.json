@@ -1,0 +1,245 @@
+{
+  "account": {
+    "encryptOAuthTokens": true
+  },
+  "advanced": {
+    "useSecureCookies": true
+  },
+  "appName": "RequestPort",
+  "baseURL": "https://requestport.com",
+  "database": {},
+  "databaseHooks": {
+    "user": {
+      "create": {
+        "before": "[function]"
+      }
+    }
+  },
+  "disabledPaths": ["/change-password"],
+  "onAPIError": {
+    "errorURL": "https://requestport.com/auth-error"
+  },
+  "plugins": [
+    {
+      "endpoints": ["getJwks", "getToken", "signJWT", "verifyJWT"],
+      "hooks": {
+        "after": 1,
+        "before": 0
+      },
+      "id": "jwt",
+      "options": {
+        "disableSettingJwtHeader": true,
+        "jwks": {
+          "gracePeriod": 604800,
+          "rotationInterval": 2592000
+        },
+        "jwt": {
+          "expirationTime": "15 minutes",
+          "issuer": "https://requestport.com"
+        }
+      }
+    },
+    {
+      "endpoints": [
+        "createApiKey",
+        "deleteAllExpiredApiKeys",
+        "deleteApiKey",
+        "getApiKey",
+        "listApiKeys",
+        "updateApiKey",
+        "verifyApiKey"
+      ],
+      "hooks": {
+        "after": 0,
+        "before": 1
+      },
+      "id": "api-key"
+    },
+    {
+      "endpoints": [
+        "adminCreateOAuthClient",
+        "adminCreateOAuthResource",
+        "adminDeleteOAuthResource",
+        "adminGetOAuthResource",
+        "adminLinkClientResource",
+        "adminListOAuthResources",
+        "adminUnlinkClientResource",
+        "adminUpdateOAuthClient",
+        "adminUpdateOAuthResource",
+        "createOAuthClient",
+        "deleteOAuthClient",
+        "deleteOAuthConsent",
+        "getOAuthClient",
+        "getOAuthClientPublic",
+        "getOAuthClientPublicPrelogin",
+        "getOAuthClients",
+        "getOAuthConsent",
+        "getOAuthConsents",
+        "getOAuthServerConfig",
+        "getOpenIdConfig",
+        "oauth2Authorize",
+        "oauth2Consent",
+        "oauth2Continue",
+        "oauth2EndSession",
+        "oauth2EndSessionConfirmation",
+        "oauth2Introspect",
+        "oauth2Revoke",
+        "oauth2Token",
+        "oauth2UserInfo",
+        "registerOAuthClient",
+        "rotateClientSecret",
+        "updateOAuthClient",
+        "updateOAuthConsent"
+      ],
+      "hooks": {
+        "after": 1,
+        "before": 1
+      },
+      "id": "oauth-provider",
+      "options": {
+        "accessTokenExpiresIn": 900,
+        "allowDynamicClientRegistration": true,
+        "allowPublicClientPrelogin": true,
+        "allowUnauthenticatedClientRegistration": true,
+        "claims": ["sub", "iss", "aud", "exp", "iat", "sid", "scope", "azp"],
+        "clientRegistrationAllowedResources": [
+          "https://requestport.com/mcp",
+          "https://requestport.com/api/v1"
+        ],
+        "clientRegistrationAllowedScopes": [
+          "project:provision",
+          "request:triage",
+          "request:complete",
+          "request:verify",
+          "webhook:manage",
+          "import:write",
+          "openid",
+          "offline_access",
+          "org:read",
+          "project:read",
+          "request:create",
+          "request:read",
+          "request:write",
+          "question:answer",
+          "work:claim",
+          "work:update",
+          "agent:register"
+        ],
+        "clientRegistrationDefaultResources": [],
+        "clientRegistrationDefaultScopes": [
+          "openid",
+          "offline_access",
+          "org:read",
+          "project:read",
+          "request:create",
+          "request:read",
+          "request:write",
+          "question:answer",
+          "work:claim",
+          "work:update",
+          "agent:register"
+        ],
+        "codeExpiresIn": 600,
+        "consentPage": "/oauth/agent-consent",
+        "customAccessTokenClaims": "[function]",
+        "disableJwtPlugin": false,
+        "enforcePerClientResources": false,
+        "grantTypes": ["authorization_code", "refresh_token"],
+        "loginPage": "/sign-in",
+        "m2mAccessTokenExpiresIn": 3600,
+        "rateLimit": {
+          "authorize": {
+            "max": 30,
+            "window": 60
+          },
+          "introspect": {
+            "max": 100,
+            "window": 60
+          },
+          "register": {
+            "max": 5,
+            "window": 60
+          },
+          "revoke": {
+            "max": 30,
+            "window": 60
+          },
+          "token": {
+            "max": 20,
+            "window": 60
+          },
+          "userinfo": {
+            "max": 60,
+            "window": 60
+          }
+        },
+        "refreshTokenExpiresIn": 2592000,
+        "refreshTokenReuseInterval": 0,
+        "resources": [
+          "https://requestport.com/mcp",
+          "https://requestport.com/api/v1"
+        ],
+        "scopes": [
+          "openid",
+          "offline_access",
+          "project:provision",
+          "org:read",
+          "project:read",
+          "request:create",
+          "request:read",
+          "request:write",
+          "request:triage",
+          "request:complete",
+          "request:verify",
+          "question:answer",
+          "work:claim",
+          "work:update",
+          "agent:register",
+          "webhook:manage",
+          "import:write"
+        ],
+        "storeClientSecret": "hashed",
+        "storeTokens": "hashed"
+      }
+    },
+    {
+      "endpoints": ["magicLinkVerify", "signInMagicLink"],
+      "hooks": null,
+      "id": "magic-link",
+      "options": {
+        "sendMagicLink": "[function]",
+        "storeToken": "hashed"
+      }
+    },
+    {
+      "endpoints": [],
+      "hooks": {
+        "after": 0,
+        "before": 2
+      },
+      "id": "requestport-signup-policy"
+    },
+    {
+      "endpoints": [],
+      "hooks": {
+        "after": 0,
+        "before": 1
+      },
+      "id": "requestport-agent-grant-integrity"
+    }
+  ],
+  "secret": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "socialProviders": {
+    "github": {
+      "clientId": "github-client",
+      "clientSecret": "github-secret"
+    }
+  },
+  "trustedOrigins": [
+    "https://requestport.com",
+    "https://staging.requestport.com",
+    "https://*.preview.requestport.com",
+    "https://requestport.vercel.app",
+    "https://requestport-*-cueplusplus.vercel.app"
+  ]
+}

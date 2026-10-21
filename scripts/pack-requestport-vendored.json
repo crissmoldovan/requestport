@@ -1,0 +1,156 @@
+{
+  "about": "The vendored copies of third-party packages that carry no package.json of their own, inside a package of @requestport/web's notices (Plan 13, H.7 round 7; ruling 199 item 1). scripts/pack-requestport.mjs's listedVendoredPackages reads it: an entry names the installed package that holds the copy (holder, by name, and its version) and the copy's path there, the copy's SHA-256, what was read to review it (reviewed), and the packages it bundles, each with the licence its package.json declares and the text of its licence file, which THIRD-PARTY-NOTICES enters by itself as <name>@<version> (vendored in <holder>@<version>). An entry whose holder the notices cover at another version, or whose file there is missing or at another SHA-256, refuses the pack, so a changed copy is reviewed here before it ships; an entry whose holder the notices do not cover adds nothing. Each bundled text is the licence file of that version's npm tarball (the tarball its entry's from names by its sha512), its trailing white space dropped. An entry for a bundler's runtime, which a holder's own files carry (esbuild's helpers, rolldown's runtime; ruling 210 item 2), names one file of the holder's that carries it, not each, and the bundler at the version packages/core installs, whose licence text it gives: no holder's build records the version of the bundler that wrote it. scripts/pack-requestport.test.mjs holds each entry's file against its holder's as this tree installs it, and each bundled text against a SHA-256 that case pins. A copy with no package.json, no licence comment, no source map and no entry here is what the notices cannot see.",
+  "copies": [
+    {
+      "holder": "@trigger.dev/core",
+      "version": "4.6.4",
+      "path": "dist/esm/v3/vendor/superjson.mjs",
+      "sha256": "c58dd1601cd0e7bc65ba7a2717f8cac7554917825efb087bd47e8f9191345b6c",
+      "reviewed": "H.7 round 7, 2026-10-12, at @trigger.dev/core 4.6.4 (both copies this tree installs, one per zod peer, hold this file byte for byte). It is esbuild's bundle of superjson 2.2.1, which @trigger.dev/core's own scripts/bundle-superjson.mjs writes (its package.json's bundle-vendor script; superjson is a development dependency of it, not a dependency), opening with the comment 'Bundled superjson v2.2.1 … Original package: https://github.com/flightcontrolhq/superjson … License: MIT', which names no copyright holder and is no licence comment as the pack reads one. Its module path comments name node_modules/.pnpm/superjson@2.2.1, is-what@4.1.16 and copy-anything@3.0.5 and no other package. It carries no source map, and no package.json between it and @trigger.dev/core's root names a package (dist/esm/package.json names none). It is the copy the package's ESM build imports (dist/esm/v3/imports/superjson.js), and the one the self-host build compiles in (H.7 round 6's check; H.7 round 7's measuring build at 4a57b4d3). The rest of it is the bundler's module wrapper.",
+      "bundles": [
+        {
+          "name": "copy-anything",
+          "version": "3.0.5",
+          "license": "MIT",
+          "file": "LICENSE",
+          "text": "MIT License\n\nCopyright (c) 2018 Luca Ban - Mesqueeb\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+          "from": "the npm tarball of copy-anything@3.0.5 (sha512-yCEafptTtb4bk7GLEQoM8KVJpxAfdBJYaXyzQEgQQQgYrZiDp8SJmGKlYza6CYjEDNstAdNdKA3UuoULlEbS6w==)"
+        },
+        {
+          "name": "is-what",
+          "version": "4.1.16",
+          "license": "MIT",
+          "file": "LICENSE",
+          "text": "MIT License\n\nCopyright (c) 2018 Luca Ban - Mesqueeb\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+          "from": "the npm tarball of is-what@4.1.16 (sha512-ZhMwEosbFJkA0YhFnNDgTM4ZxDRsS6HqTo7qsZM08fehyRYIYa0yHu5R6mgo1n/8MgaPBXiPimPD77baVFYg+A==)"
+        },
+        {
+          "name": "superjson",
+          "version": "2.2.1",
+          "license": "MIT",
+          "file": "LICENSE",
+          "text": "MIT License\n\nCopyright (c) 2020 Simon Knott and superjson contributors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+          "from": "the npm tarball of superjson@2.2.1 (sha512-8iGv75BYOa0xRJHK5vRLEjE2H/i4lulTjzpUXic3Eg8akftYjkmQDa8JARQ42rlczXyFR3IeRoeFCc7RxHsYZA==)"
+        }
+      ]
+    },
+    {
+      "holder": "@trigger.dev/core",
+      "version": "4.6.4",
+      "path": "dist/commonjs/v3/vendor/superjson.cjs",
+      "sha256": "a22f66b7210d0d3762373bae828a9ec8e4601737f5f74d874f9c080297892645",
+      "reviewed": "H.7 round 7, 2026-10-12, at @trigger.dev/core 4.6.4 (both copies this tree installs, one per zod peer, hold this file byte for byte). It is esbuild's bundle of superjson 2.2.1, which @trigger.dev/core's own scripts/bundle-superjson.mjs writes (its package.json's bundle-vendor script; superjson is a development dependency of it, not a dependency), opening with the comment 'Bundled superjson v2.2.1 … Original package: https://github.com/flightcontrolhq/superjson … License: MIT', which names no copyright holder and is no licence comment as the pack reads one. Its module path comments name node_modules/.pnpm/superjson@2.2.1, is-what@4.1.16 and copy-anything@3.0.5 and no other package. It carries no source map, and no package.json between it and @trigger.dev/core's root names a package (dist/commonjs/package.json names none). It is the same bundle in CommonJS form, the copy the package's CommonJS build requires (dist/commonjs/v3/imports/superjson.js); the self-host build compiles it in nowhere (H.7 round 7's measuring build at 4a57b4d3). The rest of it is the bundler's module wrapper.",
+      "bundles": [
+        {
+          "name": "copy-anything",
+          "version": "3.0.5",
+          "license": "MIT",
+          "file": "LICENSE",
+          "text": "MIT License\n\nCopyright (c) 2018 Luca Ban - Mesqueeb\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+          "from": "the npm tarball of copy-anything@3.0.5 (sha512-yCEafptTtb4bk7GLEQoM8KVJpxAfdBJYaXyzQEgQQQgYrZiDp8SJmGKlYza6CYjEDNstAdNdKA3UuoULlEbS6w==)"
+        },
+        {
+          "name": "is-what",
+          "version": "4.1.16",
+          "license": "MIT",
+          "file": "LICENSE",
+          "text": "MIT License\n\nCopyright (c) 2018 Luca Ban - Mesqueeb\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+          "from": "the npm tarball of is-what@4.1.16 (sha512-ZhMwEosbFJkA0YhFnNDgTM4ZxDRsS6HqTo7qsZM08fehyRYIYa0yHu5R6mgo1n/8MgaPBXiPimPD77baVFYg+A==)"
+        },
+        {
+          "name": "superjson",
+          "version": "2.2.1",
+          "license": "MIT",
+          "file": "LICENSE",
+          "text": "MIT License\n\nCopyright (c) 2020 Simon Knott and superjson contributors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+          "from": "the npm tarball of superjson@2.2.1 (sha512-8iGv75BYOa0xRJHK5vRLEjE2H/i4lulTjzpUXic3Eg8akftYjkmQDa8JARQ42rlczXyFR3IeRoeFCc7RxHsYZA==)"
+        }
+      ]
+    },
+    {
+      "holder": "drizzle-orm",
+      "version": "0.45.2",
+      "path": "alias.cjs",
+      "sha256": "43f0c9e51dcde06bbd850a8da927109bf49beab74249a168f45d23f68ab96a9e",
+      "reviewed": "J.8, ruling 210's round, 2026-10-14, at drizzle-orm 0.45.2. Ruling 209's round's scan of the self-host build's contained files (track-j.md, 'Item 3', at 333625be's seed) found 106 of its .cjs files binding esbuild's runtime helpers in esbuild's CommonJS form ('\"use strict\";' then 'var __defProp = Object.defineProperty;' and the rest at the start of a line), eleven names among them: __copyProps, __create, __defProp, __export, __getOwnPropDesc, __getOwnPropNames, __getProtoOf, __hasOwnProp, __reExport, __toCommonJS and __toESM. This file is the first of them, sorted, and binds seven; 442 of the package's 888 JavaScript files bind one, all of them this holder at this version, which the notices enter esbuild for once. Its source map names drizzle-orm's own ../src/alias.ts alone, and it carries no licence comment. The holder's build records no version of the esbuild that wrote it: the entry gives esbuild 0.28.2, the esbuild packages/core installs, and its LICENSE.md, which is byte for byte the LICENSE.md of each esbuild this tree installs (0.18.20, 0.23.1, 0.25.12 and 0.28.2) (ruling 210 item 2).",
+      "bundles": [
+        {
+          "name": "esbuild",
+          "version": "0.28.2",
+          "license": "MIT",
+          "file": "LICENSE.md",
+          "text": "MIT License\n\nCopyright (c) 2020 Evan Wallace\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+          "from": "the npm tarball of esbuild@0.28.2 (sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==)"
+        }
+      ]
+    },
+    {
+      "holder": "@electric-sql/client",
+      "version": "1.0.14",
+      "path": "dist/index.mjs",
+      "sha256": "63fca345c7abcfccca8951e1b142bfd20b49fe61f8fb17339181e4342ce4367e",
+      "reviewed": "J.8, ruling 210's round, 2026-10-14, at @electric-sql/client 1.0.14. Ruling 209's round's scan of the self-host build's contained files (track-j.md, 'Item 3', at 333625be's seed) found this file, its ESM build (tsup, a development dependency at ^8.0.1, which runs esbuild), binding eighteen of esbuild's runtime helpers at the start of a line, from 'var __defProp = Object.defineProperty;' on its first line: __accessCheck, __async, __defNormalProp, __defProp, __defProps, __getOwnPropDescs, __getOwnPropSymbols, __hasOwnProp, __objRest, __privateAdd, __privateGet, __privateMethod, __privateSet, __privateWrapper, __propIsEnum, __spreadProps, __spreadValues and __typeError. Its source map names the package's own ../src modules, and it carries no licence comment. The holder's build records no version of the esbuild that wrote it: the entry gives esbuild 0.28.2, the esbuild packages/core installs, and its LICENSE.md, which is byte for byte the LICENSE.md of each esbuild this tree installs (0.18.20, 0.23.1, 0.25.12 and 0.28.2) (ruling 210 item 2).",
+      "bundles": [
+        {
+          "name": "esbuild",
+          "version": "0.28.2",
+          "license": "MIT",
+          "file": "LICENSE.md",
+          "text": "MIT License\n\nCopyright (c) 2020 Evan Wallace\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+          "from": "the npm tarball of esbuild@0.28.2 (sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==)"
+        }
+      ]
+    },
+    {
+      "holder": "next",
+      "version": "16.3.8",
+      "path": "dist/compiled/@edge-runtime/cookies/index.js",
+      "sha256": "078a208032232fcedaa17a3471421688e4be15f5cb71cb1f189d0514b393ed94",
+      "reviewed": "J.8, ruling 210's round, 2026-10-14, at next 16.3.8. Ruling 209's round's scan of the self-host build's contained files (track-j.md, 'Item 3', at 333625be's seed) found this file, the @edge-runtime/cookies 6.0.0 next compiles into its dist/compiled (whose package.json the nested scan enters as vendored in next), binding seven of esbuild's runtime helpers in esbuild's CommonJS form ('\"use strict\";' then 'var __defProp = Object.defineProperty;'): __copyProps, __defProp, __export, __getOwnPropDesc, __getOwnPropNames, __hasOwnProp and __toCommonJS. It carries no source map and no licence comment. The entry is keyed by next, the installed package that holds the copy, with the copy's path from next's directory. The holder's build records no version of the esbuild that wrote it: the entry gives esbuild 0.28.2, the esbuild packages/core installs, and its LICENSE.md, which is byte for byte the LICENSE.md of each esbuild this tree installs (0.18.20, 0.23.1, 0.25.12 and 0.28.2) (ruling 210 item 2).",
+      "bundles": [
+        {
+          "name": "esbuild",
+          "version": "0.28.2",
+          "license": "MIT",
+          "file": "LICENSE.md",
+          "text": "MIT License\n\nCopyright (c) 2020 Evan Wallace\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+          "from": "the npm tarball of esbuild@0.28.2 (sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==)"
+        }
+      ]
+    },
+    {
+      "holder": "@modelcontextprotocol/server",
+      "version": "2.3.0",
+      "path": "dist/chunk-Br0eD_fh.mjs",
+      "sha256": "d4a000980e7c6a8a2ee04c12d80cf538b11e5040e8487dad7661b09d85894e74",
+      "reviewed": "J.8, ruling 210's round, 2026-10-14, at @modelcontextprotocol/server 2.1.0; reviewed again for ruling 236, 2026-10-21, at 2.3.0, whose npm tarball holds this file byte for byte as 2.1.0's does (both tarballs read, and compared; 2.2.0's holds it too), so what follows is true of it at 2.3.0, its CommonJS twin dist/chunk-Bnu9O96Y.cjs is unchanged as well, and 2.3.0's package.json declares tsdown ^0.18.0 as 2.1.0's does. Ruling 209's round's scan of the self-host build's contained files (track-j.md, 'Item 3', at 333625be's seed) found this file binding nine names of esbuild's runtime helpers: __commonJSMin, __copyProps, __create, __defProp, __getOwnPropDesc, __getOwnPropNames, __getProtoOf, __hasOwnProp and __toESM. It is rolldown's runtime, not esbuild's: the file is that runtime alone, between '//#region rolldown:runtime' and '//#endregion', beside rolldown's own __exportAll, from the package's tsdown build (tsdown, a development dependency at ^0.18.0, runs rolldown). It carries no source map and no licence comment. Rolldown is entered for it, as ruling 210 item 2 has it, and esbuild is not. The holder's build records no version of the rolldown that wrote it: the entry gives rolldown 1.2.4, the rolldown packages/core installs, and its LICENSE, whose last line points to rolldown's THIRD-PARTY-LICENSE, the licences of the works parts of rolldown derive from (rollup's and esbuild's MIT texts, in the copy installed beside it) (ruling 210 item 2).",
+      "bundles": [
+        {
+          "name": "rolldown",
+          "version": "1.2.4",
+          "license": "MIT",
+          "file": "LICENSE",
+          "text": "MIT License\n\nCopyright (c) 2024-present VoidZero Inc. & Contributors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n\nend of terms and conditions\n\nThe licenses of externally maintained libraries from which parts of the Software is derived are listed [here](https://github.com/rolldown/rolldown/blob/main/THIRD-PARTY-LICENSE).",
+          "from": "the npm tarball of rolldown@1.2.4 (sha512-rSr7irW0K7QRWzjdJXqZowkcRdDtjRduh43rBltnVKd0VFq839l1lJoDvGJb6gl7+4rTTCrPWu+YfujUL8Ug7w==)"
+        }
+      ]
+    },
+    {
+      "holder": "@better-auth/oauth-provider",
+      "version": "1.7.6",
+      "path": "dist/rolldown-runtime-wcPFST8Q.mjs",
+      "sha256": "16a983b80655888fa521be8504570aef2fc3713d1a723ff439beddac3a2428c3",
+      "reviewed": "J.8, ruling 210's round, 2026-10-14, at @better-auth/oauth-provider 1.7.6. Ruling 209's round's scan of the self-host build's contained files (track-j.md, 'Item 3', at 333625be's seed) found this file binding one name of esbuild's runtime helpers, __defProp. It is rolldown's runtime, not esbuild's: the file is that runtime alone, between '//#region \\0rolldown/runtime.js' and '//#endregion', __defProp beside rolldown's own __exportAll, from the package's tsdown build (tsdown 0.21.10, a development dependency, runs rolldown). It carries no source map and no licence comment. Rolldown is entered for it, as ruling 210 item 2 has it, and esbuild is not. The holder's build records no version of the rolldown that wrote it: the entry gives rolldown 1.2.4, the rolldown packages/core installs, and its LICENSE, whose last line points to rolldown's THIRD-PARTY-LICENSE, the licences of the works parts of rolldown derive from (rollup's and esbuild's MIT texts, in the copy installed beside it) (ruling 210 item 2).",
+      "bundles": [
+        {
+          "name": "rolldown",
+          "version": "1.2.4",
+          "license": "MIT",
+          "file": "LICENSE",
+          "text": "MIT License\n\nCopyright (c) 2024-present VoidZero Inc. & Contributors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n\nend of terms and conditions\n\nThe licenses of externally maintained libraries from which parts of the Software is derived are listed [here](https://github.com/rolldown/rolldown/blob/main/THIRD-PARTY-LICENSE).",
+          "from": "the npm tarball of rolldown@1.2.4 (sha512-rSr7irW0K7QRWzjdJXqZowkcRdDtjRduh43rBltnVKd0VFq839l1lJoDvGJb6gl7+4rTTCrPWu+YfujUL8Ug7w==)"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "$description": "Theme: requestport, dark mode. Flat data-dense console palette with a warm orange accent and Geist Mono fallback. COLOR + TYPE ONLY: derived soft and border tokens remain compiler-owned.",
+  "color": {
+    "$type": "color",
+    "bg": { "$value": "#0a0d0e" },
+    "sunken": { "$value": "#07090a" },
+    "surface-1": { "$value": "#101416" },
+    "surface-2": { "$value": "#151a1d" },
+    "surface-3": { "$value": "#1a2024" },
+    "fg": { "$value": "#f0eee9" },
+    "fg-muted": { "$value": "#a3a6a8" },
+    "fg-subtle": { "$value": "#83888c" },
+    "border": { "$value": "#293034" },
+    "border-strong": { "$value": "#61686d" },
+    "border-overlay": { "$value": "#3f484e" },
+    "accent": { "$value": "#e66a45" },
+    "accent-hover": { "$value": "#f07a53" },
+    "accent-fg": { "$value": "#160d09" },
+    "ok": { "$value": "#63b482" },
+    "busy": { "$value": "#9a8cdb" },
+    "warn": { "$value": "#d6a65a" },
+    "warn-fg": { "$value": "#07090a" },
+    "danger": { "$value": "#dc6d69" },
+    "danger-fg": { "$value": "#07090a" },
+    "info": { "$value": "#6eb7d9" },
+    "stream": { "$value": "#7cc4e8" },
+    "selection": { "$value": "rgba(230,106,69,0.18)" },
+    "focus": { "$value": "#e66a45" },
+    "data-ground": { "$value": "#000000" },
+    "scrim": { "$value": "rgba(0,0,0,0.72)" }
+  },
+  "type": {
+    "font-mono": {
+      "$type": "fontFamily",
+      "$value": ["Geist Mono", "ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [],
+  "files": [
+    "src/index.ts",
+    "src/authorize.ts",
+    "src/callback-server.ts",
+    "src/ci.ts",
+    "src/credentials.ts",
+    "src/http.ts",
+    "src/oauth.ts",
+    "src/project.ts",
+    "src/resolve.ts",
+    "src/token-source.ts"
+  ],
+  "exclude": ["**/*.test.ts", "src/test-support/**"]
+}

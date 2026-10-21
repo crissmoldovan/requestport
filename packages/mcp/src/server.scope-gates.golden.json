@@ -1,0 +1,83 @@
+{
+  "org:read": ["whoami", "list_organizations", "agent_hello"],
+  "project:read": ["whoami", "list_projects", "get_project", "agent_hello"],
+  "request:create": [
+    "whoami",
+    "agent_hello",
+    "create_request_draft",
+    "submit_request",
+    "withdraw_request"
+  ],
+  "request:read": [
+    "whoami",
+    "list_requests",
+    "get_request",
+    "get_request_timeline",
+    "list_open_questions",
+    "list_events",
+    "agent_hello"
+  ],
+  "request:write": [
+    "whoami",
+    "agent_hello",
+    "update_request",
+    "post_message",
+    "link_requests",
+    "unlink_requests",
+    "ask_question",
+    "close_question",
+    "attach_artifact"
+  ],
+  "request:triage": ["whoami", "agent_hello", "transition_request"],
+  "request:complete": ["whoami", "agent_hello", "complete_request"],
+  "request:verify": ["whoami", "agent_hello", "verify_request"],
+  "question:answer": ["whoami", "agent_hello", "answer_question"],
+  "work:claim": ["whoami", "agent_hello", "claim_request"],
+  "work:update": [
+    "whoami",
+    "agent_hello",
+    "start_work_session",
+    "heartbeat_work_session",
+    "pause_work_session",
+    "resume_work_session",
+    "block_work_session",
+    "release_request",
+    "end_work_session",
+    "post_work_update",
+    "begin_request_work",
+    "block_request",
+    "resume_request"
+  ],
+  "agent:register": [
+    "whoami",
+    "agent_hello",
+    "register_agent_installation",
+    "register_project",
+    "register_machine_workspace"
+  ],
+  "webhook:manage": [
+    "whoami",
+    "agent_hello",
+    "list_event_subscriptions",
+    "create_event_subscription",
+    "verify_event_subscription",
+    "rotate_event_subscription_secret",
+    "set_event_subscription_status",
+    "replay_event_delivery"
+  ],
+  "import:write": [
+    "whoami",
+    "agent_hello",
+    "list_legacy_imports",
+    "get_legacy_import",
+    "analyze_legacy_import",
+    "apply_legacy_import",
+    "correct_legacy_import"
+  ],
+  "project:provision": [
+    "whoami",
+    "agent_hello",
+    "create_project",
+    "provision_agent"
+  ]
+}

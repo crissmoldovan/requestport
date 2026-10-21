@@ -1,0 +1,31 @@
+{
+  "name": "@requestport/core",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./adapters": "./src/adapters.ts",
+    "./agent-services": "./src/agent-services/index.ts",
+    "./migrate": "./src/migrate.ts",
+    "./person-context": "./src/person-context.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "biome check src test-support bundle.mjs bundle.d.mts tsconfig.build.json tsconfig.host-packages.json tsconfig.private-module-control.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@requestport/db": "workspace:*",
+    "@requestport/domain": "workspace:*",
+    "@requestport/importer": "workspace:*",
+    "@requestport/jobs": "workspace:*",
+    "@requestport/webhooks": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "rolldown": "1.2.4",
+    "rolldown-plugin-dts": "0.28.6"
+  }
+}

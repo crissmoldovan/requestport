@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.build.json",
+  "include": [
+    "../db/src/**/*.ts",
+    "test-support/declaration-reaches-private-module.ts"
+  ]
+}

@@ -1,0 +1,201 @@
+{
+  "routes": "apps/web/src/app at 29a3aac6 (main, the merge of G.7a, #198), behind apps/web/src/proxy.ts as Next serves them (ruling 147)",
+  "normalisation": ["the proxy's CSP nonce"],
+  "cases": [
+    {
+      "name": "GET /api/health/live",
+      "request": {
+        "method": "GET",
+        "url": "https://requestport.test/api/health/live",
+        "headers": []
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          ["cache-control", "private, no-store"],
+          [
+            "content-security-policy",
+            "default-src 'self'; script-src 'self' 'nonce-<nonce>' 'strict-dynamic' 'unsafe-eval'; style-src 'self'; style-src-elem 'self' 'nonce-<nonce>'; style-src-attr 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://github.com https://slack.com"
+          ],
+          ["content-type", "application/json"],
+          [
+            "permissions-policy",
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()"
+          ],
+          ["referrer-policy", "strict-origin-when-cross-origin"],
+          ["x-content-type-options", "nosniff"],
+          ["x-frame-options", "DENY"]
+        ],
+        "body": "{\"ok\":true}"
+      },
+      "admission": {
+        "calls": []
+      }
+    },
+    {
+      "name": "GET /api/health/ready, the storage ready: 200",
+      "request": {
+        "method": "GET",
+        "url": "https://requestport.test/api/health/ready",
+        "headers": []
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          ["cache-control", "private, no-store"],
+          [
+            "content-security-policy",
+            "default-src 'self'; script-src 'self' 'nonce-<nonce>' 'strict-dynamic' 'unsafe-eval'; style-src 'self'; style-src-elem 'self' 'nonce-<nonce>'; style-src-attr 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://github.com https://slack.com"
+          ],
+          ["content-type", "application/json"],
+          [
+            "permissions-policy",
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()"
+          ],
+          ["referrer-policy", "strict-origin-when-cross-origin"],
+          ["x-content-type-options", "nosniff"],
+          ["x-frame-options", "DENY"]
+        ],
+        "body": "{\"ready\":true}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "storage.ready",
+            "args": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "GET /api/health/ready, the storage not ready: 503",
+      "request": {
+        "method": "GET",
+        "url": "https://requestport.test/api/health/ready",
+        "headers": []
+      },
+      "response": {
+        "status": 503,
+        "headers": [
+          ["cache-control", "private, no-store"],
+          [
+            "content-security-policy",
+            "default-src 'self'; script-src 'self' 'nonce-<nonce>' 'strict-dynamic' 'unsafe-eval'; style-src 'self'; style-src-elem 'self' 'nonce-<nonce>'; style-src-attr 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://github.com https://slack.com"
+          ],
+          ["content-type", "application/json"],
+          [
+            "permissions-policy",
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()"
+          ],
+          ["referrer-policy", "strict-origin-when-cross-origin"],
+          ["x-content-type-options", "nosniff"],
+          ["x-frame-options", "DENY"]
+        ],
+        "body": "{\"ready\":false}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "storage.ready",
+            "args": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "GET /api/health/ready, the storage silent past 2,000 ms: 503",
+      "request": {
+        "method": "GET",
+        "url": "https://requestport.test/api/health/ready",
+        "headers": []
+      },
+      "response": {
+        "status": 503,
+        "headers": [
+          ["cache-control", "private, no-store"],
+          [
+            "content-security-policy",
+            "default-src 'self'; script-src 'self' 'nonce-<nonce>' 'strict-dynamic' 'unsafe-eval'; style-src 'self'; style-src-elem 'self' 'nonce-<nonce>'; style-src-attr 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://github.com https://slack.com"
+          ],
+          ["content-type", "application/json"],
+          [
+            "permissions-policy",
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()"
+          ],
+          ["referrer-policy", "strict-origin-when-cross-origin"],
+          ["x-content-type-options", "nosniff"],
+          ["x-frame-options", "DENY"]
+        ],
+        "body": "{\"ready\":false}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "storage.ready",
+            "args": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "GET /api/health/ready, the web root refusing its storage: 503",
+      "request": {
+        "method": "GET",
+        "url": "https://requestport.test/api/health/ready",
+        "headers": []
+      },
+      "response": {
+        "status": 503,
+        "headers": [
+          ["cache-control", "private, no-store"],
+          [
+            "content-security-policy",
+            "default-src 'self'; script-src 'self' 'nonce-<nonce>' 'strict-dynamic' 'unsafe-eval'; style-src 'self'; style-src-elem 'self' 'nonce-<nonce>'; style-src-attr 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://github.com https://slack.com"
+          ],
+          ["content-type", "application/json"],
+          [
+            "permissions-policy",
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()"
+          ],
+          ["referrer-policy", "strict-origin-when-cross-origin"],
+          ["x-content-type-options", "nosniff"],
+          ["x-frame-options", "DENY"]
+        ],
+        "body": "{\"ready\":false}"
+      },
+      "admission": {
+        "calls": []
+      }
+    },
+    {
+      "name": "GET /api/health/ready in a process whose server configuration does not parse: 503",
+      "request": {
+        "method": "GET",
+        "url": "https://requestport.test/api/health/ready",
+        "headers": []
+      },
+      "response": {
+        "status": 503,
+        "headers": [
+          ["cache-control", "private, no-store"],
+          [
+            "content-security-policy",
+            "default-src 'self'; script-src 'self' 'nonce-<nonce>' 'strict-dynamic' 'unsafe-eval'; style-src 'self'; style-src-elem 'self' 'nonce-<nonce>'; style-src-attr 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://github.com https://slack.com"
+          ],
+          ["content-type", "application/json"],
+          [
+            "permissions-policy",
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()"
+          ],
+          ["referrer-policy", "strict-origin-when-cross-origin"],
+          ["x-content-type-options", "nosniff"],
+          ["x-frame-options", "DENY"]
+        ],
+        "body": "{\"ready\":false}"
+      },
+      "admission": {
+        "calls": []
+      }
+    }
+  ]
+}

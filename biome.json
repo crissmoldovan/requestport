@@ -1,0 +1,43 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.8/schema.json",
+  "files": {
+    "includes": [
+      "**",
+      "!!docs",
+      "!!**/.next",
+      "!!**/.next-self-host",
+      "!!**/coverage",
+      "!!**/dist",
+      "!!**/generated",
+      "!!**/migrations",
+      "!!**/node_modules",
+      "!!**/playwright-report",
+      "!!**/test-results",
+      "!!packages/theme/theme.css",
+      "!!packages/theme/variants.css",
+      "!!packages/theme/index.js",
+      "!!packages/theme/index.d.ts",
+      "!!packages/theme/manifest.json",
+      "!!packages/theme/src"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  }
+}

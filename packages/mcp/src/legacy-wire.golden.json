@@ -1,0 +1,213 @@
+{
+  "initialize at 2025-06-18": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "result": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          }
+        },
+        "serverInfo": {
+          "name": "RequestPort",
+          "version": "1.0.0"
+        }
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    }
+  },
+  "initialize at 2025-11-25": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "result": {
+        "protocolVersion": "2025-11-25",
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          }
+        },
+        "serverInfo": {
+          "name": "RequestPort",
+          "version": "1.0.0"
+        }
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    }
+  },
+  "tools/list with no scope": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "result": {
+        "whoami": {
+          "name": "whoami",
+          "description": "Return the effective RequestPort agent identity and constraints.",
+          "inputSchema": {
+            "type": "object",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "properties": {}
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "idempotentHint": true
+          }
+        },
+        "toolKeySets": ["annotations,description,inputSchema,name"],
+        "whoamiIsFirst": true
+      },
+      "jsonrpc": "2.0",
+      "id": 2
+    }
+  },
+  "tools/list with request:read": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "result": {
+        "whoami": {
+          "name": "whoami",
+          "description": "Return the effective RequestPort agent identity and constraints.",
+          "inputSchema": {
+            "type": "object",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "properties": {}
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "idempotentHint": true
+          }
+        },
+        "toolKeySets": ["annotations,description,inputSchema,name"],
+        "whoamiIsFirst": true
+      },
+      "jsonrpc": "2.0",
+      "id": 2
+    }
+  },
+  "tools/list with every agent scope": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "result": {
+        "whoami": {
+          "name": "whoami",
+          "description": "Return the effective RequestPort agent identity and constraints.",
+          "inputSchema": {
+            "type": "object",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "properties": {}
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "idempotentHint": true
+          }
+        },
+        "toolKeySets": ["annotations,description,inputSchema,name"],
+        "whoamiIsFirst": true
+      },
+      "jsonrpc": "2.0",
+      "id": 2
+    }
+  },
+  "tools/call whoami": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"actor\":{\"type\":\"agent\",\"id\":\"018f0000-0000-7000-8000-0000000c1003\"},\"organizationId\":\"018f0000-0000-7000-8000-0000000c1001\",\"projectId\":\"018f0000-0000-7000-8000-0000000c1002\",\"laneIds\":[],\"scopes\":[\"request:read\"],\"audience\":\"mcp\",\"authorizationId\":\"k1-legacy-wire-authorization\",\"serverSchemaVersion\":1}"
+          }
+        ],
+        "structuredContent": {
+          "actor": {
+            "type": "agent",
+            "id": "018f0000-0000-7000-8000-0000000c1003"
+          },
+          "organizationId": "018f0000-0000-7000-8000-0000000c1001",
+          "projectId": "018f0000-0000-7000-8000-0000000c1002",
+          "laneIds": [],
+          "scopes": ["request:read"],
+          "audience": "mcp",
+          "authorizationId": "k1-legacy-wire-authorization",
+          "serverSchemaVersion": 1
+        }
+      },
+      "jsonrpc": "2.0",
+      "id": 3
+    }
+  },
+  "tools/call refused by the domain": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"error\":\"not_found\",\"message\":\"The requested resource was not found.\",\"details\":{\"field\":\"projectId\"}}"
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 4
+    }
+  },
+  "tools/call refused by input validation": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Input validation error: Invalid arguments for tool get_project: projectId: Invalid UUID"
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 5
+    }
+  },
+  "GET": {
+    "status": 200,
+    "contentType": "text/event-stream"
+  },
+  "DELETE": {
+    "status": 200,
+    "contentType": null,
+    "body": null
+  },
+  "a batch of 101 pings": {
+    "status": 400,
+    "contentType": "application/json",
+    "body": {
+      "jsonrpc": "2.0",
+      "error": {
+        "code": -32600,
+        "message": "Invalid Request: Batch must not exceed 100 messages"
+      },
+      "id": null
+    }
+  },
+  "a 2026-07-28 server/discover probe": {
+    "status": 400,
+    "contentType": "application/json",
+    "body": {
+      "jsonrpc": "2.0",
+      "error": {
+        "code": -32000,
+        "message": "Bad Request: Unsupported protocol version: 2026-07-28 (supported versions: 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05, 2024-10-07)"
+      },
+      "id": null
+    }
+  }
+}

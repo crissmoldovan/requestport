@@ -1,0 +1,46 @@
+{
+  "about": "The files the self-host build of @requestport/web copies as they are, which no module of a chunk records (Plan 13, H.7 round 6; ruling 198 item 2). scripts/pack-requestport.mjs's verbatimPackages finds each file the build emits that is, byte for byte, a file of a package of apps/web's production closure, and keys it here by its SHA-256: an entry names the package that ships it (holder) and its path there, and what the file bundles, each with the licence its package.json declares and the text of its licence file, which THIRD-PARTY-NOTICES enters as bundled in the holder. A file so copied whose SHA-256 no entry names, an entry whose holder or path is not the file's, and an entry no file of the build matches each refuse the pack, so a changed file is reviewed here before it ships. Each bundled text is the licence file of that version's npm tarball (the tarball its entry's from names by its sha512), its trailing white space dropped. scripts/pack-requestport.test.mjs holds each entry's file against its holder's as apps/web installs it, and each bundled text against a SHA-256 that case pins, and against the store's copy where this tree installs that version. That release/licence-texts.json classifies each text was measured once, at H.7 round 6 (track-h.md); no test holds it.",
+  "files": [
+    {
+      "sha256": "0973c1d64c88adc8e3c950410cb58b288f72118d5965b78049438deb8f2f9683",
+      "holder": "next",
+      "path": "dist/build/polyfills/polyfill-nomodule.js",
+      "emitted": "static/chunks/polyfills-<hash>.js",
+      "reviewed": "H.7 round 6, 2026-10-11, at next 16.3.8. Next's webpack configuration copies it as the polyfills chunk (dist/build/webpack-config.js:1771-1772, filePath require.resolve('./polyfills/polyfill-nomodule')). It is byte for byte @next/polyfill-nomodule@16.3.8's dist/polyfill-nomodule.js (its npm tarball, sha512-JYUtE8qRJ+C04LWGqna6ltOSv4VmASEu2R/5ONUKoXzYJ6LwBeL+hrXIcwrLQU9F+jybksrUP3mDJOUp1IV9vg==), microbundle's IIFE build ('microbundle -i src/index.js -o dist/polyfill-nomodule.js -f iife --no-sourcemap --external none --no-pkg-main') of its src/index.js, which imports 56 core-js modules, whatwg-fetch and object-assign: the three packages its package.json pins beside microbundle (core-js 3.38.1, whatwg-fetch 3.0.0, object-assign 4.1.1). Read in the file: core-js's own version record (version \"3.38.1\", its copyright), whatwg-fetch's _bodyInit (8 times), 'Network request failed' and fetch's polyfill flag, and object-assign's 'Object.assign cannot be called with null or undefined'. The file carries no licence comment and no source map. The rest of it is @next/polyfill-nomodule's own two lines (Next's, under next's licence) and the bundler's module wrapper.",
+      "bundles": [
+        {
+          "name": "core-js",
+          "version": "3.38.1",
+          "license": "MIT",
+          "file": "LICENSE",
+          "text": "Copyright (c) 2014-2024 Denis Pushkarev\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.",
+          "from": "the npm tarball of core-js@3.38.1 (sha512-OP35aUorbU3Zvlx7pjsFdu1rGNnD4pgw/CWoYzRY3t2EzoVT7shKHY1dlAy3f41cGIO7ZDPQimhGFTlEYkG/Hw==)"
+        },
+        {
+          "name": "object-assign",
+          "version": "4.1.1",
+          "license": "MIT",
+          "file": "license",
+          "text": "The MIT License (MIT)\n\nCopyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.",
+          "from": "the npm tarball of object-assign@4.1.1 (sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==)"
+        },
+        {
+          "name": "whatwg-fetch",
+          "version": "3.0.0",
+          "license": "MIT",
+          "file": "LICENSE",
+          "text": "Copyright (c) 2014-2016 GitHub, Inc.\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n\"Software\"), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND\nNONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE\nLIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION\nWITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
+          "from": "the npm tarball of whatwg-fetch@3.0.0 (sha512-9GSJUgz1D4MfyKU7KRqwOjXCXTqWdFNvEr7eUBYchQiVc744mqK/MzXPNR2WsPkmkOa4ywfg8C2n8h+13Bey1Q==)"
+        }
+      ]
+    },
+    {
+      "sha256": "678f6ce2cb80b1fe72fc67e7412be6e2ab6ada083111b64f7c40d35e3cba5e00",
+      "holder": "next",
+      "path": "dist/bundle-analyzer/_next/static/WF5Ql9w6rALUjSQk9e-fZ/_ssgManifest.js",
+      "emitted": "static/<build id>/_ssgManifest.js",
+      "reviewed": "H.7 round 6, 2026-10-11, at next 16.3.8. Next writes static/<build id>/_ssgManifest.js (dist/build/index.js's writeClientSsgManifest), naming the build's statically generated pages: for a build with none, two statements of its own, 'self.__SSG_MANIFEST=new Set([]);self.__SSG_MANIFEST_CB&&self.__SSG_MANIFEST_CB()'. That is byte for byte the bundle analyser's copy next ships, so it matches a file of next; it is Next's code, not a copy of another package's, and bundles nothing.",
+      "bundles": []
+    }
+  ]
+}

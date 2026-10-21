@@ -1,0 +1,1 @@
+ALTER TABLE "agent_credentials" DROP CONSTRAINT "agent_credentials_issued_by_grant_id_agent_oauth_grants_id_fk";

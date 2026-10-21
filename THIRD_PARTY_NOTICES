@@ -1,0 +1,115 @@
+THIRD-PARTY NOTICES
+
+The third-party material this repository carries: for each, the licence
+it is under, and its notice or licence text. The entries are sorted by
+name and version.
+
+It also lists third-party code that this repository does not carry,
+which a package built from it bundles into its npm tarball: each such
+entry names that package and the workspace it is built from.
+
+------------------------------------------------------------------------
+@cueplusplus/theme-requestport@1.0.1
+Licence: MIT
+Carried in:
+  packages/theme/index.d.ts
+  packages/theme/index.js
+  packages/theme/manifest.json
+  packages/theme/src/requestport.dark.tokens.json
+  packages/theme/src/requestport.light.tokens.json
+  packages/theme/theme.css
+What: The RequestPort palette and the theme package's index files, from
+cue-ui's packages/theme-requestport at commit ddb2c56a (its package.json
+there reads version 1.0.1), with the AA corrections of cue-ui#117, which
+were never published.
+
+Licence text, from @cueplusplus/theme-base@1.0.3 (LICENSE):
+
+MIT License
+
+Copyright (c) 2026 CUE++ contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+------------------------------------------------------------------------
+esbuild@0.28.2 (bundled in @requestport/db)
+Licence: MIT
+Carried in:
+  the npm tarball of @requestport/db, built from packages/db
+What: esbuild's runtime helpers, the small functions esbuild 0.28.2
+writes at the top of a chunk of @requestport/db's dist/ when it bundles
+the package.
+
+Licence text, from esbuild@0.28.2 (LICENSE.md):
+
+MIT License
+
+Copyright (c) 2020 Evan Wallace
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+------------------------------------------------------------------------
+spdx-exceptions@2.5.0
+Licence: CC-BY-3.0
+Carried in:
+  scripts/licence-inventory.mjs
+What: The SPDX licence exception identifiers, index.json then
+deprecated.json of spdx-exceptions 2.5.0, embedded as
+SPDX_EXCEPTION_IDENTIFIERS; the package's author copied them from the
+SPDX specification.
+
+From version 2.0 of the SPDX specification (https://spdx.org), as the
+package's README quotes it:
+
+  Copyright © 2010-2015 Linux Foundation and its Contributors. Licensed
+  under the Creative Commons Attribution License 3.0 Unported. All other
+  rights are expressly reserved.
+
+The licence: https://creativecommons.org/licenses/by/3.0/legalcode
+
+"SPDX" is a federally registered United States trademark of The Linux
+Foundation Corporation.
+
+------------------------------------------------------------------------
+spdx-license-ids@3.0.24
+Licence: CC0-1.0
+Carried in:
+  scripts/licence-inventory.mjs
+What: The SPDX licence identifiers, index.json then deprecated.json of
+spdx-license-ids 3.0.24, embedded as SPDX_LICENCE_IDENTIFIERS.
+
+spdx-license-ids 3.0.24 declares CC0-1.0, and its README's License
+section names Creative Commons Zero v1.0 Universal:
+https://creativecommons.org/publicdomain/zero/1.0/deed

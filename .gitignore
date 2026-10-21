@@ -1,0 +1,32 @@
+.DS_Store
+.env
+.env.*
+.env*
+!.env.example
+.next/
+# The self-host build's own distDir (Plan 13, H.5; manifest-h.md §2.7.1).
+.next-self-host/
+.turbo/
+.vercel/
+.trigger/
+.worktrees/
+.superpowers/
+coverage/
+dist/
+node_modules/
+playwright-report/
+test-results/
+*.tsbuildinfo
+pnpm-debug.log*
+acceptance-report/
+acceptance-evidence/
+
+# Acceptance run results: one directory per run, holding its logs, reports
+# and artefacts. Kept on disk because there is no CI to hold them, and out of
+# git because they contain screenshots and traces.
+e2e-results/
+
+# Playwright MCP's own scratch output — console logs and page snapshots it
+# writes while driving a browser. Debris, not content: the checkout had six
+# files from a single afternoon in August sitting untracked for six weeks.
+.playwright-mcp/

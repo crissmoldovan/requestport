@@ -1,0 +1,38 @@
+{
+  "name": "@requestport/jobs",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./catalogue": "./src/catalogue.ts",
+    "./dispatch": "./src/dispatch.ts",
+    "./selection": "./src/selection.ts",
+    "./worker": "./src/worker.ts",
+    "./worker-storages": "./src/worker-storages.ts"
+  },
+  "bin": {
+    "requestport-jobs": "./bin/requestport-jobs.mjs"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "biome check src bin",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "worker": "node ../../scripts/with-root-env.mjs --without-owner-variables node bin/requestport-jobs.mjs"
+  },
+  "dependencies": {
+    "@requestport/config": "workspace:*",
+    "@requestport/db": "workspace:*",
+    "@requestport/domain": "workspace:*",
+    "@requestport/importer": "workspace:*",
+    "@requestport/notifications": "workspace:*",
+    "@requestport/webhooks": "workspace:*",
+    "@slack/web-api": "8.0.0",
+    "drizzle-orm": "0.45.2",
+    "tsx": "4.23.12",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1"
+  }
+}

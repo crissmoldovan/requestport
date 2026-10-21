@@ -1,0 +1,252 @@
+{
+  "about": [
+    "One origin rule, restated in two packages that may not import each other: the client's binding (isBindableServer, packages/client/src/project.ts) and the issuer check (isServableIssuerUrl, packages/auth/src/server-options.ts) (manifest-h.md §2.8.1).",
+    "Two suites hold the whole rule to this file: packages/client/src/project.test.ts holds the binding to every row, and packages/auth/src/server-options.origin-rule.test.ts holds the issuer check to every row, through createAuthOptions, where production asks it. A change to either function is checked against the same rows.",
+    "A third suite reads it for the loopback half alone: packages/server/src/security-headers.test.ts holds upgradeInsecureRequestsFor (packages/server/src/security-headers.ts), which drops upgrade-insecure-requests for http on a loopback host, to every row by its scheme and host (H.5).",
+    "The rule: https on any host, or http on a loopback host (localhost, *.localhost, 127.0.0.0/8, [::1]); and no user name, password, query or fragment, an empty query (?) and an empty fragment (#) included.",
+    "No row has a path. The binding refuses a path and the issuer check does not, so a row with a path would be one on which the two disagree by design; the binding's path refusal is tested in project.test.ts, and the issuer check's acceptance of one in server-options.origin-rule.test.ts.",
+    "kind names what a row is there to show. The six refusals manifest-h.md §2.8.1 lists (userinfo, password-only, query, empty-query, fragment, empty-fragment) each appear over https and over loopback http, and project.test.ts holds the file to that; server-options.origin-rule.test.ts holds it to production's issuer, accepted, and to the user name and password rows over both."
+  ],
+  "cases": [
+    {
+      "url": "https://requestport.com",
+      "accepted": true,
+      "kind": "origin",
+      "why": "production's issuer"
+    },
+    {
+      "url": "https://requestport.com/",
+      "accepted": true,
+      "kind": "origin",
+      "why": "a trailing slash, which is an empty path rather than a path"
+    },
+    {
+      "url": "https://rp.example.com:8443",
+      "accepted": true,
+      "kind": "origin",
+      "why": "https on any host and port"
+    },
+    {
+      "url": "https://127.0.0.1:3000",
+      "accepted": true,
+      "kind": "origin",
+      "why": "https on a loopback host"
+    },
+    {
+      "url": "http://127.0.0.1:3000",
+      "accepted": true,
+      "kind": "loopback",
+      "why": "http on 127.0.0.1"
+    },
+    {
+      "url": "http://127.0.0.2:3000",
+      "accepted": true,
+      "kind": "loopback",
+      "why": "http anywhere in 127.0.0.0/8"
+    },
+    {
+      "url": "http://127.255.255.254:3000",
+      "accepted": true,
+      "kind": "loopback",
+      "why": "http at the top of 127.0.0.0/8"
+    },
+    {
+      "url": "http://127.1:3000",
+      "accepted": true,
+      "kind": "loopback",
+      "why": "an IPv4 shorthand the URL parser writes out as 127.0.0.1"
+    },
+    {
+      "url": "http://localhost:3000",
+      "accepted": true,
+      "kind": "loopback",
+      "why": "http on localhost"
+    },
+    {
+      "url": "http://LOCALHOST:3000",
+      "accepted": true,
+      "kind": "loopback",
+      "why": "a host name in capitals, which is the same host"
+    },
+    {
+      "url": "http://localhost.:3000",
+      "accepted": true,
+      "kind": "loopback",
+      "why": "localhost written fully qualified, with its trailing dot"
+    },
+    {
+      "url": "http://rp.localhost:3000",
+      "accepted": true,
+      "kind": "loopback",
+      "why": "http on a *.localhost name"
+    },
+    {
+      "url": "http://[::1]:3000",
+      "accepted": true,
+      "kind": "loopback",
+      "why": "http on the IPv6 loopback address"
+    },
+    {
+      "url": "http://example.com",
+      "accepted": false,
+      "kind": "host",
+      "why": "http on a host that is not this machine"
+    },
+    {
+      "url": "http://requestport.com",
+      "accepted": false,
+      "kind": "host",
+      "why": "production's host over http"
+    },
+    {
+      "url": "http://localhost.example.com:3000",
+      "accepted": false,
+      "kind": "host",
+      "why": "a name that only begins like localhost"
+    },
+    {
+      "url": "http://127.0.0.1.example.com:3000",
+      "accepted": false,
+      "kind": "host",
+      "why": "a name that only begins like 127.0.0.1"
+    },
+    {
+      "url": "http://128.0.0.1:3000",
+      "accepted": false,
+      "kind": "host",
+      "why": "an address just outside 127.0.0.0/8"
+    },
+    {
+      "url": "http://0.0.0.0:3000",
+      "accepted": false,
+      "kind": "host",
+      "why": "the unspecified address, which is not loopback"
+    },
+    {
+      "url": "http://10.0.0.1:3000",
+      "accepted": false,
+      "kind": "host",
+      "why": "a private address, which is not loopback"
+    },
+    {
+      "url": "http://[::2]:3000",
+      "accepted": false,
+      "kind": "host",
+      "why": "an IPv6 address that is not ::1"
+    },
+    {
+      "url": "http://[::ffff:127.0.0.1]:3000",
+      "accepted": false,
+      "kind": "host",
+      "why": "an IPv4-mapped IPv6 address, which the rule does not name"
+    },
+    {
+      "url": "ftp://requestport.com",
+      "accepted": false,
+      "kind": "scheme",
+      "why": "neither https nor http"
+    },
+    {
+      "url": "ws://127.0.0.1:3000",
+      "accepted": false,
+      "kind": "scheme",
+      "why": "not http, even on a loopback host"
+    },
+    {
+      "url": "requestport.com",
+      "accepted": false,
+      "kind": "not-a-url",
+      "why": "a host with no scheme, which is not an absolute URL"
+    },
+    {
+      "url": "",
+      "accepted": false,
+      "kind": "not-a-url",
+      "why": "the empty string"
+    },
+    {
+      "url": "https://alice:secret@requestport.com",
+      "accepted": false,
+      "kind": "userinfo",
+      "why": "a user name and password over https"
+    },
+    {
+      "url": "http://alice:secret@127.0.0.1:3000",
+      "accepted": false,
+      "kind": "userinfo",
+      "why": "a user name and password over loopback http"
+    },
+    {
+      "url": "https://:secret@requestport.com",
+      "accepted": false,
+      "kind": "password-only",
+      "why": "a password with no user name, over https"
+    },
+    {
+      "url": "http://:secret@127.0.0.1:3000",
+      "accepted": false,
+      "kind": "password-only",
+      "why": "a password with no user name, over loopback http"
+    },
+    {
+      "url": "https://alice@requestport.com",
+      "accepted": false,
+      "kind": "username-only",
+      "why": "a user name alone, over https"
+    },
+    {
+      "url": "http://alice@127.0.0.1:3000",
+      "accepted": false,
+      "kind": "username-only",
+      "why": "a user name alone, over loopback http"
+    },
+    {
+      "url": "https://requestport.com/?x=1",
+      "accepted": false,
+      "kind": "query",
+      "why": "a query over https"
+    },
+    {
+      "url": "http://127.0.0.1:3000/?x=1",
+      "accepted": false,
+      "kind": "query",
+      "why": "a query over loopback http"
+    },
+    {
+      "url": "https://requestport.com/?",
+      "accepted": false,
+      "kind": "empty-query",
+      "why": "an empty query over https, which leaves URL.search empty"
+    },
+    {
+      "url": "http://127.0.0.1:3000/?",
+      "accepted": false,
+      "kind": "empty-query",
+      "why": "an empty query over loopback http, which leaves URL.search empty"
+    },
+    {
+      "url": "https://requestport.com/#frag",
+      "accepted": false,
+      "kind": "fragment",
+      "why": "a fragment over https"
+    },
+    {
+      "url": "http://127.0.0.1:3000/#frag",
+      "accepted": false,
+      "kind": "fragment",
+      "why": "a fragment over loopback http"
+    },
+    {
+      "url": "https://requestport.com/#",
+      "accepted": false,
+      "kind": "empty-fragment",
+      "why": "an empty fragment over https, which leaves URL.hash empty"
+    },
+    {
+      "url": "http://127.0.0.1:3000/#",
+      "accepted": false,
+      "kind": "empty-fragment",
+      "why": "an empty fragment over loopback http, which leaves URL.hash empty"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+#!/bin/sh
+# The gate, before a push.
+#
+# There is no CI. This is the last automatic check a change meets, and it is
+# deliberately the fast half: lint, typecheck, the scripts corpus and every
+# workspace suite — around a minute and a half. The browser lanes are not here,
+# because a six-minute pre-push hook is a hook people learn to skip.
+#
+# Run the whole thing yourself before anything that matters:
+#     node scripts/verify-locally.mjs --e2e
+#
+# This hook gates a push from this machine and nothing else. It does not gate
+# the merge, which happens server-side, and `git push --no-verify` walks past
+# it. It is a default, not a wall.
+set -e
+
+root="$(git rev-parse --show-toplevel)"
+cd "$root"
+
+printf '\nRunning the local gate before pushing. Skip with --no-verify if you must.\n\n'
+
+if ! node scripts/verify-locally.mjs; then
+  printf '\nThe local gate failed, so the push stopped here.\n'
+  printf 'Fix it, or push with --no-verify if you know why it is failing.\n\n'
+  exit 1
+fi
+
+printf '\nLocal gate passed. Pushing.\n\n'

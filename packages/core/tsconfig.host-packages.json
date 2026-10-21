@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.build.json",
+  "include": [
+    "../auth/src/auth-handler.ts",
+    "../auth/src/create-auth.ts",
+    "../db/src/**/*.ts",
+    "../mcp/src/index.ts",
+    "../server/src/index.ts"
+  ]
+}

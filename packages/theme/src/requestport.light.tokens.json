@@ -1,0 +1,32 @@
+{
+  "$description": "Theme: requestport, light mode. Warm paper surfaces with the RequestPort orange accent. COLOR ONLY: font-mono inherits from the dark block and derived tokens remain compiler-owned.",
+  "color": {
+    "$type": "color",
+    "bg": { "$value": "#f4f3ef" },
+    "sunken": { "$value": "#e7e6e1" },
+    "surface-1": { "$value": "#faf9f6" },
+    "surface-2": { "$value": "#ffffff" },
+    "surface-3": { "$value": "#deddd8" },
+    "fg": { "$value": "#1a1d1e" },
+    "fg-muted": { "$value": "#53595c" },
+    "fg-subtle": { "$value": "#5b6165" },
+    "border": { "$value": "#d0d2cf" },
+    "border-strong": { "$value": "#7f8689" },
+    "border-overlay": { "$value": "#aeb4b5" },
+    "accent": { "$value": "#a14026" },
+    "accent-hover": { "$value": "#963b23" },
+    "accent-fg": { "$value": "#ffffff" },
+    "ok": { "$value": "#247746" },
+    "busy": { "$value": "#604aaa" },
+    "warn": { "$value": "#8a5b00" },
+    "warn-fg": { "$value": "#f4f3ef" },
+    "danger": { "$value": "#aa2f2b" },
+    "danger-fg": { "$value": "#f4f3ef" },
+    "info": { "$value": "#1d6587" },
+    "stream": { "$value": "#15607f" },
+    "selection": { "$value": "rgba(161,64,38,0.18)" },
+    "focus": { "$value": "#a14026" },
+    "data-ground": { "$value": "#000000" },
+    "scrim": { "$value": "rgba(20,18,15,0.45)" }
+  }
+}

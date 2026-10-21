@@ -1,0 +1,26 @@
+{
+  "name": "@requestport/client",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./authorize": "./src/authorize.ts",
+    "./callback-server": "./src/callback-server.ts",
+    "./ci": "./src/ci.ts",
+    "./credentials": "./src/credentials.ts",
+    "./http": "./src/http.ts",
+    "./oauth": "./src/oauth.ts",
+    "./project": "./src/project.ts",
+    "./resolve": "./src/resolve.ts",
+    "./token-source": "./src/token-source.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "biome check src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "@requestport/theme",
+  "version": "1.0.2",
+  "private": true,
+  "description": "The RequestPort theme: the palette this product owns.",
+  "type": "module",
+  "keywords": [
+    "cue-theme"
+  ],
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./theme.css": "./theme.css",
+    "./variants.css": "./variants.css",
+    "./manifest.json": "./manifest.json",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "theme:generate": "cue-theme build",
+    "theme:check": "cue-theme check",
+    "lint": "biome check .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@cueplusplus/theme-base": "^1"
+  },
+  "devDependencies": {
+    "@cueplusplus/theme-base": "^1.0.3",
+    "@cueplusplus/theme-tools": "1.0.4",
+    "@cueplusplus/tokens": "0.14.1"
+  }
+}
