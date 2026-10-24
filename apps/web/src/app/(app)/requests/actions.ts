@@ -8,6 +8,8 @@ import {
   requestPriorities,
   requestStates,
   requestTypes,
+  utf16Max,
+  utf16Min,
 } from "@requestport/domain";
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
@@ -42,15 +44,15 @@ const createSchema = z.object({
   sourceProjectId: z.union([z.literal(""), z.uuid()]),
   targetProjectId: z.uuid(),
   type: z.enum(requestTypes),
-  title: z.string().trim().min(1).max(240),
-  descriptionMd: z.string().trim().min(1).max(100_000),
+  title: z.string().trim().min(1).check(utf16Max(240)),
+  descriptionMd: z.string().trim().min(1).check(utf16Max(100_000)),
   priority: z.enum(requestPriorities),
   visibility: z.enum(["organization", "restricted"]),
   sensitivity: z.enum(["normal", "sensitive"]),
-  labels: z.string().max(4_000),
-  acceptanceCriteria: z.string().max(100_000),
+  labels: z.string().check(utf16Max(4_000)),
+  acceptanceCriteria: z.string().check(utf16Max(100_000)),
   intent: z.enum(["draft", "submit"]),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 const routePreviewSchema = z.object({
@@ -80,38 +82,38 @@ const transitionSchema = z.object({
     "complete_request",
     "verify_request",
   ]),
-  reason: z.string().trim().max(20_000),
-  relatedRequestId: z.string().trim().max(100),
-  verificationEvidence: z.string().trim().max(50_000),
-  outcomeMd: z.string().trim().max(100_000),
-  changedRepositories: z.string().trim().max(100_000),
-  validationCommand: z.string().trim().max(2_000),
+  reason: z.string().trim().check(utf16Max(20_000)),
+  relatedRequestId: z.string().trim().check(utf16Max(100)),
+  verificationEvidence: z.string().trim().check(utf16Max(50_000)),
+  outcomeMd: z.string().trim().check(utf16Max(100_000)),
+  changedRepositories: z.string().trim().check(utf16Max(100_000)),
+  validationCommand: z.string().trim().check(utf16Max(2_000)),
   validationResult: z.enum(["passed", "failed", "not_run"]),
-  validationSummary: z.string().trim().max(4_000),
-  risksMd: z.string().trim().max(50_000),
-  followupsMd: z.string().trim().max(50_000),
-  verificationStepsMd: z.string().trim().max(50_000),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  validationSummary: z.string().trim().check(utf16Max(4_000)),
+  risksMd: z.string().trim().check(utf16Max(50_000)),
+  followupsMd: z.string().trim().check(utf16Max(50_000)),
+  verificationStepsMd: z.string().trim().check(utf16Max(50_000)),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 const messageSchema = z.object({
   requestId: z.uuid(),
-  bodyMd: z.string().trim().min(1).max(100_000),
+  bodyMd: z.string().trim().min(1).check(utf16Max(100_000)),
   visibility: z.enum(["organization", "restricted"]),
-  mentionUserIds: z.string().max(4_000),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  mentionUserIds: z.string().check(utf16Max(4_000)),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 const updateSchema = z
   .object({
     requestId: z.uuid(),
     expectedVersion: z.coerce.number().int().positive(),
-    title: z.string().trim().min(1).max(240),
-    descriptionMd: z.string().trim().min(1).max(100_000),
+    title: z.string().trim().min(1).check(utf16Max(240)),
+    descriptionMd: z.string().trim().min(1).check(utf16Max(100_000)),
     priority: z.enum(requestPriorities),
     visibility: z.enum(["organization", "restricted"]),
     sensitivity: z.enum(["normal", "sensitive"]),
-    idempotencyKey: z.string().trim().min(16).max(200),
+    idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
   })
   .refine(
     (value) =>
@@ -133,44 +135,44 @@ const relationshipSchema = z.object({
     "related_to",
     "derived_from",
   ]),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 const unlinkSchema = z.object({
   requestId: z.uuid(),
   relationshipId: z.uuid(),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 const closeQuestionSchema = z.object({
   requestId: z.uuid(),
   questionId: z.uuid(),
   expectedVersion: z.coerce.number().int().positive(),
-  reason: z.string().trim().min(1).max(20_000),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  reason: z.string().trim().min(1).check(utf16Max(20_000)),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 const questionSchema = z.object({
   requestId: z.uuid(),
   expectedVersion: z.coerce.number().int().positive(),
-  audience: z.string().trim().min(1).max(300),
-  bodyMd: z.string().trim().min(1).max(100_000),
-  choices: z.string().trim().max(2_000),
+  audience: z.string().trim().min(1).check(utf16Max(300)),
+  bodyMd: z.string().trim().min(1).check(utf16Max(100_000)),
+  choices: z.string().trim().check(utf16Max(2_000)),
   allowFreeText: z.enum(["true", "false"]),
   answerMode: z.enum(["single", "multiple"]),
   blocksRequest: z.enum(["true", "false"]),
-  deadlineAt: z.string().trim().max(100),
+  deadlineAt: z.string().trim().check(utf16Max(100)),
   escalateAfterMinutes: z.enum(["none", "60", "240", "1440"]),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 const answerSchema = z
   .object({
     questionId: z.uuid(),
     expectedVersion: z.coerce.number().int().positive(),
-    bodyMd: z.string().trim().max(100_000),
-    choice: z.string().trim().max(160).optional(),
-    idempotencyKey: z.string().trim().min(16).max(200),
+    bodyMd: z.string().trim().check(utf16Max(100_000)),
+    choice: z.string().trim().check(utf16Max(160)).optional(),
+    idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
   })
   .refine((value) => Boolean(value.choice || value.bodyMd), {
     message: "An answer is required",
@@ -179,11 +181,11 @@ const answerSchema = z
 
 const artifactSchema = z.object({
   requestId: z.uuid(),
-  kind: z.string().trim().min(1).max(64),
-  externalUrl: z.string().trim().min(1).max(4_096),
-  mediaType: z.string().trim().max(255),
-  sha256: z.string().trim().max(64),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  kind: z.string().trim().min(1).check(utf16Max(64)),
+  externalUrl: z.string().trim().min(1).check(utf16Max(4_096)),
+  mediaType: z.string().trim().check(utf16Max(255)),
+  sha256: z.string().trim().check(utf16Max(64)),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 function strings(formData: FormData) {

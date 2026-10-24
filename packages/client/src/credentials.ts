@@ -89,6 +89,25 @@ export function isAudience(value: unknown): value is Audience {
   return value === "mcp" || value === "api";
 }
 
+/*
+  `z.iso.datetime()` with seconds optional: what zod 4.4.3 answered for the
+  client at 0.2.0, kept on zod 4.6.7. `@requestport/domain`'s
+  `shared/zod-compat.ts` holds the same helper and says what moved; this
+  package depends on no other workspace, so it keeps a copy here, beside
+  its two uses.
+*/
+const isoDatetimePattern =
+  /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$/;
+
+/**
+ * `z.iso.datetime()` with 4.4.3's pattern. zod's types leave `pattern` out
+ * of a datetime's parameters, but its constructor keeps one it is given.
+ */
+function isoDatetime() {
+  const params: Record<string, unknown> = { pattern: isoDatetimePattern };
+  return z.iso.datetime(params as z.core.$ZodISODateTimeParams);
+}
+
 /**
  * A stored credential, version 2: what a refresh needs, and nothing else.
  *
@@ -103,7 +122,7 @@ const CredentialSchema = z
   .object({
     audience: z.enum(AUDIENCES),
     clientId: z.string().min(1),
-    obtained: z.iso.datetime(),
+    obtained: isoDatetime(),
     refreshToken: z.string().min(1),
     resource: z.string().min(1),
     version: z.literal(2),
@@ -118,7 +137,7 @@ export type StoredCredential = z.infer<typeof CredentialSchema>;
  */
 const LegacyCredentialSchema = z
   .object({
-    obtained: z.iso.datetime(),
+    obtained: isoDatetime(),
     refreshToken: z.string().min(1),
   })
   .strict();

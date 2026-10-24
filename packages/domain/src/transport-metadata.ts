@@ -16,6 +16,7 @@ import { agentRevokeScope } from "./operators/operator-types.js";
 import { projectRegistrationInputSchema } from "./projects/project-registration-schema.js";
 import { requestStates } from "./requests/request-types.js";
 import { requestPriorities, requestTypes } from "./routing/routing-types.js";
+import { utf16Max, utf16Min } from "./shared/zod-compat.js";
 import {
   slackAdministrationScope,
   slackConnectionTestInputSchema,
@@ -78,7 +79,7 @@ export const administrationBasePath = `${restApiBasePath}/administration`;
  * declares these inline; this is the same pair of constraints.
  */
 export const restCommandEnvelopeFields = {
-  idempotencyKey: z.string().min(16).max(200),
+  idempotencyKey: z.string().check(utf16Min(16)).check(utf16Max(200)),
   expectedVersion: z.number().int().nonnegative(),
 } as const;
 

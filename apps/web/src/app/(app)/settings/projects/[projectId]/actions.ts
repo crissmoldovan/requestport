@@ -4,6 +4,8 @@ import {
   projectSettingsCommandInputSchemas as commands,
   DomainError,
   type ProjectSettingsCommandName,
+  utf16Max,
+  utf16Min,
 } from "@requestport/domain";
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
@@ -26,7 +28,7 @@ import type { ProjectSettingsActionState } from "./action-state.js";
  */
 const envelope = z.object({
   projectId: z.uuid(),
-  idempotencyKey: z.string().min(16).max(200),
+  idempotencyKey: z.string().check(utf16Min(16)).check(utf16Max(200)),
   expectedVersion: z.coerce.number().int().positive(),
 });
 

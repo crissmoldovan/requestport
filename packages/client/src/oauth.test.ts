@@ -131,6 +131,13 @@ describe("discovering the authorization server", () => {
     expect(metadata.registration_endpoint).toBe(REGISTER);
   });
 
+  test("keeps a tab inside an endpoint's url as the server sent it, as zod 4.4.3 did", async () => {
+    const tabbed = `${SERVER}/api/auth/oauth2/to\tken`;
+    const metadata = await discovered({ token_endpoint: tabbed });
+
+    expect(metadata.token_endpoint).toBe(tabbed);
+  });
+
   test("tolerates a server url written with a trailing slash", async () => {
     const server = metadataStub();
     await discover(`${SERVER}/`, server.fetch);

@@ -15,6 +15,7 @@ import type { CommandDefinition, CommandMeta } from "../shared/command.js";
 import { DomainError } from "../shared/errors.js";
 import type { JsonObject } from "../shared/idempotency.js";
 import type { UnitOfWork } from "../shared/unit-of-work.js";
+import { utf16Max, utf16Min } from "../shared/zod-compat.js";
 
 /*
   Delivery recovery and retention holds, as commands on the tenant bus (Plan
@@ -56,7 +57,7 @@ const slackOperationInput = organization.extend({ operationId: z.uuid() });
 const importDispatchInput = organization.extend({ dispatchId: z.uuid() });
 const holdCreateInput = organization.extend({
   category: z.enum(retentionHoldCategories),
-  reason: z.string().trim().min(8).max(500),
+  reason: z.string().trim().check(utf16Min(8)).check(utf16Max(500)),
 });
 const holdReleaseInput = organization.extend({ holdId: z.uuid() });
 

@@ -109,6 +109,31 @@ export function isBindableServer(value: string): boolean {
   return serverProblem(value) === undefined;
 }
 
+/*
+  A string's length in UTF-16 code units: what zod 4.4.3 answered for the
+  client at 0.2.0, kept on zod 4.6.7. `@requestport/domain`'s
+  `shared/zod-compat.ts` holds the same helper and says what moved; this
+  package depends on no other workspace, so its one use keeps a copy.
+*/
+function utf16Max(maximum: number) {
+  const check = z.maxLength(maximum);
+  const def = check._zod.def;
+  check._zod.check = (payload) => {
+    const input = payload.value;
+    if (input.length <= def.maximum) return;
+    payload.issues.push({
+      origin: z.core.util.getLengthableOrigin(input),
+      code: "too_big",
+      maximum: def.maximum,
+      inclusive: true,
+      input,
+      inst: check,
+      continue: !def.abort,
+    });
+  };
+  return check;
+}
+
 /**
  * `strict()` rather than the default, and that is the point of the schema.
  *
@@ -121,7 +146,7 @@ const BindingSchema = z
   .object({
     organizationId: z.uuid(),
     projectId: z.uuid(),
-    projectSlug: z.string().min(1).max(120),
+    projectSlug: z.string().min(1).check(utf16Max(120)),
     server: z.string().superRefine((value, context) => {
       const problem = serverProblem(value);
       if (problem !== undefined) {

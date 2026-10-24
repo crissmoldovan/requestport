@@ -163,7 +163,7 @@ describe("REST transport metadata against the route and the handlers it composes
 
   test("the envelope fields are the route's", () => {
     expect(restHandlerSource).toContain(
-      "idempotencyKey: z.string().min(16).max(200)",
+      "idempotencyKey: z.string().check(utf16Min(16)).check(utf16Max(200))",
     );
     expect(restHandlerSource).toContain(
       "expectedVersion: z.number().int().nonnegative()",

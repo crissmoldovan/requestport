@@ -4,6 +4,7 @@ import {
   type OrganizationAccess,
   type OrganizationService,
   type ProjectService,
+  utf16Max,
 } from "@requestport/domain";
 import { z } from "zod";
 
@@ -88,18 +89,18 @@ type AdministrationActionDependencies = {
 };
 
 const organizationSchema = z.object({
-  name: z.string().max(160),
-  slug: z.string().max(63),
+  name: z.string().check(utf16Max(160)),
+  slug: z.string().check(utf16Max(63)),
 });
 const projectSchema = z.object({
-  name: z.string().max(160),
-  slug: z.string().max(63),
-  keyPrefix: z.string().max(10),
-  description: z.string().max(2_000).optional(),
-  repositoryUrl: z.string().max(500).optional(),
+  name: z.string().check(utf16Max(160)),
+  slug: z.string().check(utf16Max(63)),
+  keyPrefix: z.string().check(utf16Max(10)),
+  description: z.string().check(utf16Max(2_000)).optional(),
+  repositoryUrl: z.string().check(utf16Max(500)).optional(),
 });
 const invitationSchema = z.object({
-  email: z.string().max(320),
+  email: z.string().check(utf16Max(320)),
   role: z.enum(["owner", "admin", "member"]),
 });
 const switchSchema = z.object({ organizationId: z.uuid() });

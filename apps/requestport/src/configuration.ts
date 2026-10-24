@@ -3,8 +3,8 @@ import { isIP } from "node:net";
 import { join } from "node:path";
 
 import { isBindableServer } from "@requestport/client/project";
+import { utf16Min } from "@requestport/domain";
 import { z } from "zod";
-
 import { readDataFile, writeFileAtomic } from "./atomic-file.js";
 
 /**
@@ -149,7 +149,7 @@ const SECRET_BYTES = 32;
  */
 const key = z
   .string()
-  .min(43)
+  .check(utf16Min(43))
   .refine(
     (value) => Buffer.from(value, "base64url").byteLength === SECRET_BYTES,
     { message: "must be base64url of exactly 32 bytes" },
@@ -180,7 +180,7 @@ const loginUrl = z.string().refine(
 const SecretsSchema = z
   .object({
     version: z.literal(1),
-    BETTER_AUTH_SECRET: z.string().min(32),
+    BETTER_AUTH_SECRET: z.string().check(utf16Min(32)),
     REQUESTPORT_WORKSPACE_KEK: key,
     REQUESTPORT_WEBHOOK_KEK: key,
     REQUESTPORT_WEBHOOK_SIGNING_KEY: key,

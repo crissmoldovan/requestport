@@ -6,6 +6,7 @@ import {
   restCommandTransports,
 } from "@requestport/domain";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import type { z } from "zod";
 
 import { reauthorizeWithResourceDescription } from "./bearer-challenge.js";
 import { withProject } from "./project-scope.js";
@@ -500,6 +501,87 @@ describe("handleRestCommand: POST", () => {
     expect(response.status).toBe(422);
     expect((await response.json()).error).toBe("validation_failed");
     expect(rest.requestPort).not.toHaveBeenCalled();
+  });
+
+  test("counts the idempotency key in UTF-16 code units, as zod 4.4.3 did: eight emoji, sixteen units, reach the RequestPort", async () => {
+    const rest = restOver();
+    const idempotencyKey = "\u{1F600}".repeat(8);
+
+    const response = await handleRestCommand(
+      post("create_request_draft", { ...envelope(), idempotencyKey }),
+      rest.parts("commands", "create_request_draft"),
+      rest.options,
+    );
+
+    expect(response.status).toBe(200);
+    expect(rest.execute.mock.calls[0]?.[2]).toMatchObject({
+      meta: { idempotencyKey, expectedVersion: 3 },
+    });
+  });
+
+  test("refuses an idempotency key of 101 emoji, 202 UTF-16 code units, 422, as zod 4.4.3 did", async () => {
+    const rest = restOver();
+
+    const response = await handleRestCommand(
+      post("create_request_draft", {
+        ...envelope(),
+        idempotencyKey: "\u{1F600}".repeat(101),
+      }),
+      rest.parts("commands", "create_request_draft"),
+      rest.options,
+    );
+
+    expect(response.status).toBe(422);
+    expect((await response.json()).error).toBe("validation_failed");
+    expect(rest.requestPort).not.toHaveBeenCalled();
+  });
+
+  test("drops an own __proto__ key of the envelope, as zod 4.4.3 did, and the command reaches the RequestPort", async () => {
+    const rest = restOver();
+
+    const response = await handleRestCommand(
+      post(
+        "create_request_draft",
+        '{"input":{},"idempotencyKey":"rest-idempotency-key-0001","expectedVersion":3,"__proto__":{"polluted":true}}',
+      ),
+      rest.parts("commands", "create_request_draft"),
+      rest.options,
+    );
+
+    expect(response.status).toBe(200);
+    expect(rest.execute).toHaveBeenCalledTimes(1);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  test("drops an own __proto__ key inside a command's input, so ask_question's escalation policy parses as 0.2.0 parsed it", async () => {
+    const rest = restOver();
+    const requestId = "018f0000-0000-7000-8000-0000000c0001";
+
+    const response = await handleRestCommand(
+      post(
+        "ask_question",
+        `{"input":{"requestId":"${requestId}","audience":{"type":"requester"},"bodyMd":"Which one?","escalationPolicy":{"__proto__":{"polluted":true}}},"idempotencyKey":"rest-idempotency-key-0001","expectedVersion":3}`,
+      ),
+      rest.parts("commands", "ask_question"),
+      rest.options,
+    );
+
+    expect(response.status).toBe(200);
+    const input = rest.execute.mock.calls[0]?.[1] as {
+      escalationPolicy: object;
+    };
+    expect(Object.hasOwn(input.escalationPolicy, "__proto__")).toBe(false);
+    const askQuestion = restCommandTransports.find(
+      (transport) => transport.name === "ask_question",
+    );
+    const escalationPolicy = (
+      askQuestion?.inputSchema as
+        | z.ZodObject<Record<string, z.ZodType>>
+        | undefined
+    )?.shape.escalationPolicy;
+    expect(escalationPolicy?.safeParse(input.escalationPolicy).success).toBe(
+      true,
+    );
   });
 
   test("bounds the body at REST_MAX_BODY, 524,288 bytes, unless maxBody says otherwise", async () => {

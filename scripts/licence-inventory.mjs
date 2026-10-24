@@ -1051,7 +1051,7 @@ const workspace = (name) => `@requestport/${name}`;
 const workspaces = (...names) => names.map(workspace).sort();
 
 const CORE_NOTE =
-  "packages/core (G.6) declares db, domain, importer, jobs, webhooks and zod 4.4.3, which domain also declares; importer and webhooks are in jobs' closure already. So core's closure is taken as that of the three packages manifest-g.md §3.1 says core imports, jobs, db and domain: the one third-party dependency core declares is in it at that version. G.8's licence check covers core's closure only, the rows of track-g-licence-reference.json (ruling 139)";
+  "packages/core (G.6) declares db, domain, importer, jobs, webhooks and zod 4.6.7, which domain also declares; importer and webhooks are in jobs' closure already. So core's closure is taken as that of the three packages manifest-g.md §3.1 says core imports, jobs, db and domain: the one third-party dependency core declares is in it at that version. G.8's licence check covers core's closure only, the rows of track-g-licence-reference.json (ruling 139)";
 
 /**
  * The candidates, as `manifest-g.md` defines them at `f64c0f48`.

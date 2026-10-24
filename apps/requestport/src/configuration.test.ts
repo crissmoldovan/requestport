@@ -159,6 +159,17 @@ describe("secrets, generated once", () => {
     );
   });
 
+  test("measures BETTER_AUTH_SECRET in UTF-16 code units, as zod 4.4.3 did: sixteen emoji are its 32", () => {
+    const secrets = {
+      ...generateSecrets("pglite"),
+      BETTER_AUTH_SECRET: "\u{1F600}".repeat(16),
+    };
+
+    expect(parseSecrets(secrets, "pglite").BETTER_AUTH_SECRET).toBe(
+      "\u{1F600}".repeat(16),
+    );
+  });
+
   test("holds the four login URLs the operator step adds, each a postgres: URL with its credentials, and only on pg", () => {
     const secrets = generateSecrets("pg");
     const passwords = secrets.loginPasswords as Record<string, string>;

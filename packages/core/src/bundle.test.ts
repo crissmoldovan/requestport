@@ -126,9 +126,10 @@ import {
  * and `meta/_journal.json`), under `node_modules/@requestport/`, beside the
  * third-party packages they import and the optional PGlite peer, and a
  * package's own copy of one under that package where it is another than the
- * top's (`auth`'s `zod`), as an install nests a version the top does not
- * hold; in a directory with no `node_modules` above it; loaded by Node with
- * an empty environment. Importing every entry, in build order, by its
+ * top's (`auth`'s `zod`, while it declared 4.5.4 beside the others'
+ * 4.4.3), as an install nests a version the top does not hold; in a
+ * directory with no `node_modules` above it; loaded by Node with an empty
+ * environment. Importing every entry, in build order, by its
  * package's name, but `config`'s `./server`, reads no variable in the
  * packages' own code, and adds only the globals its dependencies add;
  * `config`'s `./server`, imported after them, parses `process.env` as it is
@@ -1579,7 +1580,7 @@ function resolveSpecifier(
  * workspace of `set` that has it; and under a package's own `node_modules/`
  * a link to each it imports whose copy in its own workspace is another than
  * that one, as an install nests a version the top does not hold (`auth`'s
- * `zod`).
+ * `zod`, while it declared 4.5.4 beside the others' 4.4.3).
  */
 function layOut(set: readonly BundleName[]) {
   const thirdParty = new Set(["@electric-sql/pglite"]);

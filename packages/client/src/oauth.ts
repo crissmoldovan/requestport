@@ -117,6 +117,23 @@ export const AGENT_SCOPES = [
  */
 export const REFRESH_SCOPE = "offline_access";
 
+/*
+  `z.url()` keeping a tab or newline inside a URL: what zod 4.4.3 answered
+  for the client at 0.2.0, kept on zod 4.6.7. `@requestport/domain`'s
+  `shared/zod-compat.ts` holds the same helper and says what moved; this
+  package depends on no other workspace, so it keeps a copy here, beside
+  its four uses.
+*/
+function parsesAsUrl(value: string) {
+  return URL.canParse(value.trim());
+}
+
+function trimmedUrl() {
+  return z
+    .stringFormat("url", parsesAsUrl)
+    .overwrite((value) => (parsesAsUrl(value) ? value.trim() : value));
+}
+
 /**
  * Not `strict()`, unlike the binding schema in `project.ts`, and for the
  * opposite reason: that file is ours and must not grow a secret, while this
@@ -125,7 +142,7 @@ export const REFRESH_SCOPE = "offline_access";
  * deploy. Unknown keys are dropped instead of trusted.
  */
 const MetadataSchema = z.object({
-  authorization_endpoint: z.url(),
+  authorization_endpoint: trimmedUrl(),
   /**
    * RFC 9207: true when every authorization response names its issuer in an
    * `iss` parameter. `authorize` turns it into what `readCallback` requires.
@@ -142,11 +159,11 @@ const MetadataSchema = z.object({
       message: "the server must support the S256 code challenge method",
     }),
   grant_types_supported: z.array(z.string()).optional(),
-  issuer: z.url(),
-  registration_endpoint: z.url().optional(),
+  issuer: trimmedUrl(),
+  registration_endpoint: trimmedUrl().optional(),
   response_types_supported: z.array(z.string()).optional(),
   scopes_supported: z.array(z.string()).optional(),
-  token_endpoint: z.url(),
+  token_endpoint: trimmedUrl(),
 });
 
 export type AuthorizationServerMetadata = z.infer<typeof MetadataSchema>;

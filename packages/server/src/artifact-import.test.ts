@@ -228,6 +228,34 @@ describe("handleArtifactImport, over the collaborators it is handed", () => {
     },
   );
 
+  test("measures the idempotency key in UTF-16 code units, as zod 4.4.3 did: eight emoji, sixteen units, start a capture", async () => {
+    const { options } = collaborators();
+
+    const response = await handleArtifactImport(
+      post({ ...payloads.start, idempotencyKey: "\u{1F600}".repeat(8) }),
+      options,
+    );
+
+    expect(response.status).toBe(201);
+  });
+
+  test("measures an artifact's relative path in UTF-16 code units, as zod 4.4.3 did: 1,025 emoji, 2,050 units, are over its 2,048, 422", async () => {
+    const { options } = collaborators();
+
+    const response = await handleArtifactImport(
+      post({
+        ...payloads.append,
+        artifacts: [
+          { ...artifact("# One\n"), relativePath: "\u{1F600}".repeat(1_025) },
+        ],
+      }),
+      options,
+    );
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "validation_failed" });
+  });
+
   test("reads no secret for a request it refuses", async () => {
     const { options, stand } = collaborators({
       authenticateAgentBearer: async () => agent({ scopes: new Set() }),

@@ -4,6 +4,8 @@ import {
   DomainError,
   revokeOrganizationInvitationCommandName,
   setOrganizationMemberCommandName,
+  utf16Max,
+  utf16Min,
 } from "@requestport/domain";
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
@@ -21,17 +23,17 @@ import {
 import type { MemberActionState } from "./action-state.js";
 
 const memberSchema = z.object({
-  userId: z.string().min(1).max(255),
+  userId: z.string().min(1).check(utf16Max(255)),
   role: z.enum(["owner", "admin", "member"]),
   status: z.enum(["active", "revoked"]),
   expectedVersion: z.coerce.number().int().positive(),
-  idempotencyKey: z.string().min(16).max(200),
+  idempotencyKey: z.string().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 const invitationSchema = z.object({
   invitationId: z.uuid(),
   expectedVersion: z.coerce.number().int().positive(),
-  idempotencyKey: z.string().min(16).max(200),
+  idempotencyKey: z.string().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 function mapError(error: unknown): MemberActionState {

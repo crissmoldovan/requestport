@@ -1,7 +1,9 @@
 import {
   createMcpHandler,
+  isJsonContentType,
   isLegacyRequest,
   McpServer,
+  readRequestBody,
   type StandardSchemaWithJSON,
   type ToolAnnotations,
   type ToolCallback,
@@ -17,7 +19,12 @@ import type {
 import {
   containsSensitiveJson,
   DomainError,
+  dropOwnProtoKeys,
   findMcpToolTransport,
+  isoDatetime,
+  trimmedUrl,
+  utf16Max,
+  utf16Min,
 } from "@requestport/domain";
 import { z } from "zod";
 
@@ -152,11 +159,11 @@ export type McpServerDependencies = {
 };
 
 const commandMeta = {
-  idempotencyKey: z.string().min(16).max(200),
+  idempotencyKey: z.string().check(utf16Min(16)).check(utf16Max(200)),
   expectedVersion: z.number().int().nonnegative(),
 };
 
-const cursorSchema = z.string().min(1).max(2_048);
+const cursorSchema = z.string().min(1).check(utf16Max(2_048));
 const capabilityKeySchema = z.string().regex(/^[a-z][a-z0-9_.:-]{0,63}$/u);
 const capabilitiesSchema = z
   .record(capabilityKeySchema, z.boolean())
@@ -165,7 +172,7 @@ const capabilitiesSchema = z
   });
 const boundedJsonRecord = (maximumEntries: number) =>
   z
-    .record(z.string().min(1).max(128), z.json())
+    .record(z.string().min(1).check(utf16Max(128)), z.json())
     .refine((value) => Object.keys(value).length <= maximumEntries, {
       message: `At most ${maximumEntries} fields may be supplied`,
     });
@@ -665,8 +672,8 @@ export function createRequestPortMcpServer(
       {
         description: "Negotiate effective agent policy before starting work.",
         inputSchema: z.object({
-          softwareName: z.string().min(1).max(160),
-          softwareVersion: z.string().min(1).max(160),
+          softwareName: z.string().min(1).check(utf16Max(160)),
+          softwareVersion: z.string().min(1).check(utf16Max(160)),
           capabilities: capabilitiesSchema.default({}),
           intendedProjectId: z.uuid().optional(),
           installationId: z.uuid().optional(),
@@ -719,8 +726,8 @@ export function createRequestPortMcpServer(
     description: "Register this authenticated agent installation.",
     schema: z.object({
       ...commandMeta,
-      softwareName: z.string().min(1).max(160),
-      softwareVersion: z.string().min(1).max(160),
+      softwareName: z.string().min(1).check(utf16Max(160)),
+      softwareVersion: z.string().min(1).check(utf16Max(160)),
       capabilities: capabilitiesSchema.default({}),
     }),
   });
@@ -762,19 +769,24 @@ export function createRequestPortMcpServer(
            * answer".
            */
           correlationId: z.uuid(),
-          name: z.string().min(1).max(160),
+          name: z.string().min(1).check(utf16Max(160)),
           slug: z
             .string()
             .min(1)
-            .max(63)
+            .check(utf16Max(63))
             .regex(/^[a-z0-9][a-z0-9-]*$/u, "must be a lowercase slug"),
           keyPrefix: z
             .string()
             .min(1)
-            .max(10)
+            .check(utf16Max(10))
             .regex(/^[A-Z][A-Z0-9]*$/u, "must be uppercase letters and digits"),
-          description: z.string().max(2_000).optional(),
-          repositoryUrl: z.url().startsWith("https://github.com/").optional(),
+          description: z.string().check(utf16Max(2_000)).optional(),
+          // zod 4.6 writes the last check's format, `starts_with`, into
+          // tools/list; `.meta` keeps the `uri` 0.2.0 listed.
+          repositoryUrl: trimmedUrl()
+            .startsWith("https://github.com/")
+            .meta({ format: "uri" })
+            .optional(),
         }),
         annotations: {
           readOnlyHint: false,
@@ -813,13 +825,13 @@ export function createRequestPortMcpServer(
         inputSchema: z.object({
           idempotencyKey: z.uuid(),
           projectId: z.uuid(),
-          displayName: z.string().min(1).max(160),
+          displayName: z.string().min(1).check(utf16Max(160)),
           slug: z
             .string()
             .min(1)
-            .max(120)
+            .check(utf16Max(120))
             .regex(/^[a-z0-9][a-z0-9-]*$/u, "must be a lowercase slug"),
-          softwareName: z.string().min(1).max(160).optional(),
+          softwareName: z.string().min(1).check(utf16Max(160)).optional(),
           laneIds: z.array(z.uuid()).max(100).default([]),
           /**
            * Working scopes only. A provisioning credential that could mint
@@ -829,7 +841,7 @@ export function createRequestPortMcpServer(
            * be skipped by a caller that reaches the host directly.
            */
           scopes: z
-            .array(z.string().min(1).max(64))
+            .array(z.string().min(1).check(utf16Max(64)))
             .min(1)
             .max(30)
             .refine(
@@ -868,8 +880,13 @@ export function createRequestPortMcpServer(
       inputSchema: z
         .object({
           ...commandMeta,
-          alias: z.string().min(1).max(120).optional(),
-          repositoryUrl: z.url().startsWith("https://github.com/").optional(),
+          alias: z.string().min(1).check(utf16Max(120)).optional(),
+          // zod 4.6 writes the last check's format, `starts_with`, into
+          // tools/list; `.meta` keeps the `uri` 0.2.0 listed.
+          repositoryUrl: trimmedUrl()
+            .startsWith("https://github.com/")
+            .meta({ format: "uri" })
+            .optional(),
         })
         .refine((value) => value.alias || value.repositoryUrl, {
           message: "An alias or repositoryUrl is required",
@@ -916,14 +933,17 @@ export function createRequestPortMcpServer(
     targetProjectId: z.uuid(),
     laneId: z.uuid().nullable().optional(),
     type: z.enum(["feature", "bug", "question", "chore", "investigation"]),
-    title: z.string().min(1).max(240),
-    descriptionMd: z.string().min(1).max(100_000),
+    title: z.string().min(1).check(utf16Max(240)),
+    descriptionMd: z.string().min(1).check(utf16Max(100_000)),
     priority: z.enum(["low", "normal", "high", "urgent"]).default("normal"),
     visibility: z.enum(["organization", "restricted"]).default("organization"),
     sensitivity: z.enum(["normal", "sensitive"]).default("normal"),
-    labels: z.array(z.string().trim().min(1).max(80)).max(50).default([]),
+    labels: z
+      .array(z.string().trim().min(1).check(utf16Max(80)))
+      .max(50)
+      .default([]),
     acceptanceCriteria: z
-      .array(z.string().trim().min(1).max(2_000))
+      .array(z.string().trim().min(1).check(utf16Max(2_000)))
       .max(100)
       .default([]),
   });
@@ -953,7 +973,7 @@ export function createRequestPortMcpServer(
     schema: z.object({
       ...commandMeta,
       requestId: z.uuid(),
-      reason: z.string().min(1).max(20_000),
+      reason: z.string().min(1).check(utf16Max(20_000)),
     }),
   });
   registerCommand(server, dependencies, {
@@ -962,8 +982,8 @@ export function createRequestPortMcpServer(
     schema: z.object({
       ...commandMeta,
       requestId: z.uuid(),
-      title: z.string().min(1).max(240).optional(),
-      descriptionMd: z.string().min(1).max(100_000).optional(),
+      title: z.string().min(1).check(utf16Max(240)).optional(),
+      descriptionMd: z.string().min(1).check(utf16Max(100_000)).optional(),
       priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
       visibility: z.enum(["organization", "restricted"]).optional(),
       sensitivity: z.enum(["normal", "sensitive"]).optional(),
@@ -975,12 +995,15 @@ export function createRequestPortMcpServer(
     schema: z.object({
       ...commandMeta,
       requestId: z.uuid(),
-      bodyMd: z.string().min(1).max(100_000),
+      bodyMd: z.string().min(1).check(utf16Max(100_000)),
       visibility: z
         .enum(["organization", "restricted"])
         .default("organization"),
       replyToId: z.uuid().nullable().optional(),
-      mentionUserIds: z.array(z.string().min(1).max(255)).max(100).default([]),
+      mentionUserIds: z
+        .array(z.string().min(1).check(utf16Max(255)))
+        .max(100)
+        .default([]),
     }),
   });
   registerCommand(server, dependencies, {
@@ -1022,13 +1045,16 @@ export function createRequestPortMcpServer(
         "requester",
         "target_maintainers",
       ]),
-      audienceId: z.string().min(1).max(255).nullable().optional(),
-      bodyMd: z.string().min(1).max(100_000),
-      choices: z.array(z.string().trim().min(1).max(160)).max(8).default([]),
+      audienceId: z.string().min(1).check(utf16Max(255)).nullable().optional(),
+      bodyMd: z.string().min(1).check(utf16Max(100_000)),
+      choices: z
+        .array(z.string().trim().min(1).check(utf16Max(160)))
+        .max(8)
+        .default([]),
       allowFreeText: z.boolean().default(true),
       answerMode: z.enum(["single", "multiple"]).default("single"),
       blocksRequest: z.boolean().default(false),
-      deadlineAt: z.iso.datetime().nullable().optional(),
+      deadlineAt: isoDatetime().nullable().optional(),
       escalationPolicy: z
         .object({
           reminderOffsetsMinutes: z
@@ -1075,7 +1101,7 @@ export function createRequestPortMcpServer(
     schema: z.object({
       ...commandMeta,
       questionId: z.uuid(),
-      bodyMd: z.string().min(1).max(100_000),
+      bodyMd: z.string().min(1).check(utf16Max(100_000)),
       structuredValue: z.json().nullable().optional(),
       sourceChannel: z.literal("mcp").default("mcp"),
     }),
@@ -1086,7 +1112,7 @@ export function createRequestPortMcpServer(
     schema: z.object({
       ...commandMeta,
       questionId: z.uuid(),
-      reason: z.string().min(1).max(20_000),
+      reason: z.string().min(1).check(utf16Max(20_000)),
     }),
   });
   registerCommand(server, dependencies, {
@@ -1096,9 +1122,10 @@ export function createRequestPortMcpServer(
     schema: z.object({
       ...commandMeta,
       requestId: z.uuid(),
-      kind: z.string().min(1).max(64),
-      externalUrl: z.url().startsWith("https://"),
-      mediaType: z.string().max(255).nullable().optional(),
+      kind: z.string().min(1).check(utf16Max(64)),
+      // As `repositoryUrl` above: tools/list keeps 0.2.0's `uri`.
+      externalUrl: trimmedUrl().startsWith("https://").meta({ format: "uri" }),
+      mediaType: z.string().check(utf16Max(255)).nullable().optional(),
       byteSize: z.number().int().nonnegative().nullable().optional(),
       sha256: z
         .string()
@@ -1135,36 +1162,41 @@ export function createRequestPortMcpServer(
       "pause_work_session",
       simpleRequestCommand.omit({ requestId: true }).extend({
         workSessionId: z.uuid(),
-        reason: z.string().trim().min(1).max(20_000),
+        reason: z.string().trim().min(1).check(utf16Max(20_000)),
       }),
     ],
     [
       "resume_work_session",
       simpleRequestCommand.omit({ requestId: true }).extend({
         workSessionId: z.uuid(),
-        reason: z.string().trim().min(1).max(20_000),
+        reason: z.string().trim().min(1).check(utf16Max(20_000)),
       }),
     ],
     [
       "block_work_session",
       simpleRequestCommand.omit({ requestId: true }).extend({
         workSessionId: z.uuid(),
-        reason: z.string().trim().min(1).max(20_000),
+        reason: z.string().trim().min(1).check(utf16Max(20_000)),
       }),
     ],
     [
       "release_request",
       simpleRequestCommand.omit({ requestId: true }).extend({
         workSessionId: z.uuid(),
-        reason: z.string().trim().min(1).max(20_000),
+        reason: z.string().trim().min(1).check(utf16Max(20_000)),
       }),
     ],
     [
       "end_work_session",
       simpleRequestCommand.omit({ requestId: true }).extend({
         workSessionId: z.uuid(),
-        reason: z.string().trim().min(1).max(20_000),
-        outcomeSummaryMd: z.string().trim().min(1).max(100_000).optional(),
+        reason: z.string().trim().min(1).check(utf16Max(20_000)),
+        outcomeSummaryMd: z
+          .string()
+          .trim()
+          .min(1)
+          .check(utf16Max(100_000))
+          .optional(),
       }),
     ],
   ] as const) {
@@ -1181,7 +1213,7 @@ export function createRequestPortMcpServer(
       ...commandMeta,
       workSessionId: z.uuid(),
       kind: z.enum(["progress", "checkpoint", "blocker", "note"]),
-      bodyMd: z.string().min(1).max(100_000),
+      bodyMd: z.string().min(1).check(utf16Max(100_000)),
       progressPercent: z
         .number()
         .int()
@@ -1199,7 +1231,7 @@ export function createRequestPortMcpServer(
       ...commandMeta,
       requestId: z.uuid(),
       action: z.enum(transitionActions()),
-      reason: z.string().max(20_000).optional(),
+      reason: z.string().check(utf16Max(20_000)).optional(),
       relatedRequestId: z.uuid().optional(),
     }),
   });
@@ -1214,7 +1246,7 @@ export function createRequestPortMcpServer(
       schema: z.object({
         ...commandMeta,
         requestId: z.uuid(),
-        reason: z.string().max(20_000).optional(),
+        reason: z.string().check(utf16Max(20_000)).optional(),
       }),
     });
   }
@@ -1225,13 +1257,13 @@ export function createRequestPortMcpServer(
       ...commandMeta,
       requestId: z.uuid(),
       report: z.object({
-        outcomeMd: z.string().trim().min(1).max(100_000),
+        outcomeMd: z.string().trim().min(1).check(utf16Max(100_000)),
         changedRepositories: z
           .array(
             z
               .object({
                 repositoryId: z.uuid().optional(),
-                repositoryUrl: z.url().max(4_096).optional(),
+                repositoryUrl: trimmedUrl().check(utf16Max(4_096)).optional(),
                 commitSha: z
                   .string()
                   .regex(/^[0-9a-f]{7,64}$/u)
@@ -1253,16 +1285,16 @@ export function createRequestPortMcpServer(
         validations: z
           .array(
             z.object({
-              command: z.string().trim().min(1).max(2_000),
+              command: z.string().trim().min(1).check(utf16Max(2_000)),
               result: z.enum(["passed", "failed", "not_run"]),
-              summary: z.string().trim().max(4_000).optional(),
+              summary: z.string().trim().check(utf16Max(4_000)).optional(),
             }),
           )
           .min(1)
           .max(200),
-        risksMd: z.string().trim().max(50_000),
-        followupsMd: z.string().trim().max(50_000),
-        verificationStepsMd: z.string().trim().min(1).max(50_000),
+        risksMd: z.string().trim().check(utf16Max(50_000)),
+        followupsMd: z.string().trim().check(utf16Max(50_000)),
+        verificationStepsMd: z.string().trim().min(1).check(utf16Max(50_000)),
       }),
     }),
   });
@@ -1272,8 +1304,8 @@ export function createRequestPortMcpServer(
     schema: z.object({
       ...commandMeta,
       requestId: z.uuid(),
-      reason: z.string().trim().min(1).max(20_000),
-      verificationEvidence: z.string().trim().min(1).max(100_000),
+      reason: z.string().trim().min(1).check(utf16Max(20_000)),
+      verificationEvidence: z.string().trim().min(1).check(utf16Max(100_000)),
     }),
   });
 
@@ -1303,10 +1335,16 @@ export function createRequestPortMcpServer(
           "Create a project-scoped signed webhook. The signing secret is returned once.",
         inputSchema: z.object({
           ...commandMeta,
-          name: z.string().min(1).max(160),
-          endpointUrl: z.url().max(2_048),
-          eventTypes: z.array(z.string().min(1).max(160)).max(100).default([]),
-          requestTypes: z.array(z.string().min(1).max(80)).max(50).default([]),
+          name: z.string().min(1).check(utf16Max(160)),
+          endpointUrl: trimmedUrl().check(utf16Max(2_048)),
+          eventTypes: z
+            .array(z.string().min(1).check(utf16Max(160)))
+            .max(100)
+            .default([]),
+          requestTypes: z
+            .array(z.string().min(1).check(utf16Max(80)))
+            .max(50)
+            .default([]),
         }),
         annotations: {
           readOnlyHint: false,
@@ -1582,6 +1620,37 @@ export function createRequestPortMcpServer(
 const maxRequestBodySize = 524_288;
 
 /**
+ * A JSON POST's body, parsed as the SDK parses it (`readRequestBody` under
+ * the same bound, then `JSON.parse`), with every own `__proto__` key
+ * removed (`dropOwnProtoKeys`), for the SDK to take as `parsedBody`. zod
+ * 4.4.3, which 0.2.0 ran, dropped such a key wherever a tool's schema met
+ * it; zod 4.6.7's strict objects refuse it. `undefined`, so that the SDK
+ * reads the body itself and answers as it always has, for anything else: a
+ * request that is not a POST, not JSON, empty, over the bound, unreadable or
+ * not JSON. It reads a clone, so the request is whole for the SDK either way.
+ */
+async function bodyWithoutOwnProtoKeys(request: Request): Promise<unknown> {
+  if (
+    request.method.toUpperCase() !== "POST" ||
+    !isJsonContentType(request.headers.get("content-type"))
+  )
+    return undefined;
+  let text: string;
+  try {
+    const read = await readRequestBody(request.clone(), maxRequestBodySize);
+    if (read.tooLarge || read.text.length === 0) return undefined;
+    text = read.text;
+  } catch {
+    return undefined;
+  }
+  try {
+    return dropOwnProtoKeys(JSON.parse(text) as unknown);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Serve one MCP request, in whichever protocol era it speaks.
  *
  * 2025-era traffic (the `initialize` handshake and everything a 2025 client
@@ -1617,9 +1686,10 @@ export async function handleMcpRequest(
   if (Number.isFinite(length) && length > maxRequestBodySize) {
     return Response.json({ error: "request_too_large" }, { status: 413 });
   }
+  const parsedBody = await bodyWithoutOwnProtoKeys(request);
   if (
     !dependencies.modernProtocol ||
-    (await isLegacyRequest(request, undefined, { maxRequestBodySize }))
+    (await isLegacyRequest(request, parsedBody, { maxRequestBodySize }))
   ) {
     const server = createRequestPortMcpServer(dependencies);
     const transport = new WebStandardStreamableHTTPServerTransport({
@@ -1627,7 +1697,7 @@ export async function handleMcpRequest(
       enableJsonResponse: true,
     });
     await server.connect(transport);
-    return transport.handleRequest(request);
+    return transport.handleRequest(request, { parsedBody });
   }
   const handler = createMcpHandler(
     () => {
@@ -1638,7 +1708,7 @@ export async function handleMcpRequest(
     { legacy: "reject", responseMode: "json", maxRequestBodySize },
   );
   try {
-    return await handler.fetch(request);
+    return await handler.fetch(request, { parsedBody });
   } finally {
     await handler.close();
   }

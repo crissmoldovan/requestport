@@ -4,6 +4,8 @@ import {
   DomainError,
   requestPriorities,
   requestTypes,
+  utf16Max,
+  utf16Min,
 } from "@requestport/domain";
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
@@ -30,13 +32,13 @@ const createSchema = z.object({
   humanRoles: z.array(z.enum(["owner", "admin", "member"])).max(3),
   laneIds: z.array(z.uuid()).max(100),
   agentPrincipalIds: z.array(z.uuid()).max(100),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 const disableSchema = z.object({
   ruleId: z.uuid(),
   expectedVersion: z.coerce.number().int().positive(),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 const updateSchema = createSchema.extend({

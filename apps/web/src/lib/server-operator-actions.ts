@@ -3,6 +3,8 @@ import {
   DomainError,
   type OperatorCredentialAvailability,
   revokeOperatorCredentialCommandName,
+  utf16Max,
+  utf16Min,
 } from "@requestport/domain";
 import { z } from "zod";
 
@@ -27,11 +29,15 @@ import { namedValidationFailure } from "./action-field-issues.js";
   error escapes as a throw, so the page never turns one into a 500.
 */
 
-const idempotencyKey = z.string().trim().min(16).max(200);
+const idempotencyKey = z
+  .string()
+  .trim()
+  .check(utf16Min(16))
+  .check(utf16Max(200));
 
 const issueSchema = z.object({
   projectId: z.union([z.literal(""), z.uuid()]).default(""),
-  name: z.string().trim().min(1).max(160),
+  name: z.string().trim().min(1).check(utf16Max(160)),
   scopes: z.array(z.string()).max(30),
   expiresInDays: z.coerce.number().int().min(1).max(90),
   expectedVersion: z.coerce.number().int().nonnegative(),

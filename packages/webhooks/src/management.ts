@@ -12,6 +12,8 @@ import {
   normalizedInputHash,
   requireOrganization,
   requireScope,
+  trimmedUrl,
+  utf16Max,
   validateCommandMeta,
 } from "@requestport/domain";
 import { v5 as uuidv5, v7 as uuidv7 } from "uuid";
@@ -175,12 +177,12 @@ const createInput = z.object({
     .string()
     .trim()
     .min(1)
-    .max(160)
+    .check(utf16Max(160))
     .refine(
       (value) => !containsSensitiveContent(value),
       "Webhook name contains private or secret material",
     ),
-  endpointUrl: z.url().max(2_048),
+  endpointUrl: trimmedUrl().check(utf16Max(2_048)),
   eventTypes: z
     .array(
       z

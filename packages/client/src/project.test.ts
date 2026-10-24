@@ -123,6 +123,23 @@ describe("what a binding may contain", () => {
     expect(() => readProjectBinding(root)).toThrow(ProjectBindingError);
   });
 
+  test("measures a project slug in UTF-16 code units, as zod 4.4.3 did", () => {
+    const root = workspace();
+    // Sixty emoji: 120 units, the bound.
+    writeBinding(root, {
+      ...validBinding,
+      projectSlug: "\u{1F600}".repeat(60),
+    });
+    expect(readProjectBinding(root).projectSlug).toBe("\u{1F600}".repeat(60));
+
+    // 61 emoji: 122 units, over it.
+    writeBinding(root, {
+      ...validBinding,
+      projectSlug: "\u{1F600}".repeat(61),
+    });
+    expect(() => readProjectBinding(root)).toThrow(ProjectBindingError);
+  });
+
   test("refuses a file that is not JSON, without echoing its contents", () => {
     const root = workspace();
     writeBinding(root, "this is not json, and may hold anything at all");

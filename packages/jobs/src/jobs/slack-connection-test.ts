@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 
 import { createSlackRepository } from "@requestport/db";
+import { utf16Max } from "@requestport/domain";
 import type { ChatPostMessageArguments } from "@slack/web-api";
 import { z } from "zod";
-
 import { observeTaskResult, triggerMetrics } from "../observability.js";
 import type { JobPayloads, JobRunner } from "../port.js";
 import { decryptSlackInstallationToken } from "../slack-encryption.js";
@@ -13,7 +13,9 @@ import {
 } from "../slack-rate-limit.js";
 import { inUnit, workerStorages } from "../worker-storages.js";
 
-const payloadSchema = z.object({ channelId: z.string().min(1).max(64) });
+const payloadSchema = z.object({
+  channelId: z.string().min(1).check(utf16Max(64)),
+});
 
 export const runSlackConnectionTest = (
   { operationId }: JobPayloads["slack-connection-test"],

@@ -7,6 +7,8 @@ import {
   agentScopes,
   DomainError,
   keyedFingerprint,
+  utf16Max,
+  utf16Min,
 } from "@requestport/domain";
 import { headers } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
@@ -34,8 +36,8 @@ const resources = new Map([
 ] as const);
 
 const decisionSchema = z.object({
-  oauthQuery: z.string().min(1).max(16_384),
-  clientId: z.string().min(1).max(255),
+  oauthQuery: z.string().min(1).check(utf16Max(16_384)),
+  clientId: z.string().min(1).check(utf16Max(255)),
   /**
    * `<organizationId>:<projectId>`, or `<organizationId>:` for an
    * organization-wide grant.
@@ -47,22 +49,22 @@ const decisionSchema = z.object({
    * were unreachable. The shape is still checked, by the parser, against uuids
    * rather than against a character count.
    */
-  projectBinding: z.string().min(37).max(73),
+  projectBinding: z.string().check(utf16Min(37)).check(utf16Max(73)),
   laneIds: z.array(z.uuid()).max(100),
   agentPrincipalId: z.union([z.literal(newAgentPrincipalValue), z.uuid()]),
-  displayName: z.string().trim().max(160).optional(),
-  slug: z.string().trim().toLowerCase().max(63).optional(),
-  softwareName: z.string().trim().max(160).optional(),
+  displayName: z.string().trim().check(utf16Max(160)).optional(),
+  slug: z.string().trim().toLowerCase().check(utf16Max(63)).optional(),
+  softwareName: z.string().trim().check(utf16Max(160)).optional(),
 });
 
 const newPrincipalSchema = z.object({
-  displayName: z.string().trim().min(1).max(160),
+  displayName: z.string().trim().min(1).check(utf16Max(160)),
   slug: z
     .string()
     .trim()
     .toLowerCase()
     .regex(/^[a-z0-9][a-z0-9-]{1,62}$/u),
-  softwareName: z.string().trim().min(1).max(160),
+  softwareName: z.string().trim().min(1).check(utf16Max(160)),
 });
 
 /**
@@ -612,7 +614,7 @@ async function denyConsent(
   const oauthQuery = z
     .string()
     .min(1)
-    .max(16_384)
+    .check(utf16Max(16_384))
     .parse(formData.get("oauthQuery"));
   /**
    * Taken from the form, not from a parse of the signed query.
@@ -629,7 +631,11 @@ async function denyConsent(
    * form for the same reason and is held to the same bucket — declining is not
    * cheaper than approving, and a separate allowance would be one.
    */
-  const clientId = z.string().min(1).max(255).parse(formData.get("clientId"));
+  const clientId = z
+    .string()
+    .min(1)
+    .check(utf16Max(255))
+    .parse(formData.get("clientId"));
   identity.clientId = clientId;
   await enforceRateLimit({
     endpointClass: "token",

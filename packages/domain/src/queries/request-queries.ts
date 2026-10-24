@@ -9,6 +9,7 @@ import type {
 } from "../routing/routing-types.js";
 import { DomainError } from "../shared/errors.js";
 import type { JsonValue } from "../shared/idempotency.js";
+import { isoDatetime } from "../shared/zod-compat.js";
 
 export interface CursorPage<T> {
   items: T[];
@@ -247,7 +248,7 @@ export interface RequestQueryRepository {
 
 const cursorSchema = z.object({
   v: z.literal(1),
-  at: z.iso.datetime(),
+  at: isoDatetime(),
   id: z.uuid(),
 });
 

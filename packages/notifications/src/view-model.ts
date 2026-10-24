@@ -1,8 +1,18 @@
-import { redactSensitiveText } from "@requestport/domain";
+import {
+  isoDatetime,
+  redactSensitiveText,
+  trimmedUrl,
+  utf16Max,
+} from "@requestport/domain";
 import { z } from "zod";
 
 function safeText(maxLength: number) {
-  return z.string().trim().min(1).max(maxLength).transform(redactSensitiveText);
+  return z
+    .string()
+    .trim()
+    .min(1)
+    .check(utf16Max(maxLength))
+    .transform(redactSensitiveText);
 }
 
 /**
@@ -14,7 +24,7 @@ function safeText(maxLength: number) {
  * No other http link and no other scheme is taken.
  */
 function deepLinkField() {
-  return z.url().refine((value) => {
+  return trimmedUrl().refine((value) => {
     let url: URL;
     try {
       url = new URL(value);
@@ -64,7 +74,7 @@ const questionNotificationSchema = z
       .nullable()
       .optional(),
     reason: safeText(1_000).optional(),
-    deadlineAt: z.iso.datetime().optional(),
+    deadlineAt: isoDatetime().optional(),
   })
   .strict();
 
@@ -74,7 +84,7 @@ const invitationNotificationSchema = z
     organizationName: safeText(160),
     role: z.enum(["owner", "admin", "member"]),
     deepLink: deepLinkField(),
-    expiresAt: z.iso.datetime(),
+    expiresAt: isoDatetime(),
   })
   .strict();
 

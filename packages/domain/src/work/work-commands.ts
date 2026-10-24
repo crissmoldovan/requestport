@@ -25,6 +25,7 @@ import type { CommandDefinition } from "../shared/command.js";
 import { DomainError } from "../shared/errors.js";
 import type { JsonObject } from "../shared/idempotency.js";
 import { fitsUtf8ByteLimit } from "../shared/validation.js";
+import { utf16Max } from "../shared/zod-compat.js";
 import {
   assertWorkTransition,
   boundedLeasePolicy,
@@ -90,7 +91,7 @@ const stateInput = baseSessionInput.extend({
     .string()
     .trim()
     .min(1)
-    .max(20_000)
+    .check(utf16Max(20_000))
     .refine(
       (value) => !containsSensitiveContent(value),
       "Reason contains private or secret material",
@@ -100,7 +101,7 @@ const stateInput = baseSessionInput.extend({
     .string()
     .trim()
     .min(1)
-    .max(100_000)
+    .check(utf16Max(100_000))
     .refine(
       (value) => fitsUtf8ByteLimit(value, 262_144),
       "Markdown content exceeds 256 KiB",
@@ -135,7 +136,7 @@ const progressInput = baseSessionInput.extend({
     .string()
     .trim()
     .min(1)
-    .max(100_000)
+    .check(utf16Max(100_000))
     .refine(
       (value) => fitsUtf8ByteLimit(value, 262_144),
       "Markdown content exceeds 256 KiB",
@@ -148,7 +149,7 @@ const progressInput = baseSessionInput.extend({
   evidence: z
     .array(
       z
-        .record(z.string().trim().min(1).max(128), z.json())
+        .record(z.string().trim().min(1).check(utf16Max(128)), z.json())
         .superRefine((value, context) => {
           if (Object.keys(value).length > 64) {
             context.addIssue({

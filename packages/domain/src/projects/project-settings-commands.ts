@@ -12,6 +12,7 @@ import type { CommandDefinition, CommandMeta } from "../shared/command.js";
 import { DomainError } from "../shared/errors.js";
 import type { JsonObject } from "../shared/idempotency.js";
 import type { UnitOfWork } from "../shared/unit-of-work.js";
+import { utf16Max } from "../shared/zod-compat.js";
 import { privateTelemetryFields } from "../workspaces/workspace-types.js";
 
 /*
@@ -42,17 +43,17 @@ export const projectSettingsPortName = "projectSettingsCommands";
 
 const target = z.object({ organizationId: z.uuid(), projectId: z.uuid() });
 const aliasInput = target.extend({
-  alias: z.string().trim().min(1).max(100),
+  alias: z.string().trim().min(1).check(utf16Max(100)),
 });
 const repositoryInput = target.extend({
-  repositoryUrl: z.string().trim().min(1).max(500),
+  repositoryUrl: z.string().trim().min(1).check(utf16Max(500)),
 });
 const repositoryDefaultInput = target.extend({ repositoryId: z.uuid() });
 const repositoryStatusInput = repositoryDefaultInput.extend({
   status: z.enum(["active", "archived"]),
 });
 const laneInput = target.extend({
-  name: z.string().trim().min(1).max(100),
+  name: z.string().trim().min(1).check(utf16Max(100)),
   slug: z
     .string()
     .trim()
@@ -64,7 +65,7 @@ const laneStatusInput = laneDefaultInput.extend({
   status: z.enum(["active", "archived"]),
 });
 const memberInput = target.extend({
-  userId: z.string().trim().min(1).max(255),
+  userId: z.string().trim().min(1).check(utf16Max(255)),
   role: z.enum(["maintainer", "contributor", "viewer"]),
   status: z.enum(["active", "revoked"]),
 });
@@ -77,8 +78,8 @@ const workPolicyInput = target.extend({
     .max(privateTelemetryFields.length),
 });
 const metadataInput = target.extend({
-  name: z.string().trim().min(1).max(160),
-  description: z.string().trim().max(2_000),
+  name: z.string().trim().min(1).check(utf16Max(160)),
+  description: z.string().trim().check(utf16Max(2_000)),
 });
 const projectStatusInput = target.extend({
   status: z.enum(["active", "archived"]),

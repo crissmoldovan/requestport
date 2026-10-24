@@ -21,6 +21,7 @@ import {
 import type { CommandDefinition } from "../shared/command.js";
 import { DomainError } from "../shared/errors.js";
 import type { JsonObject } from "../shared/idempotency.js";
+import { utf16Max, utf16Min } from "../shared/zod-compat.js";
 import { WorkspaceService } from "../workspaces/workspace-service.js";
 import type { WorkspaceRepository } from "../workspaces/workspace-types.js";
 import { workspaceRegistrationSchema } from "../workspaces/workspace-types.js";
@@ -75,7 +76,7 @@ const createPrincipalInput = z.object({
     .string()
     .trim()
     .min(1)
-    .max(160)
+    .check(utf16Max(160))
     .refine(
       (value) => !containsSensitiveContent(value),
       "Agent name contains private or secret material",
@@ -89,7 +90,7 @@ const createPrincipalInput = z.object({
     .string()
     .trim()
     .min(1)
-    .max(160)
+    .check(utf16Max(160))
     .refine(
       (value) => !containsSensitiveContent(value),
       "Software name contains private or secret material",
@@ -104,7 +105,7 @@ const registerInstallationInput = z.object({
     .string()
     .trim()
     .min(1)
-    .max(160)
+    .check(utf16Max(160))
     .refine(
       (value) => !containsSensitiveContent(value),
       "Software name contains private or secret material",
@@ -113,7 +114,7 @@ const registerInstallationInput = z.object({
     .string()
     .trim()
     .min(1)
-    .max(160)
+    .check(utf16Max(160))
     .refine(
       (value) => !containsSensitiveContent(value),
       "Software version contains private or secret material",
@@ -133,8 +134,8 @@ const setPrincipalStatusInput = z.object({
   reason: z
     .string()
     .trim()
-    .min(10)
-    .max(500)
+    .check(utf16Min(10))
+    .check(utf16Max(500))
     .refine(
       (value) => !containsSensitiveContent(value),
       "Reason contains private or secret material",
@@ -177,7 +178,7 @@ export const agentAdministrationInputSchemas = {
     organizationId: z.uuid(),
     agentPrincipalId: z.uuid(),
     grantId: z.uuid(),
-    reason: z.string().trim().min(10).max(500),
+    reason: z.string().trim().check(utf16Min(10)).check(utf16Max(500)),
   }),
 } as const;
 

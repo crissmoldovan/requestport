@@ -39,9 +39,12 @@ import {
   admitsCredentialKind,
   type CredentialKind,
   DomainError,
+  dropOwnProtoKeys,
   findRestCommandTransport,
   isOperatorContext,
   type RestInjectedField,
+  utf16Max,
+  utf16Min,
 } from "@requestport/domain";
 import { ZodError, z } from "zod";
 
@@ -115,7 +118,7 @@ export function restPathParts(pathname: string): string[] | undefined {
 const commandEnvelopeSchema = z
   .object({
     input: z.record(z.string(), z.unknown()).default({}),
-    idempotencyKey: z.string().min(16).max(200),
+    idempotencyKey: z.string().check(utf16Min(16)).check(utf16Max(200)),
     expectedVersion: z.number().int().nonnegative(),
   })
   .strict();
@@ -393,6 +396,11 @@ export async function handleRestCommand(
       throw new DomainError("validation_failed", "API JSON input is invalid");
     }
     assertJsonDepth(parsed);
+    // An own `__proto__` key, at any depth, goes before any schema reads the
+    // body: zod 4.4.3 dropped it, and 0.2.0 answered as if it were absent,
+    // where zod 4.6.7's strict objects (this envelope among them) refuse it.
+    // After the walk above, whose count saw it.
+    dropOwnProtoKeys(parsed);
     if (
       typeof parsed !== "object" ||
       parsed === null ||

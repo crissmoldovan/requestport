@@ -3,7 +3,12 @@
 import { randomUUID } from "node:crypto";
 import { serverEnv } from "@requestport/config/server";
 import { createImportRepository } from "@requestport/db";
-import { DomainError, importReviewDecisions } from "@requestport/domain";
+import {
+  DomainError,
+  importReviewDecisions,
+  utf16Max,
+  utf16Min,
+} from "@requestport/domain";
 import { LEGACY_PARSER_VERSION } from "@requestport/importer";
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
@@ -67,7 +72,7 @@ function rejected(issues: readonly ActionValidationIssue[]): ImportActionState {
 }
 
 const commandMetaSchema = z.object({
-  idempotencyKey: z.string().trim().min(16).max(200),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
   expectedVersion: z.coerce.number().int().nonnegative(),
 });
 
@@ -146,7 +151,7 @@ export async function reviewImportEntryAction(
         decision: z.enum(importReviewDecisions),
         proposedCanonicalId: z.union([z.literal(""), z.uuid()]).optional(),
         targetProjectId: z.union([z.literal(""), z.uuid()]).optional(),
-        relationships: z.string().max(4_000).optional().default(""),
+        relationships: z.string().check(utf16Max(4_000)).optional().default(""),
       })
       .safeParse(Object.fromEntries(formData));
     if (!parsed.success) return rejected(parsed.error.issues);
@@ -190,7 +195,7 @@ export async function splitImportEntryAction(
       .extend({
         runId: z.uuid(),
         entryId: z.uuid(),
-        splitLines: z.string().trim().min(1).max(500),
+        splitLines: z.string().trim().min(1).check(utf16Max(500)),
       })
       .safeParse(Object.fromEntries(formData));
     if (!parsed.success) return rejected(parsed.error.issues);

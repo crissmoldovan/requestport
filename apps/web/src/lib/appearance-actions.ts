@@ -6,6 +6,8 @@ import {
   appearanceThemeSchema,
   DomainError,
   type DomainErrorCode,
+  utf16Max,
+  utf16Min,
 } from "@requestport/domain";
 import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
@@ -70,9 +72,9 @@ export type AppearanceActionDependencies = {
 
 const inheritSchema = z.literal(appearanceInheritValue);
 const metadataSchema = {
-  idempotencyKey: z.string().trim().min(16).max(200),
-  renderContext: z.string().min(1).max(512),
-  returnTo: z.string().max(512).optional(),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
+  renderContext: z.string().min(1).check(utf16Max(512)),
+  returnTo: z.string().check(utf16Max(512)).optional(),
 };
 
 /** Personal axes accept `inherit`; the tenant default never does. */

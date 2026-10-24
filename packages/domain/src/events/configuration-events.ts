@@ -1,5 +1,5 @@
 import { z } from "zod";
-
+import { isoDatetime, utf16Max } from "../shared/zod-compat.js";
 import type { EventSchemaRegistry } from "./event-factory.js";
 
 const organizationCreatedSchema = z.object({
@@ -19,7 +19,7 @@ const organizationCreatedSchema = z.object({
 const organizationInvitationCreatedSchema = z.object({
   invitationId: z.uuid(),
   role: z.enum(["owner", "admin", "member"]),
-  expiresAt: z.iso.datetime(),
+  expiresAt: isoDatetime(),
   renewedFrom: z.enum(["revoked", "expired", "accepted"]).optional(),
 });
 
@@ -44,7 +44,7 @@ const projectRegisteredSchema = z.object({
 const projectUpdatedSchema = z.object({
   projectId: z.uuid(),
   changeType: z.string().min(1),
-  fieldNames: z.array(z.string().min(1).max(160)).max(100),
+  fieldNames: z.array(z.string().min(1).check(utf16Max(160))).max(100),
 });
 
 const webhookConfigurationSchema = z.object({

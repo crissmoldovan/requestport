@@ -225,6 +225,26 @@ describe("the forms F.2.2 ports", () => {
     );
   });
 
+  test("an overlap of Infinity minutes is refused in zod 4.4.3's words, received number", async () => {
+    expect(
+      await revokeAgentKeyAction(
+        initialAgentActionState,
+        formOf({
+          agentPrincipalId,
+          credentialId,
+          overlapMinutes: "Infinity",
+          expectedVersion: "2",
+          idempotencyKey: key,
+        }),
+      ),
+    ).toEqual({
+      status: "error",
+      field: "overlapMinutes",
+      message: "Invalid input: expected number, received number",
+    });
+    expect(agents.revokeAgentCredential).not.toHaveBeenCalled();
+  });
+
   test("a refused key revocation is answered as before", async () => {
     agents.revokeAgentCredential.mockRejectedValue(
       new DomainError("version_conflict", "Agent credential changed"),

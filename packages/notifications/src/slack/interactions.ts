@@ -1,18 +1,19 @@
+import { utf16Max, utf16Min } from "@requestport/domain";
 import { z } from "zod";
 
-const userSchema = z.object({ id: z.string().min(1).max(64) });
-const teamSchema = z.object({ id: z.string().min(1).max(64) });
+const userSchema = z.object({ id: z.string().min(1).check(utf16Max(64)) });
+const teamSchema = z.object({ id: z.string().min(1).check(utf16Max(64)) });
 
 const blockActionSchema = z.object({
   type: z.literal("block_actions"),
   team: teamSchema,
   user: userSchema,
-  trigger_id: z.string().min(1).max(255),
+  trigger_id: z.string().min(1).check(utf16Max(255)),
   actions: z
     .array(
       z.object({
         action_id: z.enum(["requestport_answer", "requestport_other"]),
-        value: z.string().min(20).max(512),
+        value: z.string().check(utf16Min(20)).check(utf16Max(512)),
       }),
     )
     .length(1),
@@ -29,7 +30,7 @@ const modalSubmissionSchema = z.object({
   team: teamSchema,
   user: userSchema,
   view: z.object({
-    private_metadata: z.string().min(20).max(512),
+    private_metadata: z.string().check(utf16Min(20)).check(utf16Max(512)),
     state: z.object({
       values: z.record(
         z.string(),
@@ -58,7 +59,7 @@ export function modalAnswerBody(
   for (const block of Object.values(interaction.view.state.values)) {
     for (const value of Object.values(block)) {
       const text = value.value?.trim();
-      if (text) return z.string().min(1).max(10_000).parse(text);
+      if (text) return z.string().min(1).check(utf16Max(10_000)).parse(text);
     }
   }
   throw new Error("A Slack answer is required");

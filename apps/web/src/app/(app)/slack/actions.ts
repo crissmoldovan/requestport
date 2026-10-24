@@ -1,6 +1,6 @@
 "use server";
 
-import { DomainError } from "@requestport/domain";
+import { DomainError, utf16Max, utf16Min } from "@requestport/domain";
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
@@ -89,12 +89,16 @@ export async function mapSlackUserAction(
     const parsed = z
       .object({
         installationId: z.uuid(),
-        userId: z.string().min(1).max(255),
+        userId: z.string().min(1).check(utf16Max(255)),
         slackUserId: z
           .string()
           .trim()
           .regex(/^[UW][A-Z0-9]{4,}$/u),
-        idempotencyKey: z.string().trim().min(16).max(200),
+        idempotencyKey: z
+          .string()
+          .trim()
+          .check(utf16Min(16))
+          .check(utf16Max(200)),
         expectedVersion: z.coerce.number().int().nonnegative(),
       })
       .safeParse(Object.fromEntries(formData));
@@ -132,10 +136,14 @@ export async function setSlackRouteAction(
       .object({
         projectId: z.union([z.literal(""), z.uuid()]),
         mode: z.enum(["dm", "channel", "both"]),
-        channelId: z.string().trim().max(64),
+        channelId: z.string().trim().check(utf16Max(64)),
         fallback: z.enum(["none", "organization_channel", "email"]),
         expectedVersion: z.coerce.number().int().nonnegative(),
-        idempotencyKey: z.string().trim().min(16).max(200),
+        idempotencyKey: z
+          .string()
+          .trim()
+          .check(utf16Min(16))
+          .check(utf16Max(200)),
       })
       .safeParse(Object.fromEntries(formData));
     if (!parsed.success) return rejected(parsed.error.issues);
@@ -173,7 +181,11 @@ export async function setSlackInstallationStatusAction(
       .object({
         installationId: z.uuid(),
         expectedVersion: z.coerce.number().int().positive(),
-        idempotencyKey: z.string().trim().min(16).max(200),
+        idempotencyKey: z
+          .string()
+          .trim()
+          .check(utf16Min(16))
+          .check(utf16Max(200)),
         status: z.enum(["active", "disabled", "revoked"]),
       })
       .parse(Object.fromEntries(formData));
@@ -214,7 +226,11 @@ export async function sendSlackConnectionTestAction(
           .string()
           .trim()
           .regex(/^C[A-Z0-9]{4,}$/u),
-        idempotencyKey: z.string().trim().min(16).max(200),
+        idempotencyKey: z
+          .string()
+          .trim()
+          .check(utf16Min(16))
+          .check(utf16Max(200)),
       })
       .safeParse(Object.fromEntries(formData));
     if (!parsed.success) return rejected(parsed.error.issues);

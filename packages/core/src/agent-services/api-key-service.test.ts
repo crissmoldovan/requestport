@@ -410,3 +410,24 @@ describe("a person's issuance and rotation, re-checked first by the authorizatio
     expect(calls).toEqual([]);
   });
 });
+
+describe("a key's name, measured as zod 4.4.3 measured it, in UTF-16 code units", () => {
+  const emoji = "\u{1F600}";
+
+  test("eighty emoji, 160 units, are a name", async () => {
+    const { createdKeyNames, service } = harness();
+
+    await service.issue(context(), issuance({ name: emoji.repeat(80) }), meta);
+
+    expect(createdKeyNames).toEqual([emoji.repeat(80)]);
+  });
+
+  test("81 emoji, 162 units, are over the 160 and mint nothing", async () => {
+    const { createdKeyNames, service } = harness();
+
+    await expect(
+      service.issue(context(), issuance({ name: emoji.repeat(81) }), meta),
+    ).rejects.toThrow(/Too big: expected string to have <=160 characters/);
+    expect(createdKeyNames).toEqual([]);
+  });
+});

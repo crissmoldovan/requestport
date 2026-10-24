@@ -17,6 +17,7 @@ import type { CommandDefinition, CommandMeta } from "../shared/command.js";
 import { DomainError } from "../shared/errors.js";
 import type { JsonObject } from "../shared/idempotency.js";
 import type { UnitOfWork } from "../shared/unit-of-work.js";
+import { utf16Max } from "../shared/zod-compat.js";
 import {
   createOrganizationInvitation,
   defaultInvitationTokenHash,
@@ -80,13 +81,13 @@ const organizationRole = z.enum(["owner", "admin", "member"]);
 
 const inviteInput = z.strictObject({
   organizationId: z.uuid(),
-  email: z.string().max(320),
+  email: z.string().check(utf16Max(320)),
   role: organizationRole,
   expiresInSeconds: z.number().int().optional(),
 });
 const memberInput = z.strictObject({
   organizationId: z.uuid(),
-  userId: z.string().min(1).max(255),
+  userId: z.string().min(1).check(utf16Max(255)),
   role: organizationRole,
   status: z.enum(["active", "revoked"]),
 });

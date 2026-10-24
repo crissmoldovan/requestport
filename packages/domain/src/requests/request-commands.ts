@@ -21,6 +21,7 @@ import { DomainError } from "../shared/errors.js";
 import type { JsonObject } from "../shared/idempotency.js";
 import type { UnitOfWork } from "../shared/unit-of-work.js";
 import { fitsUtf8ByteLimit } from "../shared/validation.js";
+import { utf16Max } from "../shared/zod-compat.js";
 import { nextRequestState } from "./request-state-machine.js";
 import {
   type CompletionReportInput,
@@ -97,7 +98,7 @@ const createDraftInput = z
       .string()
       .trim()
       .min(1)
-      .max(240)
+      .check(utf16Max(240))
       .refine(
         (value) => !containsSensitiveContent(value),
         "Title contains private or secret material",
@@ -106,7 +107,7 @@ const createDraftInput = z
       .string()
       .trim()
       .min(1)
-      .max(100_000)
+      .check(utf16Max(100_000))
       .refine(
         (value) => fitsUtf8ByteLimit(value, 262_144),
         "Markdown content exceeds 256 KiB",
@@ -124,7 +125,7 @@ const createDraftInput = z
           .string()
           .trim()
           .min(1)
-          .max(64)
+          .check(utf16Max(64))
           .refine(
             (value) => !containsSensitiveContent(value),
             "Label contains private or secret material",
@@ -138,7 +139,7 @@ const createDraftInput = z
           .string()
           .trim()
           .min(1)
-          .max(1_000)
+          .check(utf16Max(1_000))
           .refine(
             (value) => !containsSensitiveContent(value),
             "Acceptance criterion contains private or secret material",
@@ -172,7 +173,7 @@ const completionReportSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .max(100_000)
+    .check(utf16Max(100_000))
     .refine(
       (value) => fitsUtf8ByteLimit(value, 262_144),
       "Markdown content exceeds 256 KiB",
@@ -189,7 +190,7 @@ const completionReportSchema = z.object({
           repositoryUrl: z
             .string()
             .trim()
-            .max(4_096)
+            .check(utf16Max(4_096))
             .refine((raw) => {
               try {
                 const url = new URL(raw);
@@ -239,7 +240,7 @@ const completionReportSchema = z.object({
           .string()
           .trim()
           .min(1)
-          .max(2_000)
+          .check(utf16Max(2_000))
           .refine(
             (value) => !containsSensitiveContent(value),
             "Validation command contains private or secret material",
@@ -248,7 +249,7 @@ const completionReportSchema = z.object({
         summary: z
           .string()
           .trim()
-          .max(4_000)
+          .check(utf16Max(4_000))
           .refine(
             (value) => !containsSensitiveContent(value),
             "Validation summary contains private or secret material",
@@ -261,7 +262,7 @@ const completionReportSchema = z.object({
   risksMd: z
     .string()
     .trim()
-    .max(50_000)
+    .check(utf16Max(50_000))
     .refine(
       (value) => !containsSensitiveContent(value),
       "Risk summary contains private or secret material",
@@ -269,7 +270,7 @@ const completionReportSchema = z.object({
   followupsMd: z
     .string()
     .trim()
-    .max(50_000)
+    .check(utf16Max(50_000))
     .refine(
       (value) => !containsSensitiveContent(value),
       "Follow-up summary contains private or secret material",
@@ -278,7 +279,7 @@ const completionReportSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .max(50_000)
+    .check(utf16Max(50_000))
     .refine(
       (value) => !containsSensitiveContent(value),
       "Verification steps contain private or secret material",
@@ -312,7 +313,7 @@ const transitionInput = z
       .string()
       .trim()
       .min(1)
-      .max(20_000)
+      .check(utf16Max(20_000))
       .refine(
         (value) => !containsSensitiveContent(value),
         "Reason contains private or secret material",
@@ -324,7 +325,7 @@ const transitionInput = z
       .string()
       .trim()
       .min(1)
-      .max(50_000)
+      .check(utf16Max(50_000))
       .refine(
         (value) => !containsSensitiveContent(value),
         "Verification evidence contains private or secret material",
@@ -388,7 +389,7 @@ const updateRequestInput = z
       .string()
       .trim()
       .min(1)
-      .max(240)
+      .check(utf16Max(240))
       .refine(
         (value) => !containsSensitiveContent(value),
         "Title contains private or secret material",
@@ -398,7 +399,7 @@ const updateRequestInput = z
       .string()
       .trim()
       .min(1)
-      .max(100_000)
+      .check(utf16Max(100_000))
       .refine(
         (value) => fitsUtf8ByteLimit(value, 262_144),
         "Markdown content exceeds 256 KiB",

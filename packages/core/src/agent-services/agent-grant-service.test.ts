@@ -361,3 +361,28 @@ describe("a person's consent binding, re-checked first by the authorization the 
     expect(calls).toEqual([]);
   });
 });
+
+describe("a consent's strings, measured as zod 4.4.3 measured them, in UTF-16 code units", () => {
+  const emoji = "\u{1F600}";
+
+  test("an idempotency key of eight emoji, sixteen units, binds", async () => {
+    const { bindings, service } = harness();
+
+    await expect(
+      service.bindConsent(
+        context(),
+        consent({ idempotencyKey: emoji.repeat(8) }),
+      ),
+    ).resolves.toEqual({ grantId: GRANT });
+    expect(bindings).toHaveLength(1);
+  });
+
+  test("a client id of 128 emoji, 256 units, is over its 255 and binds nothing", async () => {
+    const { bindings, service } = harness();
+
+    await expect(
+      service.bindConsent(context(), consent({ clientId: emoji.repeat(128) })),
+    ).rejects.toThrow(/Too big: expected string to have <=255 characters/);
+    expect(bindings).toEqual([]);
+  });
+});

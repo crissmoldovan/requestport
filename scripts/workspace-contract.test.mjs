@@ -2149,7 +2149,7 @@ test("declares only the exact foundation service workspace dependencies", {
 
   assert.deepEqual(domainPackage.dependencies ?? {}, {
     uuid: "14.0.1",
-    zod: "4.4.3",
+    zod: "4.6.7",
   });
   assert.equal(dbPackage.dependencies["@requestport/domain"], "workspace:*");
   assert.equal(cliPackage.dependencies["@requestport/db"], "workspace:*");

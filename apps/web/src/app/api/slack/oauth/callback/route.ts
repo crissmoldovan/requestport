@@ -1,4 +1,5 @@
 import { serverEnv } from "@requestport/config/server";
+import { utf16Max, utf16Min } from "@requestport/domain";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
@@ -9,8 +10,8 @@ import {
 import { completeSlackInstallation } from "../../../../../lib/server-slack.js";
 
 const querySchema = z.object({
-  code: z.string().min(1).max(2_048),
-  state: z.string().min(20).max(512),
+  code: z.string().min(1).check(utf16Max(2_048)),
+  state: z.string().check(utf16Min(20)).check(utf16Max(512)),
 });
 
 export async function GET(request: Request) {

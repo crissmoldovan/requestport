@@ -2405,8 +2405,8 @@ describe("esbuild's runtime helpers and THIRD-PARTY-NOTICES (ruling 209)", () =>
  * and inlines none of their modules, so it imports `config`'s
  * `./sign-in-methods` rather than carrying a copy, and it names Better Auth,
  * which it composes, by its exemption alone. Its `zod` is its own
- * manifest's, 4.5.4 (ruling 144; ruling 193 item 7): the
- * version rule reads its workspace alone, and no exemption is needed.
+ * manifest's (ruling 144; ruling 193 item 7): the version rule reads its
+ * workspace alone, and no exemption is needed.
  */
 describe("auth's tarball (ruling 190; Done when 9's named exemption)", () => {
   test("leaves every other package bundles builds external and inlines none of their modules: it imports config's ./sign-in-methods, and its JavaScript names only auth's own modules", () => {
@@ -2491,9 +2491,18 @@ describe("auth's tarball (ruling 190; Done when 9's named exemption)", () => {
     );
   });
 
-  test("its zod is its own manifest's, which no other workspace it inlines declares, so no exemption is needed and none is named; read over auth's and config's manifests together, as a bundle inlining both would be, the one-version rule refuses zod until an exemption takes auth's, and refuses an exemption no disagreement needs or whose workspace declares nothing; it names a workspace package at the stamped version only when the run packs it", () => {
+  test("its zod is its own manifest's, which no other workspace it inlines declares, so no exemption is needed and none is named; read over auth's manifest and config's with another zod planted, as a bundle inlining both would be, the one-version rule refuses zod until an exemption takes auth's, and refuses an exemption no disagreement needs or whose workspace declares nothing; it names a workspace package at the stamped version only when the run packs it", () => {
     const manifests = readWorkspaceManifests();
-    const configZod = declaredVersion("zod", ["packages/config"]);
+    // The disagreement the rule refuses is planted, so the case holds
+    // whatever zod the workspaces declare: config at 0.2.0's 4.4.3.
+    const configZod = "4.4.3";
+    const disagreeing = new Map(manifests).set("packages/config", {
+      ...manifests.get("packages/config"),
+      dependencies: {
+        ...manifests.get("packages/config").dependencies,
+        zod: configZod,
+      },
+    });
     const exemption = { zod: "packages/auth" };
 
     assert.deepEqual(PINNED.auth.workspaces, ["packages/auth"]);
@@ -2505,7 +2514,7 @@ describe("auth's tarball (ruling 190; Done when 9's named exemption)", () => {
       names: PINNED.auth.dependencies,
       peers: PACKAGES.auth.optionalPeers,
       workspaces: ["packages/auth", "packages/config"],
-      manifests,
+      manifests: disagreeing,
       packed: Object.fromEntries(
         ORDER.map((key) => [`@requestport/${key}`, VERSION]),
       ),

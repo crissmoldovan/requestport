@@ -29,7 +29,7 @@ import type {
   AgentAuthContext,
 } from "@requestport/auth/create-auth";
 import type { createImportRepository } from "@requestport/db";
-import { DomainError } from "@requestport/domain";
+import { DomainError, utf16Max, utf16Min } from "@requestport/domain";
 import { validatePreservedArtifact } from "@requestport/importer";
 import { z } from "zod";
 
@@ -80,20 +80,25 @@ export interface ArtifactImportOptions {
 
 const commandMeta = {
   expectedVersion: z.number().int().nonnegative(),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 };
 const artifactSchema = z.object({
-  relativePath: z.string().min(1).max(2_048),
+  relativePath: z.string().min(1).check(utf16Max(2_048)),
   mediaType: z.enum(["text/markdown", "text/plain"]),
   byteSize: z.number().int().min(0).max(1_048_576),
   sha256: z.string().regex(/^[0-9a-f]{64}$/u),
-  base64Bytes: z.string().max(1_500_000),
+  base64Bytes: z.string().check(utf16Max(1_500_000)),
 });
 const payloadSchema = z.discriminatedUnion("action", [
   z.object({
     ...commandMeta,
     action: z.literal("start"),
-    repositoryUrl: z.string().trim().max(2_048).nullable().default(null),
+    repositoryUrl: z
+      .string()
+      .trim()
+      .check(utf16Max(2_048))
+      .nullable()
+      .default(null),
     repositoryId: z.uuid().nullable().default(null),
     gitCommitSha: z
       .string()

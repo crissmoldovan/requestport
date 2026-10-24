@@ -5,6 +5,8 @@ import {
   DomainError,
   type JsonObject,
   type OperationsCommandName,
+  utf16Max,
+  utf16Min,
 } from "@requestport/domain";
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
@@ -35,7 +37,7 @@ import type { OperationsActionState } from "./action-state.js";
  */
 const envelope = z.object({
   expectedVersion: z.coerce.number().int().nonnegative(),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 /**

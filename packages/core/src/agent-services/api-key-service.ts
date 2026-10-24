@@ -12,10 +12,12 @@ import {
   agentScopes,
   containsSensitiveContent,
   DomainError,
+  isoDatetime,
   memberAuthority,
   requireAgentProject,
   requireOrganization,
   requireScope,
+  utf16Max,
   validateCommandMeta,
 } from "@requestport/domain";
 import { z } from "zod";
@@ -47,12 +49,12 @@ const issuanceReceiptSchema = z.object({
     laneIds: z.array(z.uuid()),
     scopes: z.array(z.string()),
     version: z.number().int().positive(),
-    expiresAt: z.iso.datetime(),
-    revokedAt: z.iso.datetime().nullable(),
-    overlapExpiresAt: z.iso.datetime().nullable(),
-    lastUsedAt: z.iso.datetime().nullable(),
+    expiresAt: isoDatetime(),
+    revokedAt: isoDatetime().nullable(),
+    overlapExpiresAt: isoDatetime().nullable(),
+    lastUsedAt: isoDatetime().nullable(),
     createdByUserId: z.string(),
-    createdAt: z.iso.datetime(),
+    createdAt: isoDatetime(),
   }),
 });
 
@@ -64,7 +66,7 @@ const issueInput = z.object({
     .string()
     .trim()
     .min(1)
-    .max(160)
+    .check(utf16Max(160))
     .refine(
       (value) => !containsSensitiveContent(value),
       "Credential name contains private or secret material",

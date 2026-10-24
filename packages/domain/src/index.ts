@@ -41,6 +41,7 @@ export * from "./shared/errors.js";
 export * from "./shared/idempotency.js";
 export * from "./shared/unit-of-work.js";
 export * from "./shared/validation.js";
+export * from "./shared/zod-compat.js";
 export * from "./slack/slack-administration-commands.js";
 export * from "./transport-metadata.js";
 export * from "./work/work-commands.js";

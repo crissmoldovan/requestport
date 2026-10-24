@@ -264,6 +264,14 @@ describe.each([
     expect(store.read(SERVER, PROJECT, "mcp")).toEqual(credential);
   });
 
+  test("round-trips a credential obtained to the minute, as zod 4.4.3 read one", () => {
+    const store = make();
+    const toTheMinute = { ...credential, obtained: "2026-09-06T10:00Z" };
+    store.write(SERVER, PROJECT, "mcp", toTheMinute);
+
+    expect(store.read(SERVER, PROJECT, "mcp")).toEqual(toTheMinute);
+  });
+
   test("replaces a credential rather than duplicating it", () => {
     const store = make();
     store.write(SERVER, PROJECT, "mcp", credential);

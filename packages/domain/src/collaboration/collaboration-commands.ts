@@ -29,6 +29,7 @@ import { DomainError } from "../shared/errors.js";
 import type { JsonObject, JsonValue } from "../shared/idempotency.js";
 import type { UnitOfWork } from "../shared/unit-of-work.js";
 import { fitsUtf8ByteLimit } from "../shared/validation.js";
+import { isoDatetime, trimmedUrl, utf16Max } from "../shared/zod-compat.js";
 import type {
   CollaborationRepository,
   QuestionAudience,
@@ -98,7 +99,7 @@ export function registerCollaborationEventSchemas(
       eventBase.extend({
         artifactId: z.uuid(),
         kind: z.string(),
-        externalUrl: z.url(),
+        externalUrl: trimmedUrl(),
       }),
     );
 }
@@ -110,7 +111,7 @@ const messageInput = z.object({
     .string()
     .trim()
     .min(1)
-    .max(100_000)
+    .check(utf16Max(100_000))
     .refine(
       (value) => fitsUtf8ByteLimit(value, 262_144),
       "Markdown content exceeds 256 KiB",
@@ -121,11 +122,17 @@ const messageInput = z.object({
     ),
   visibility: z.enum(["organization", "restricted"]).default("organization"),
   replyToId: z.uuid().nullable().optional(),
-  mentionUserIds: z.array(z.string().min(1).max(255)).max(100).default([]),
+  mentionUserIds: z
+    .array(z.string().min(1).check(utf16Max(255)))
+    .max(100)
+    .default([]),
 });
 
 const audienceSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("user"), id: z.string().min(1).max(255) }),
+  z.object({
+    type: z.literal("user"),
+    id: z.string().min(1).check(utf16Max(255)),
+  }),
   z.object({ type: z.literal("agent"), id: z.uuid() }),
   z.object({
     type: z.literal("role"),
@@ -164,7 +171,7 @@ const questionInput = z
       .string()
       .trim()
       .min(1)
-      .max(100_000)
+      .check(utf16Max(100_000))
       .refine(
         (value) => fitsUtf8ByteLimit(value, 262_144),
         "Markdown content exceeds 256 KiB",
@@ -179,7 +186,7 @@ const questionInput = z
           .string()
           .trim()
           .min(1)
-          .max(160)
+          .check(utf16Max(160))
           .refine(
             (value) => !containsSensitiveContent(value),
             "Question choice contains private or secret material",
@@ -190,7 +197,7 @@ const questionInput = z
     allowFreeText: z.boolean().default(true),
     answerMode: z.enum(["single", "multiple"]).default("single"),
     blocksRequest: z.boolean().default(false),
-    deadlineAt: z.iso.datetime().nullable().optional(),
+    deadlineAt: isoDatetime().nullable().optional(),
     escalationPolicy: escalationPolicySchema.nullable().optional(),
   })
   .superRefine((value, context) => {
@@ -257,7 +264,7 @@ const answerInput = z.object({
     .string()
     .trim()
     .min(1)
-    .max(100_000)
+    .check(utf16Max(100_000))
     .refine(
       (value) => fitsUtf8ByteLimit(value, 262_144),
       "Markdown content exceeds 256 KiB",
@@ -299,7 +306,7 @@ const closeQuestionInput = z.object({
     .string()
     .trim()
     .min(1)
-    .max(20_000)
+    .check(utf16Max(20_000))
     .refine(
       (value) => !containsSensitiveContent(value),
       "Reason contains private or secret material",
@@ -329,9 +336,15 @@ const unlinkInput = z.object({
 const artifactInput = z.object({
   organizationId: z.uuid(),
   requestId: z.uuid(),
-  kind: z.string().trim().min(1).max(64),
-  externalUrl: z.string().trim().min(1).max(4_096),
-  mediaType: z.string().trim().min(1).max(255).nullable().optional(),
+  kind: z.string().trim().min(1).check(utf16Max(64)),
+  externalUrl: z.string().trim().min(1).check(utf16Max(4_096)),
+  mediaType: z
+    .string()
+    .trim()
+    .min(1)
+    .check(utf16Max(255))
+    .nullable()
+    .optional(),
   byteSize: z
     .number()
     .int()
@@ -345,7 +358,7 @@ const artifactInput = z.object({
     .nullable()
     .optional(),
   provenance: z
-    .record(z.string().trim().min(1).max(128), z.json())
+    .record(z.string().trim().min(1).check(utf16Max(128)), z.json())
     .superRefine((value, context) => {
       if (Object.keys(value).length > 64) {
         context.addIssue({

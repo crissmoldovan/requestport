@@ -12,6 +12,7 @@ import type { CommandDefinition, CommandMeta } from "../shared/command.js";
 import { DomainError } from "../shared/errors.js";
 import type { JsonObject } from "../shared/idempotency.js";
 import type { UnitOfWork } from "../shared/unit-of-work.js";
+import { utf16Max } from "../shared/zod-compat.js";
 
 /*
   Slack administration, as commands on the tenant bus (Plan 13, F.2.5): mapping
@@ -57,7 +58,7 @@ export const slackAdministrationPortName = "slackAdministrationCommands";
 const target = z.object({ organizationId: z.uuid() });
 const userMappingInput = target.extend({
   installationId: z.uuid(),
-  userId: z.string().min(1).max(255),
+  userId: z.string().min(1).check(utf16Max(255)),
   slackUserId: z
     .string()
     .trim()
@@ -66,7 +67,7 @@ const userMappingInput = target.extend({
 const routeInput = target.extend({
   projectId: z.uuid().nullable(),
   mode: z.enum(["dm", "channel", "both"]),
-  channelId: z.string().trim().min(1).max(64).nullable(),
+  channelId: z.string().trim().min(1).check(utf16Max(64)).nullable(),
   fallback: z.enum(["none", "organization_channel", "email"]),
 });
 const installationStatusInput = target.extend({

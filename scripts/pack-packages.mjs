@@ -47,9 +47,9 @@
        An exemption that no disagreement needs is refused too, and no row
        names one: each package inlines only its own workspace's modules, so
        its versions are its own manifest's. Core's `package.test.ts` holds
-       one version of each name across the eight (ruling 146); `auth`
-       declares `zod` 4.5.4, which its packed manifest names beside the
-       others' 4.4.3 (ruling 144; ruling 193 item 7).
+       one version of each name across the eight (ruling 146); `auth`'s
+       packed manifest names the `zod` its own manifest declares (ruling
+       144; ruling 193 item 7).
   4. The packed manifest: `private: false` (option (B), above); the
      version, stamped from `--version` (§3.4), one version for every
      package of the run, which is J question 10's lockstep; `exports` as `{ types, import }` on `dist/`

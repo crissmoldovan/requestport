@@ -16,6 +16,8 @@ import {
   requireAgentProject,
   requireOrganization,
   requireScope,
+  utf16Max,
+  utf16Min,
 } from "@requestport/domain";
 import { z } from "zod";
 
@@ -38,12 +40,12 @@ const consentInput = z.object({
    * changed to send was refused by the schema it was sent to.
    */
   projectId: z.uuid().nullish(),
-  clientId: z.string().min(1).max(255),
+  clientId: z.string().min(1).check(utf16Max(255)),
   audience: z.enum(["mcp", "api"]),
   laneIds: z.array(z.uuid()).max(100).default([]),
   scopes: z.array(z.string()).min(1).max(30),
   expectedVersion: z.literal(0),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
   newPrincipal: z
     .object({
       id: z.uuid(),
@@ -51,7 +53,7 @@ const consentInput = z.object({
         .string()
         .trim()
         .min(1)
-        .max(160)
+        .check(utf16Max(160))
         .refine(
           (value) => !containsSensitiveContent(value),
           "Agent name contains private or secret material",
@@ -65,7 +67,7 @@ const consentInput = z.object({
         .string()
         .trim()
         .min(1)
-        .max(160)
+        .check(utf16Max(160))
         .refine(
           (value) => !containsSensitiveContent(value),
           "Software name contains private or secret material",
@@ -116,14 +118,14 @@ const revokeInput = z.object({
   reason: z
     .string()
     .trim()
-    .min(10)
-    .max(500)
+    .check(utf16Min(10))
+    .check(utf16Max(500))
     .refine(
       (value) => !containsSensitiveContent(value),
       "Reason contains private or secret material",
     ),
   expectedVersion: z.number().int().positive(),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 export function createAgentGrantService(dependencies: {

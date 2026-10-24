@@ -227,6 +227,21 @@ describe("rejecting a request submission", () => {
     expect(server.revalidatePath).not.toHaveBeenCalled();
   });
 
+  test("measures a title in UTF-16 code units, as zod 4.4.3 did: 121 emoji, 242 units, are over the 240", async () => {
+    const state = await createRequestAction(
+      initialRequestActionState,
+      createForm({ title: "\u{1F600}".repeat(121) }),
+    );
+
+    expect(state).toEqual({
+      code: "validation_failed",
+      field: "title",
+      message: "Too big: expected string to have <=240 characters",
+      status: "error",
+    });
+    expect(server.execute).not.toHaveBeenCalled();
+  });
+
   test("puts a cross-field rule on the field its schema names", async () => {
     // `sensitivity` is the value the reader changed; `visibility` is the one
     // the rule is about. Only the schema knows that, so only the schema's own

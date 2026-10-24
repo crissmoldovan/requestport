@@ -3,6 +3,67 @@
 Each RequestPort release publishes its packages together, at one version.
 This file records each release, the newest first.
 
+## 0.2.1
+
+**What.** The fourteen packages at `0.2.1`, together, as before. Every
+package now depends on zod 4.6.7, which closes the advisory 0.2.0 shipped
+with. What the REST API and MCP accept and return is unchanged, except for
+one answer that is the fix itself.
+
+**Why.**
+
+- **0.2.0's known issue.** zod before 4.6.6 has GHSA-mrhx-c7xc-m3w5 (high).
+  It spends memory on an issue for every element of a collection that is
+  over its size limit, so a large enough array could exhaust a process's
+  memory. 0.2.0 shipped with it, so that its Next.js fixes reached you
+  without delay, and said 0.2.1 would move zod.
+- **zod 4.5 and 4.6 changed other answers too.** They count string lengths
+  differently, require seconds in a datetime, strip whitespace from URLs,
+  and word some messages differently. A patch release should not change
+  your API, so 0.2.1 keeps 0.2.0's answers.
+
+**Impact.**
+
+- **Security: zod 4.6.7.** GHSA-mrhx-c7xc-m3w5 is closed in every package.
+- **One answer changes, because it is the fix:** an array over its size
+  limit is now refused by its size alone, before its elements are read.
+  - On REST and MCP, the refusal's `details.field` names the array (for
+    example `choices`), where it named its first bad element
+    (`choices.0`).
+  - MCP's refusal text lists only the size issue.
+  - A check on the whole command that runs after the array, such as
+    `create_routing_rule`'s check that its conditions are unique, no longer
+    runs for that request.
+- **Everything else is as in 0.2.0:**
+  - string lengths are counted in UTF-16 units;
+  - a datetime without seconds is accepted (`ask_question`'s `deadlineAt`
+    of `2026-10-24T12:30Z`, for example);
+  - a URL keeps its tabs and newlines;
+  - email addresses are matched by the same pattern;
+  - messages read as they did;
+  - an own `__proto__` key in a request body is dropped, as before.
+
+  The published OpenAPI document and MCP's list of tools are byte for byte
+  0.2.0's.
+- **Additive: `@requestport/domain`** exports eight helpers that keep zod
+  4.4.3's answers: `utf16Max`, `utf16Min`, `isoDatetimePattern`,
+  `isoDatetime`, `trimmedUrl`, `emailPattern`, `english443` and
+  `dropOwnProtoKeys`. Loading the package sets zod's English messages to
+  4.4.3's words, as 0.2.0's zod already did when it loaded.
+- **A correction to 0.2.0's notes.** They said zod could exhaust memory
+  validating a large array "against a schema with no length limit". The
+  advisory is about collections that *have* a size limit, and zod 4.6.7
+  fixes those. An array with no limit is still read in full. On REST and
+  MCP, RequestPort refuses a body of more than 17,000 JSON values before
+  zod reads it.
+- **Migration.** None, unless a client reads `details.field` from the
+  refusal of an oversized array: it now names the array.
+- **One version, as before.** `requestport` 0.2.1 depends on each of the
+  other thirteen packages at exactly `0.2.1`, and `latest` moves to
+  `0.2.1`.
+- **Supported versions.** Security fixes go to the latest `0.x` release
+  only, as `SECURITY.md` says, so 0.2.0 receives none from now on.
+
 ## 0.2.0
 
 **What.** The fourteen packages at `0.2.0`, together, as before. This

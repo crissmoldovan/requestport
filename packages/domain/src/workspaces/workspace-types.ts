@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { EncryptedEnvelope } from "../security/envelope-encryption.js";
 import { containsSecretContent } from "../security/sensitive-content.js";
 import { DomainError } from "../shared/errors.js";
+import { utf16Max } from "../shared/zod-compat.js";
 
 const safeCapabilityName = z.string().regex(/^[a-z][a-z0-9_.:-]{0,63}$/u);
 
@@ -22,19 +23,24 @@ export type PrivateTelemetryField = (typeof privateTelemetryFields)[number];
 
 export const privateWorkspaceTelemetrySchema = z
   .object({
-    hostname: z.string().trim().min(1).max(253).optional(),
-    fqdn: z.string().trim().min(1).max(253).optional(),
-    osUser: z.string().trim().min(1).max(256).optional(),
-    workingDirectory: z.string().trim().min(1).max(4_096).optional(),
-    repositoryRoot: z.string().trim().min(1).max(4_096).optional(),
-    branch: z.string().trim().min(1).max(1_024).optional(),
+    hostname: z.string().trim().min(1).check(utf16Max(253)).optional(),
+    fqdn: z.string().trim().min(1).check(utf16Max(253)).optional(),
+    osUser: z.string().trim().min(1).check(utf16Max(256)).optional(),
+    workingDirectory: z
+      .string()
+      .trim()
+      .min(1)
+      .check(utf16Max(4_096))
+      .optional(),
+    repositoryRoot: z.string().trim().min(1).check(utf16Max(4_096)).optional(),
+    branch: z.string().trim().min(1).check(utf16Max(1_024)).optional(),
     commitSha: z
       .string()
       .regex(/^[0-9a-f]{7,64}$/u)
       .optional(),
-    operatingSystem: z.string().trim().min(1).max(1_024).optional(),
+    operatingSystem: z.string().trim().min(1).check(utf16Max(1_024)).optional(),
     toolVersions: z
-      .record(z.string().max(128), z.string().max(256))
+      .record(z.string().check(utf16Max(128)), z.string().check(utf16Max(256)))
       .refine((value) => Object.keys(value).length <= 128, {
         message: "At most 128 tool versions may be reported",
       })

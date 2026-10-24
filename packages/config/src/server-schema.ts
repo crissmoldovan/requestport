@@ -1,11 +1,77 @@
 import { z } from "zod";
 
+/*
+  zod 4.4.3's string rules, on zod 4.6.7, for the server environment: the
+  part of `@requestport/domain`'s `shared/zod-compat.ts` this schema uses,
+  copied here because this package depends on no other workspace, and kept
+  in this module because scripts load it natively, where a sibling import
+  does not resolve. That file says what moved between the two zods and why
+  each helper answers as 4.4.3 did; `zod-443-rules.test.ts` pins what these
+  keep for the environment.
+*/
+/** `.check(utf16Max(n))` where `.max(n)` would go: UTF-16 code units. */
+function utf16Max(maximum: number, params?: Parameters<typeof z.maxLength>[1]) {
+  const check = z.maxLength(maximum, params);
+  const def = check._zod.def;
+  check._zod.check = (payload) => {
+    const input = payload.value;
+    if (input.length <= def.maximum) return;
+    payload.issues.push({
+      origin: z.core.util.getLengthableOrigin(input),
+      code: "too_big",
+      maximum: def.maximum,
+      inclusive: true,
+      input,
+      inst: check,
+      continue: !def.abort,
+    });
+  };
+  return check;
+}
+
+/** `.check(utf16Min(n))` where `.min(n)` would go, for `n` of 2 or more. */
+function utf16Min(minimum: number, params?: Parameters<typeof z.minLength>[1]) {
+  const check = z.minLength(minimum, params);
+  const def = check._zod.def;
+  check._zod.check = (payload) => {
+    const input = payload.value;
+    if (input.length >= def.minimum) return;
+    payload.issues.push({
+      origin: z.core.util.getLengthableOrigin(input),
+      code: "too_small",
+      minimum: def.minimum,
+      inclusive: true,
+      input,
+      inst: check,
+      continue: !def.abort,
+    });
+  };
+  return check;
+}
+
+function parsesAsUrl(value: string) {
+  return URL.canParse(value.trim());
+}
+
+/** `z.url()` as 4.4.3 answered it: the trimmed input, tabs and newlines kept. */
+function trimmedUrl() {
+  return z
+    .stringFormat("url", parsesAsUrl)
+    .overwrite((value) => (parsesAsUrl(value) ? value.trim() : value));
+}
+
+/** zod 4.4.3's `z.regexes.email`, character for character. */
+const emailPattern =
+  // biome-ignore lint/complexity/noUselessEscapeInRegex: 4.4.3's escapes, kept so the source matches.
+  /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$/;
+
 /**
  * The same shape `readDatabaseUrl` enforces before it opens a connection.
  *
- * `z.string().url()` accepts `mysql://host/db` and `postgres://host` with no
- * database named, and `@requestport/db` refuses both. While the pool read its
- * connection string as it was constructed, that refusal happened at import and
+ * A URL check alone (`trimmedUrl()`, zod 4.4.3's `z.url()`) accepts
+ * `mysql://host/db` and `postgres://host` with no database named, and
+ * `@requestport/db` refuses both. While the pool read its connection string
+ * as it was constructed, that refusal happened at import and
  * the application could not boot on a malformed value. The read moved into the
  * connection, so without this the application boots and fails per query — a
  * half-rendered page carrying a configuration error instead of a refusal.
@@ -31,11 +97,11 @@ export function isPostgresDatabaseUrl(value: string): boolean {
 
 const sharedServerEnvShape = {
   NODE_ENV: z.enum(["development", "test", "production"]),
-  BETTER_AUTH_SECRET: z.string().min(32),
+  BETTER_AUTH_SECRET: z.string().check(utf16Min(32)),
   // Whether this can be the OAuth issuer is checked where Better Auth is
   // composed (`createAuthOptions` in @requestport/auth), not here: the Trigger
   // worker parses this and never composes Better Auth.
-  BETTER_AUTH_URL: z.string().url(),
+  BETTER_AUTH_URL: trimmedUrl(),
   REQUESTPORT_LOCAL_CREDENTIAL: z.enum(["enabled", "disabled"]).optional(),
   /*
     Plan 13, F.3 (F3-14): operator credentials are issued and used only when
@@ -52,36 +118,36 @@ const sharedServerEnvShape = {
     (`assertPrivateWebhookReceiversSelfHosted`, below).
   */
   REQUESTPORT_WEBHOOK_PRIVATE_RECEIVERS: z.literal("enabled").optional(),
-  REQUESTPORT_WORKSPACE_KEK: z.string().min(43).optional(),
+  REQUESTPORT_WORKSPACE_KEK: z.string().check(utf16Min(43)).optional(),
   REQUESTPORT_WORKSPACE_KEK_VERSION: z
     .string()
     .min(1)
-    .max(64)
+    .check(utf16Max(64))
     .default("local-v1"),
-  REQUESTPORT_WORKSPACE_KEK_PREVIOUS: z.string().min(43).optional(),
+  REQUESTPORT_WORKSPACE_KEK_PREVIOUS: z.string().check(utf16Min(43)).optional(),
   REQUESTPORT_WORKSPACE_KEK_PREVIOUS_VERSION: z
     .string()
     .min(1)
-    .max(64)
+    .check(utf16Max(64))
     .optional(),
-  REQUESTPORT_WEBHOOK_KEK: z.string().min(43).optional(),
+  REQUESTPORT_WEBHOOK_KEK: z.string().check(utf16Min(43)).optional(),
   REQUESTPORT_WEBHOOK_KEK_VERSION: z
     .string()
     .min(1)
-    .max(64)
+    .check(utf16Max(64))
     .default("local-v1"),
-  REQUESTPORT_WEBHOOK_KEK_PREVIOUS: z.string().min(43).optional(),
+  REQUESTPORT_WEBHOOK_KEK_PREVIOUS: z.string().check(utf16Min(43)).optional(),
   REQUESTPORT_WEBHOOK_KEK_PREVIOUS_VERSION: z
     .string()
     .min(1)
-    .max(64)
+    .check(utf16Max(64))
     .optional(),
-  REQUESTPORT_WEBHOOK_SIGNING_KEY: z.string().min(43).optional(),
-  REQUESTPORT_SLACK_SIGNING_SECRET: z.string().min(16).optional(),
+  REQUESTPORT_WEBHOOK_SIGNING_KEY: z.string().check(utf16Min(43)).optional(),
+  REQUESTPORT_SLACK_SIGNING_SECRET: z.string().check(utf16Min(16)).optional(),
   REQUESTPORT_SLACK_CLIENT_ID: z.string().min(1).optional(),
   REQUESTPORT_SLACK_CLIENT_SECRET: z.string().min(1).optional(),
-  REQUESTPORT_SLACK_STATE_SECRET: z.string().min(32).optional(),
-  RESEND_WEBHOOK_SECRET: z.string().min(16).optional(),
+  REQUESTPORT_SLACK_STATE_SECRET: z.string().check(utf16Min(32)).optional(),
+  RESEND_WEBHOOK_SECRET: z.string().check(utf16Min(16)).optional(),
   TRIGGER_SECRET_KEY: z.string().min(1).optional(),
   TRIGGER_PROJECT_REF: z.string().min(1).optional(),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
@@ -103,13 +169,13 @@ const canonicalProviderEnvShape = {
   // Required, unless something stands for it (`databaseUrlStandIn`, below):
   // a PGlite storage, the application login's URL, or the worker's three
   // logins' URLs.
-  DATABASE_URL: z.string().url().refine(isPostgresDatabaseUrl, {
+  DATABASE_URL: trimmedUrl().refine(isPostgresDatabaseUrl, {
     message: "must be a postgres URL naming a database",
   }),
   GITHUB_CLIENT_ID: z.string().min(1).optional(),
   GITHUB_CLIENT_SECRET: z.string().min(1).optional(),
   RESEND_API_KEY: z.string().min(1).optional(),
-  RESEND_FROM_EMAIL: z.string().email().optional(),
+  RESEND_FROM_EMAIL: z.string().email({ pattern: emailPattern }).optional(),
 };
 
 /**
@@ -386,16 +452,19 @@ export type ParsedServerEnv = Omit<
 const PreviewServerEnvSchema = serverEnvironmentSchema(
   {
     ...sharedServerEnvShape,
-    REQUESTPORT_PREVIEW_DATABASE_URL: z
-      .string()
-      .url()
-      .refine(isPostgresDatabaseUrl, {
+    REQUESTPORT_PREVIEW_DATABASE_URL: trimmedUrl().refine(
+      isPostgresDatabaseUrl,
+      {
         message: "must be a postgres URL naming a database",
-      }),
+      },
+    ),
     REQUESTPORT_PREVIEW_GITHUB_CLIENT_ID: z.string().min(1).optional(),
     REQUESTPORT_PREVIEW_GITHUB_CLIENT_SECRET: z.string().min(1).optional(),
     REQUESTPORT_PREVIEW_RESEND_API_KEY: z.string().min(1).optional(),
-    REQUESTPORT_PREVIEW_RESEND_FROM_EMAIL: z.string().email().optional(),
+    REQUESTPORT_PREVIEW_RESEND_FROM_EMAIL: z
+      .string()
+      .email({ pattern: emailPattern })
+      .optional(),
   },
   "REQUESTPORT_PREVIEW_",
 ).transform(

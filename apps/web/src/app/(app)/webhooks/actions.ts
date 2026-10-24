@@ -5,7 +5,7 @@ import {
   createOutboxRepository,
   createWebhookRepository,
 } from "@requestport/db";
-import { DomainError } from "@requestport/domain";
+import { DomainError, utf16Max, utf16Min } from "@requestport/domain";
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
@@ -100,11 +100,11 @@ export async function createWebhookAction(
     const current = await context();
     const parsed = z
       .object({
-        idempotencyKey: z.string().min(16).max(200),
+        idempotencyKey: z.string().check(utf16Min(16)).check(utf16Max(200)),
         expectedVersion: z.coerce.number().int().nonnegative(),
         projectId: z.union([z.literal(""), z.uuid()]),
-        name: z.string().trim().min(1).max(160),
-        endpointUrl: z.string().trim().min(1).max(4_096),
+        name: z.string().trim().min(1).check(utf16Max(160)),
+        endpointUrl: z.string().trim().min(1).check(utf16Max(4_096)),
       })
       .safeParse(Object.fromEntries(formData));
     // The create form draws a field for every value it asks for, so a schema
@@ -152,7 +152,7 @@ export async function createWebhookAction(
 
 const itemSchema = z.object({
   id: z.uuid(),
-  idempotencyKey: z.string().min(16).max(200),
+  idempotencyKey: z.string().check(utf16Min(16)).check(utf16Max(200)),
   expectedVersion: z.coerce.number().int().positive(),
 });
 
@@ -237,7 +237,7 @@ export async function replayWebhookAction(
     const input = z
       .object({
         deliveryId: z.uuid(),
-        idempotencyKey: z.string().min(16).max(200),
+        idempotencyKey: z.string().check(utf16Min(16)).check(utf16Max(200)),
         expectedVersion: z.coerce.number().int().nonnegative(),
       })
       .parse(Object.fromEntries(formData));

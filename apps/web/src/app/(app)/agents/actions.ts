@@ -9,6 +9,8 @@ import {
 import {
   DomainError,
   privateTelemetryFields,
+  utf16Max,
+  utf16Min,
   WorkspaceService,
 } from "@requestport/domain";
 import { revalidatePath } from "next/cache";
@@ -34,26 +36,26 @@ import type { AgentActionState } from "./agent-action-state.js";
 
 const createSchema = z.object({
   projectId: z.union([z.literal(""), z.uuid()]),
-  displayName: z.string().trim().min(1).max(160),
+  displayName: z.string().trim().min(1).check(utf16Max(160)),
   slug: z
     .string()
     .trim()
     .toLowerCase()
     .regex(/^[a-z0-9][a-z0-9-]{1,62}$/u),
-  softwareName: z.string().trim().max(160),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  softwareName: z.string().trim().check(utf16Max(160)),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 const issueSchema = z.object({
   agentPrincipalId: z.uuid(),
   projectId: z.uuid(),
-  name: z.string().trim().min(1).max(160),
+  name: z.string().trim().min(1).check(utf16Max(160)),
   audience: z.enum(["mcp", "api"]),
   laneIds: z.array(z.uuid()).max(100),
   scopes: z.array(z.string()).min(1).max(30),
   expiresInDays: z.coerce.number().int().min(1).max(365),
   expectedVersion: z.coerce.number().int().nonnegative(),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 const credentialSchema = z.object({
@@ -61,34 +63,34 @@ const credentialSchema = z.object({
   credentialId: z.uuid(),
   overlapMinutes: z.coerce.number().int().min(0).max(60).optional(),
   expectedVersion: z.coerce.number().int().positive(),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 const oauthGrantSchema = z.object({
   agentPrincipalId: z.uuid(),
   grantId: z.uuid(),
-  reason: z.string().trim().min(10).max(500),
+  reason: z.string().trim().check(utf16Min(10)).check(utf16Max(500)),
   expectedVersion: z.coerce.number().int().positive(),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 const revealSchema = z.object({
   workspaceId: z.uuid(),
-  reason: z.string().trim().min(10).max(500),
+  reason: z.string().trim().check(utf16Min(10)).check(utf16Max(500)),
   fields: z
     .array(z.enum(privateTelemetryFields))
     .min(1)
     .max(privateTelemetryFields.length),
   expectedVersion: z.coerce.number().int().nonnegative(),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 const statusSchema = z.object({
   agentPrincipalId: z.uuid(),
   expectedVersion: z.coerce.number().int().positive(),
   status: z.enum(["active", "suspended", "revoked"]),
-  reason: z.string().trim().min(10).max(500),
-  idempotencyKey: z.string().trim().min(16).max(200),
+  reason: z.string().trim().check(utf16Min(10)).check(utf16Max(500)),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
 });
 
 function errorState(error: unknown): AgentActionState {

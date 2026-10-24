@@ -9,6 +9,7 @@ import {
   requireScope,
 } from "../shared/authorization.js";
 import { DomainError } from "../shared/errors.js";
+import { utf16Max, utf16Min } from "../shared/zod-compat.js";
 import {
   type PrivateTelemetryField,
   type PrivateWorkspaceTelemetry,
@@ -120,9 +121,13 @@ export class WorkspaceService {
         organizationId: z.uuid(),
         workspaceId: z.uuid(),
         fields: z.array(z.enum(privateTelemetryFields)).min(1).max(9),
-        reason: z.string().trim().min(10).max(500),
+        reason: z.string().trim().check(utf16Min(10)).check(utf16Max(500)),
         expectedVersion: z.number().int().nonnegative(),
-        idempotencyKey: z.string().trim().min(16).max(200),
+        idempotencyKey: z
+          .string()
+          .trim()
+          .check(utf16Min(16))
+          .check(utf16Max(200)),
       })
       .parse(rawInput);
     requireOrganization(context, input.organizationId);

@@ -22,6 +22,7 @@ import {
   type JsonObject,
   type JsonValue,
   type UnitOfWork,
+  utf16Max,
 } from "@requestport/domain";
 import { z } from "zod";
 
@@ -33,12 +34,15 @@ import { inUnit, workerStorages } from "../worker-storages.js";
 const logger = workerLogger("trigger-import-apply");
 
 const applyActor = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("user"), id: z.string().min(1).max(255) }),
+  z.object({
+    type: z.literal("user"),
+    id: z.string().min(1).check(utf16Max(255)),
+  }),
   z.object({
     type: z.literal("agent"),
     id: z.uuid(),
     authorizationId: z.uuid(),
-    delegatedByUserId: z.string().min(1).max(255).nullable(),
+    delegatedByUserId: z.string().min(1).check(utf16Max(255)).nullable(),
     projectId: z.uuid(),
   }),
 ]);
@@ -57,14 +61,14 @@ const parsedLegacy = z.object({
   kind: z.enum(["request", "response", "handoff", "research", "unknown"]),
   legacyKey: z
     .object({
-      namespace: z.string().min(1).max(64),
-      normalizedKey: z.string().min(1).max(255),
+      namespace: z.string().min(1).check(utf16Max(64)),
+      normalizedKey: z.string().min(1).check(utf16Max(255)),
     })
     .optional(),
-  title: z.string().trim().min(1).max(240).optional(),
-  bodyMarkdown: z.string().trim().min(1).max(100_000),
+  title: z.string().trim().min(1).check(utf16Max(240)).optional(),
+  bodyMarkdown: z.string().trim().min(1).check(utf16Max(100_000)),
   acceptanceCriteria: z
-    .array(z.string().trim().min(1).max(1_000))
+    .array(z.string().trim().min(1).check(utf16Max(1_000)))
     .max(100)
     .default([]),
   targetProjectId: z.uuid().optional(),
