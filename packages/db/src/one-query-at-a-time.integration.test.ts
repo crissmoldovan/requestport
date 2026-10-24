@@ -20,6 +20,12 @@ import { createSlackRepository } from "./repositories/slack-repository.js";
 import { requests } from "./schema/index.js";
 import { tenantWrappingEnabled } from "./tenant-context.js";
 import { takeConcurrentQueries } from "./test-support/one-query-at-a-time.js";
+import { queueQueriesOn } from "./test-support/queue-queries.js";
+import {
+  rolldownParseAst,
+  sourcesUnder,
+  sweepTransactionCallbacks,
+} from "./test-support/transaction-callback-sweep.js";
 import type { Tx } from "./transaction.js";
 
 /*
@@ -233,6 +239,95 @@ describe("the one-query-at-a-time guard (test-support/one-query-at-a-time.ts)", 
 
     expect(takeConcurrentQueries()).toEqual([]);
   });
+
+  test("queueQueriesOn hands a transaction's client the queries issued at once one at a time, in the order they were issued, until it is put back (X25's remainder)", async () => {
+    const order: string[] = [];
+
+    await inRollbackTransaction(async (tx) => {
+      const restore = queueQueriesOn(tx);
+      let results: unknown[];
+      try {
+        // The first names a table of Better Auth's, so the second, issued
+        // while it is in flight, is queued without a record (the next case).
+        results = await Promise.all([
+          tx
+            .execute(
+              sql`select pg_catalog.pg_sleep(0.05), 1 as first, (select count(*) from "jwks") as keys`,
+            )
+            .then((result) => {
+              order.push("first");
+              return result.rows[0]?.first;
+            }),
+          tx.execute(sql`select 2 as second`).then((result) => {
+            order.push("second");
+            return result.rows[0]?.second;
+          }),
+        ]);
+      } finally {
+        restore();
+      }
+      expect(results).toEqual([1, 2]);
+      expect(takeConcurrentQueries()).toEqual([]);
+
+      // Put back, the client is handed them at once again, as pg queues them.
+      await Promise.all([
+        tx.execute(sql`select pg_catalog.pg_sleep(0.05) as first`),
+        tx.execute(sql`select 2 as second`),
+      ]);
+      expect(takeConcurrentQueries()).toHaveLength(1);
+    });
+    expect(order).toEqual(["first", "second"]);
+  });
+
+  test("queueQueriesOn still records a query issued while another is in flight where neither names one of Better Auth's tables, and only those (X25's remainder)", async () => {
+    await inRollbackTransaction(async (tx) => {
+      const restore = queueQueriesOn(tx);
+      try {
+        // RequestPort's own: neither names a table of Better Auth's.
+        await Promise.all([
+          tx.execute(sql`select pg_catalog.pg_sleep(0.05) as first`),
+          tx.execute(sql`select 2 as second`),
+        ]);
+        expect(takeConcurrentQueries()).toEqual([
+          {
+            test: expect.stringContaining("queueQueriesOn still records"),
+            issued: "select 2 as second",
+            inFlight: ["select pg_catalog.pg_sleep(0.05) as first"],
+          },
+        ]);
+
+        // One of Better Auth's tables, issued while one of RequestPort's
+        // queries is in flight, and in flight while one is issued.
+        await Promise.all([
+          tx.execute(sql`select pg_catalog.pg_sleep(0.05) as first`),
+          tx.execute(sql`select count(*) from "jwks"`),
+        ]);
+        await Promise.all([
+          tx.execute(
+            sql`select pg_catalog.pg_sleep(0.05), count(*) from "apikey"`,
+          ),
+          tx.execute(sql`select 3 as third`),
+        ]);
+        expect(takeConcurrentQueries()).toEqual([]);
+
+        // Both kinds in flight: the query is recorded beside RequestPort's.
+        await Promise.all([
+          tx.execute(sql`select pg_catalog.pg_sleep(0.05) as first`),
+          tx.execute(sql`select count(*) from "oauth_refresh_token"`),
+          tx.execute(sql`select 4 as fourth`),
+        ]);
+        expect(takeConcurrentQueries()).toEqual([
+          {
+            test: expect.stringContaining("queueQueriesOn still records"),
+            issued: "select 4 as fourth",
+            inFlight: ["select pg_catalog.pg_sleep(0.05) as first"],
+          },
+        ]);
+      } finally {
+        restore();
+      }
+    });
+  });
 });
 
 describe("each read that ran several queries at once on one transaction runs them in turn (X24)", () => {
@@ -445,5 +540,52 @@ describe("packages/db's code hands Promise.all nothing that shares a client", ()
 
     expect(elsewhere).toEqual([]);
     expect(found.length - elsewhere.length).toBe(2);
+  });
+});
+
+/*
+ * The sweep above stops at packages/db/src. This one, X24's widened (X25's
+ * remainder; ruling 232 item 7), reads every TypeScript source in packages/
+ * and apps/ that git tracks or would track, but tests and declarations,
+ * finds the functions handed where a transaction is handed to it, as far as
+ * each argument's own text shows them
+ * (`./test-support/transaction-callback-sweep.ts` says how, and which shapes
+ * it does not see), and fails on a `Promise.all` or one of its kin inside
+ * one. Run on the tree before X24's
+ * fix (`7092f796`), it finds nine of X24's twelve sites, the imports page's
+ * among them; the sweep above finds the eleven in packages/db, among them
+ * the three this one does not, in `getRequest`, which runs on a transaction
+ * its repository was built over rather than inside a callback.
+ */
+describe("every transaction callback in packages/ and apps/ hands Promise.all nothing", () => {
+  test("the sweep reads a source in a dot-directory, parses every source, reaches the callbacks three of X24's sites ran in (the imports page's, search's and withActiveAuthorization's) and one handed by name, and finds no Promise.all or kin inside any callback", async () => {
+    const root = join(import.meta.dirname, "../../..");
+    const sources = sourcesUnder(root);
+    const swept = sweepTransactionCallbacks(sources, await rolldownParseAst());
+
+    expect(sources.map(({ path }) => path)).toContain(
+      "apps/web/src/app/.well-known/security.txt/route.ts",
+    );
+    expect(swept.unparsed).toEqual([]);
+    for (const [path, via] of [
+      ["apps/web/src/app/(app)/imports/page.tsx", "transaction"],
+      ["packages/db/src/queries/search-repository.ts", "inTenantTransaction"],
+      [
+        "packages/db/src/queries/agent-query-repository.ts",
+        "withActiveAuthorization",
+      ],
+    ] as const) {
+      expect(swept.callbacks, `${path} via ${via}`).toContainEqual(
+        expect.objectContaining({ path, via }),
+      );
+    }
+    // That file hands withUserBinding one callback, `read`, and by name.
+    expect(swept.callbacks).toContainEqual(
+      expect.objectContaining({
+        path: "packages/db/src/repositories/appearance-repository.ts",
+        via: "withUserBinding",
+      }),
+    );
+    expect(swept.sites).toEqual([]);
   });
 });

@@ -192,16 +192,20 @@ describe("the route table against apps/web/src/app", () => {
       ["/api/health/live"],
       ["/api/health/ready"],
     ]);
-    expect(FALLBACK_UNDER_FAMILY).toEqual([]);
+    expect(FALLBACK_UNDER_FAMILY.map((note) => note.pattern)).toEqual([
+      "/.well-known/security.txt",
+    ]);
   });
 
   test("every route.ts is complete and reached first by its own entry", () => {
     const { failures, served } = judge(files);
     expect(failures).toEqual([]);
     expect(served.host).toHaveLength(10);
-    // At 29a3aac6, Next serves 20 routes: the ten above, and ten outside
-    // every family, which are the fallback's.
-    expect(served.host.length + served.fallback.length).toBe(20);
+    // Next serves 21 routes: the ten above, and eleven that are the
+    // fallback's: ten outside every family (at 29a3aac6), and J.4's
+    // security.txt, which FALLBACK_UNDER_FAMILY names.
+    expect(served.fallback).toContain(".well-known/security.txt/route.ts");
+    expect(served.host.length + served.fallback.length).toBe(21);
   });
 
   test("no page or metadata file lies under a family, where the host would shadow it", () => {
@@ -236,7 +240,10 @@ describe("the rule refuses what it should (H.0b's self-test)", () => {
   test.each([
     ["api/v1/new-thing/route.ts", "a route under REST's catch-all"],
     ["api/auth/nested/deeper/route.ts", "a route under Better Auth's"],
-    [".well-known/security.txt/route.ts", "a discovery document nobody mapped"],
+    [
+      ".well-known/change-password/route.ts",
+      "a discovery document nobody mapped",
+    ],
     ["mcp/[session]/route.ts", "a dynamic route under /mcp"],
     ["api/health/(group)/deep/route.ts", "a route in a group under health"],
   ])("refuses %s (%s)", (added) => {

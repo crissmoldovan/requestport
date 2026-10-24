@@ -364,6 +364,43 @@ describe("the requestport-jobs executable", () => {
     );
   });
 
+  test("a SIGTERM and a SIGINT sent together are one stop, as a terminal's Ctrl-C passed on by pnpm or npm arrives: it logs worker.stop_repeated, drains, removes its ready file and exits 0 (ruling 246)", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "requestport-jobs-"));
+    directories.push(directory);
+    const readyFile = join(directory, "ready");
+    const run = start(["--ready-file", readyFile], workerEnv());
+
+    await until(() => existsSync(readyFile), 25_000);
+    // Two different signals, so neither can merge into the other while both
+    // are pending; which of the two the process takes first is the kernel's.
+    run.child.kill("SIGTERM");
+    run.child.kill("SIGINT");
+    const exit = await run.exited;
+
+    expect(exit).toEqual({ code: 0, signal: null });
+    expect(existsSync(readyFile)).toBe(false);
+    const stops = logEvents(run.stdout()).filter((event) =>
+      [
+        "worker.stopping",
+        "worker.stop_repeated",
+        "worker.stopped",
+        "worker.forced_exit",
+      ].includes(String(event.event)),
+    );
+    expect(stops.map((event) => event.event)).toEqual([
+      "worker.stopping",
+      "worker.stop_repeated",
+      "worker.stopped",
+    ]);
+    expect(
+      stops
+        .slice(0, 2)
+        .map((event) => event.status)
+        .sort(),
+    ).toEqual(["sigint", "sigterm"]);
+    expect(stops[2]).toMatchObject({ status: "drained" });
+  });
+
   test("with DATABASE_URL, every DATABASE_URL_*, PG* and POSTGRES_*, and every other variable naming a database removed, it starts as its three logins, routes a committed event, whose routing parses the configuration, and drains and exits cleanly", {
     timeout: 120_000,
   }, async () => {

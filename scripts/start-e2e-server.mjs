@@ -49,10 +49,11 @@ export const sourceRoots = ["apps/web/src", "packages", "trigger"];
  * The directories the walk refuses to enter, by name.
  *
  * A name list rather than "skip anything starting with a dot", because a dot
- * rule is wrong here: `apps/web/src/app/.well-known` holds four `route.ts`
- * files that ship in the bundle — the OAuth and OpenID discovery documents —
- * and a dot rule skipped every one of them, so editing them left the build
- * looking current. What is named here instead is version-control metadata and
+ * rule is wrong here: `apps/web/src/app/.well-known` holds five `route.ts`
+ * files that ship in the bundle — the four OAuth and OpenID discovery
+ * documents and `security.txt` — and a dot rule skips every one of them. It
+ * skipped the four, so editing them left the build looking current. What is
+ * named here instead is version-control metadata and
  * tool-written caches. `.turbo` is the one of those that turns up under the
  * roots above: a package collects one as soon as turbo runs a task there, and
  * turbo rewrites a log inside it on every task after that, `test` included, so

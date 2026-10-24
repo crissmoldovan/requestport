@@ -21,8 +21,11 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
  *
  * For a person's context, each of the five methods first runs the bus's own
  * re-check (`assertCurrent`), over a stand-in here, and refuses with its
- * refusal before the service or its repository is built (ruling 233 item 2);
- * an agent's context is handed to the service with no re-check of core's.
+ * refusal before the service or its repository is built (ruling 233 item 2),
+ * and once it is admitted the repository is built with the person's
+ * `credentialId`, which db's repository reads again in its locked checks
+ * (ruling 234 (c)); an agent's context is handed to the service with no
+ * re-check of core's, over a repository built with no credential.
  *
  * And the delivery replay MCP's `replay_webhook_delivery` runs, moved from
  * the MCP route with ruling 137, over stand-in outbox repositories that
@@ -276,13 +279,16 @@ describe("a person's context, re-checked first by the authorization the composit
 
   /**
    * The composition, with each repository and the re-check recording when it
-   * is built or asked, in `order`.
+   * is built or asked, in `order`, and each repository the credential it was
+   * built with, in `credentials`.
    */
   function management(assertCurrent: (context: unknown) => Promise<void>) {
     const order: string[] = [];
+    const credentials: unknown[][] = [];
     const service = createWebhookManagement({
-      repository: () => {
+      repository: (...args: unknown[]) => {
         order.push("repository");
+        credentials.push(args);
         return {} as never;
       },
       authorization: () => {
@@ -309,7 +315,7 @@ describe("a person's context, re-checked first by the authorization the composit
         context,
         ...rest,
       );
-    return { call, order };
+    return { call, credentials, order };
   }
 
   test.each(methods)(
@@ -359,6 +365,37 @@ describe("a person's context, re-checked first by the authorization the composit
         args: [agent, ...rest],
       });
       expect(order).toEqual(["repository"]);
+    },
+  );
+
+  /*
+   * Ruling 234 (c): the re-check above is taken at one point in time, so the
+   * service runs over a repository built with the person's `credentialId`,
+   * which db's repository reads again in each locked check of that person,
+   * in the write's own transaction. An agent's repository is given none.
+   */
+  test.each(methods)(
+    "%s builds the service's repository with a person's credentialId, which its locked checks read again (ruling 234 (c))",
+    async (method, rest) => {
+      const { call, credentials } = management(async () => {});
+
+      await call(method, person, rest);
+
+      expect(credentials).toEqual([["session-1"]]);
+    },
+  );
+
+  test.each(methods)(
+    "%s builds an agent's repository with no credential to read",
+    async (method, rest) => {
+      const { call, credentials } = management(async () => {
+        throw new Error("an agent's context was re-checked");
+      });
+
+      await call(method, agent, rest);
+
+      expect(credentials).toHaveLength(1);
+      expect(credentials[0]?.[0]).toBeUndefined();
     },
   );
 });

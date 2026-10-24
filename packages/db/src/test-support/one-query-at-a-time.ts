@@ -2,6 +2,14 @@ import { createRequire } from "node:module";
 import type * as Pg from "pg";
 import { afterAll, afterEach, expect } from "vitest";
 
+import {
+  type ConcurrentQuery,
+  guardState,
+  queryText,
+  recordConcurrentQuery,
+  takeConcurrentQueries,
+} from "./concurrent-queries.js";
+
 /*
  * One query at a time on a connection (Plan 13, X24; ruling 202 item 2).
  *
@@ -18,9 +26,11 @@ import { afterAll, afterEach, expect } from "vitest";
  * configurations (`vitest.config.ts`, and so its PGlite lane, and
  * `vitest.application-role.config.ts`) and, since X25 (ruling 231), by
  * `apps/web`'s node project, `packages/core`'s configuration and
- * `packages/jobs`' integration project and worker-role lane. Loaded from
- * another workspace it patches the same `pg`: it requires `pg` from this
- * package, which is where every storage those suites build loads it from.
+ * `packages/jobs`' integration project and worker-role lane, and since X25's
+ * remainder (ruling 232 item 7) by `packages/auth`'s configuration. Loaded
+ * from another workspace it patches the same `pg`: it requires `pg` from
+ * this package, which is where every storage those suites build loads it
+ * from.
  * It replaces `pg`'s
  * `Client.prototype.query`, which every pg client inherits, the storage's
  * `IsolatedPgClient` (`../client.ts`) among them, with one that records a
@@ -38,55 +48,30 @@ import { afterAll, afterEach, expect } from "vitest";
  * callback is in its configuration object, which it checks against the
  * queries in flight but does not count as in flight itself (a search of
  * packages, apps, trigger and scripts for `submit(` and `callback:` found
- * neither handed to a pg client); and a site no suite runs, which is why
- * `../one-query-at-a-time.integration.test.ts` also sweeps the source. Test
- * support only; nothing shipped imports it.
+ * neither handed to a pg client); a site no suite runs, which is why
+ * `../one-query-at-a-time.integration.test.ts` also sweeps the source; and,
+ * on a transaction `queueQueriesOn` queues (`queue-queries.ts`), an overlap
+ * in which one of the queries names a table of Better Auth's, which it
+ * queues and does not record, RequestPort's own queries on those tables
+ * included. `packages/auth`'s five suites that compose Better Auth over a
+ * rollback transaction put it on for each case: `cross-audience-token`,
+ * `better-auth-legacy-rows`, `dynamic-client-registration`,
+ * `operator-bearer` and `server-wiring`. Test support only; nothing shipped
+ * imports it.
  */
 
-/** A query issued on a client while others it was handed were in flight. */
-export interface ConcurrentQuery {
-  /** Vitest's current test name when it was issued, if it had one. */
-  readonly test: string | undefined;
-  /** The query issued, its text with whitespace collapsed. */
-  readonly issued: string;
-  /** The queries in flight on the same client at that moment. */
-  readonly inFlight: readonly string[];
-}
-
-interface GuardState {
-  readonly recorded: ConcurrentQuery[];
-  currentTest: () => string | undefined;
-}
+export {
+  type ConcurrentQuery,
+  takeConcurrentQueries,
+} from "./concurrent-queries.js";
 
 /*
- * Held on the global object, not in this module: Vitest evaluates a setup
- * file again for each test file, while `pg`, loaded through `require`, is
- * evaluated once a process and patched once. Were two test files to run in
- * one worker process, module state would leave the patch writing to the
- * first file's list after that file had ended.
+ * Held on the prototype it patches, which `pg` evaluates once a process
+ * while Vitest evaluates this setup again for each test file
+ * (`concurrent-queries.ts` holds the records on the global object for the
+ * same reason).
  */
-const STATE = Symbol.for("requestport.db.test.oneQueryAtATime");
 const PATCHED = Symbol.for("requestport.db.test.oneQueryAtATime.patched");
-
-function guardState(): GuardState {
-  const holder = globalThis as { [STATE]?: GuardState };
-
-  holder[STATE] ??= { recorded: [], currentTest: () => undefined };
-  return holder[STATE];
-}
-
-function textOf(config: unknown): string {
-  const text =
-    typeof config === "string"
-      ? config
-      : typeof config === "object" &&
-          config !== null &&
-          typeof (config as { text?: unknown }).text === "string"
-        ? (config as { text: string }).text
-        : String(config);
-
-  return text.replace(/\s+/gu, " ").trim();
-}
 
 type Query = (this: object, ...args: unknown[]) => unknown;
 
@@ -104,18 +89,11 @@ function guardOneQueryAtATime(Client: typeof Pg.Client): void {
   let nextId = 0;
 
   prototype.query = function guardedQuery(this: object, ...args: unknown[]) {
-    const state = guardState();
     const running = inFlight.get(this) ?? new Map<number, string>();
-    const issued = textOf(args[0]);
+    const issued = queryText(args[0]);
 
     inFlight.set(this, running);
-    if (running.size > 0) {
-      state.recorded.push({
-        test: state.currentTest(),
-        issued,
-        inFlight: [...running.values()],
-      });
-    }
+    if (running.size > 0) recordConcurrentQuery(issued, [...running.values()]);
 
     const config = args[0] as { submit?: unknown; callback?: unknown } | null;
     if (
@@ -155,13 +133,6 @@ function guardOneQueryAtATime(Client: typeof Pg.Client): void {
     return result;
   };
   prototype[PATCHED] = true;
-}
-
-/** Every query recorded since the last call, which it clears. */
-export function takeConcurrentQueries(): ConcurrentQuery[] {
-  const { recorded } = guardState();
-
-  return recorded.splice(0, recorded.length);
 }
 
 function describeConcurrentQueries(found: readonly ConcurrentQuery[]) {

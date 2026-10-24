@@ -98,10 +98,12 @@ export type SelfHostBuild = {
 export const SELF_HOST_LEFT_OUT = Object.freeze(["api/test"]);
 
 /**
- * `next build`'s `--debug-build-paths` (Next 16.3.8: `dist/bin/next:113`
- * names it, and `dist/lib/resolve-build-paths.js` is 16.3.1's byte for
- * byte), which filters the route files (`page`, `route`) Next discovers
- * under `app/`; layouts and `default` files are not filtered. The patterns: every route under `app/`, and
+ * `next build`'s `--debug-build-paths` (Next 16.4.2: `dist/bin/next:114`
+ * names it, and `dist/lib/resolve-build-paths.js` differs from 16.3.8's, which
+ * was 16.3.1's byte for byte, only in how its pattern error is thrown,
+ * without Next's error code), which filters the route files (`page`,
+ * `route`) Next discovers under `app/`; layouts and `default` files are not
+ * filtered. The patterns: every route under `app/`, and
  * `app/.well-known/` named too, because Next's glob passes over a directory
  * whose name begins with a dot (with `app/**` alone its four routes are left
  * out, measured with Next's own `resolveBuildPaths`); then each of

@@ -8,23 +8,32 @@ import { assertJsonDepth } from "./input-limits.js";
 import { handleMcp, MCP_MAX_BODY, type McpOptions } from "./mcp.js";
 
 /*
-  The two bounds on one MCP tool call's size, held to one number (ruling 237).
+  The two bounds on one MCP tool call's size, held to one number (ruling 237),
+  and lowered together to 17,000 (its item 3): the largest message a
+  legitimate call sends, rounded up to the next 1,000, which packages/mcp's
+  `server.tool-input-limit.test.ts` works out.
 
   - This package's MCP handler (`handleMcp`, the route production serves
-    `/mcp` through) refuses a message whose JSON holds more than 100,000
-    values. `assertJsonDepth` counts every value its walk visits: the message
-    itself, each array element and each object member's value, at every
-    level. The handler refuses before the bearer is checked and before
-    `handleMcpRequest` is reached.
+    `/mcp` through) refuses a message whose JSON holds more than 17,000
+    values: `assertJsonDepth`'s bound, which counts every value its walk
+    visits: the message itself, each array element and each object member's
+    value, at every level. The handler refuses before the bearer is checked
+    and before `handleMcpRequest` is reached.
   - `@requestport/mcp` builds its `McpServer` with `maxToolInputElements`
-    100,000. @modelcontextprotocol/server counts each array element and each
+    17,000. @modelcontextprotocol/server counts each array element and each
     own object key in a `tools/call`'s `arguments`, and answers a call over
     the limit with an `isError` result, so its tool does not run.
 
   Each element or key the SDK counts in `arguments` is a value the walk visits
   under it, and the walk also visits the message, its `params` and
-  `arguments` itself. So a call the handler admits holds at most 99,997
+  `arguments` itself. So a call the handler admits holds at most 16,997
   elements, and behind the handler the SDK's limit refuses nothing.
+
+  The calls here put their elements in one evidence field, past the 10,000
+  the domain lets evidence's field values hold. The handler's RequestPort is
+  a stand-in whose bus parses nothing, so only these two bounds stand between
+  such a call and its command; the domain's bounds are the subject of
+  `rest.input-limit.test.ts` and of packages/mcp's test.
 
   These cases fail if either number moves without the other. On each leg, the
   first three show with the real `assertJsonDepth` that ROUTE_VALUES is the
@@ -39,7 +48,7 @@ import { handleMcp, MCP_MAX_BODY, type McpOptions } from "./mcp.js";
   which REST uses too, depend on the MCP package.
 */
 
-const ROUTE_VALUES = 100_000;
+const ROUTE_VALUES = 17_000;
 
 const projectId = "018f0000-0000-7000-8000-0000000c3702";
 
@@ -294,6 +303,130 @@ describe(`one MCP tool call: the handler's walk and the SDK's maxToolInputElemen
         isError: true,
       });
       expect(executed).toEqual(["post_work_update"]);
+    },
+  );
+});
+
+/*
+  A legacy JSON-RPC batch (ruling 237 item 3). The 2025 transport still
+  serves an array of calls in one HTTP request, as the 2025-03-26 revision
+  allowed, under either 2025 protocol version. The handler walks the
+  request's JSON once, whole, so the calls in one batch share one
+  ROUTE_VALUES: a batch whose calls hold more values together is refused
+  before the bearer is checked, though each of its calls alone would run.
+  The bound is per message on purpose: walking each call apart would let
+  one request of MCP_MAX_BODY bytes carry far more values than one call
+  may.
+*/
+
+/** A `post_work_update` call with id `id`, its one evidence field holding `zeros` zeros. */
+function batchCall(id: number, zeros: number) {
+  return {
+    jsonrpc: "2.0",
+    id,
+    method: "tools/call",
+    params: {
+      name: "post_work_update",
+      arguments: {
+        ...postWorkUpdate(zeros),
+        idempotencyKey: `r237-input-limit-batch-call-${id}`,
+      },
+    },
+  };
+}
+
+/** Two calls whose batch holds `total` values, the zeros split between them. */
+function batchOf(total: number) {
+  const envelope = values([batchCall(1, 0), batchCall(2, 0)]);
+  const zeros = total - envelope;
+  const first = Math.floor(zeros / 2);
+  return [batchCall(1, first), batchCall(2, zeros - first)];
+}
+
+function postBatch(version: string, body: unknown) {
+  return new Request("https://requestport.test/mcp", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer an-mcp-credential",
+      accept: "application/json, text/event-stream",
+      "content-type": "application/json",
+      "mcp-protocol-version": version,
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+const theLegacyTransport = legs[0];
+
+describe(`a legacy JSON-RPC batch is one message: its calls share the walk's ${ROUTE_VALUES} values (ruling 237 item 3)`, () => {
+  test.each(["2025-03-26", "2025-06-18"])(
+    "%s: a batch of two small calls runs both",
+    async (version) => {
+      const { handlerOptions } = options(theLegacyTransport);
+      const response = await handleMcp(
+        postBatch(version, [batchCall(1, 1), batchCall(2, 1)]),
+        handlerOptions,
+      );
+      expect(response.status).toBe(200);
+      const answers = (await response.json()) as Array<{
+        id: number;
+        result?: { isError?: boolean };
+      }>;
+      expect(answers.map((answer) => answer.id).sort()).toEqual([1, 2]);
+      expect(answers.every((answer) => answer.result?.isError !== true)).toBe(
+        true,
+      );
+      expect(executed).toEqual(["post_work_update", "post_work_update"]);
+    },
+  );
+
+  test.each(["2025-03-26", "2025-06-18"])(
+    `%s: a batch of ${ROUTE_VALUES} values runs both calls`,
+    async (version) => {
+      const batch = batchOf(ROUTE_VALUES);
+      expect(values(batch)).toBe(ROUTE_VALUES);
+      const { handlerOptions } = options(theLegacyTransport);
+      const response = await handleMcp(
+        postBatch(version, batch),
+        handlerOptions,
+      );
+      expect(response.status).toBe(200);
+      expect(executed).toEqual(["post_work_update", "post_work_update"]);
+    },
+  );
+
+  test.each(["2025-03-26", "2025-06-18"])(
+    "%s: one value more is refused before the bearer, though each of its calls alone runs",
+    async (version) => {
+      const batch = batchOf(ROUTE_VALUES + 1);
+      expect(values(batch)).toBe(ROUTE_VALUES + 1);
+      for (const call of batch) {
+        expect(values(call)).toBeLessThan(ROUTE_VALUES);
+        const alone = await handleMcp(
+          postBatch(version, call),
+          options(theLegacyTransport).handlerOptions,
+        );
+        expect(alone.status).toBe(200);
+      }
+      expect(executed).toEqual(["post_work_update", "post_work_update"]);
+      executed.length = 0;
+
+      const { handlerOptions, authenticateAgentBearer } =
+        options(theLegacyTransport);
+      const response = await handleMcp(
+        postBatch(version, batch),
+        handlerOptions,
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: "validation_failed",
+        message: "The MCP request is invalid.",
+      });
+      expect(authenticateAgentBearer).not.toHaveBeenCalled();
+      expect(executed).toEqual([]);
+      expect(
+        (await postBatch(version, batch).arrayBuffer()).byteLength,
+      ).toBeLessThanOrEqual(MCP_MAX_BODY);
     },
   );
 });

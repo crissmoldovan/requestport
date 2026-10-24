@@ -136,7 +136,10 @@ export function createAgentGrantService(dependencies: {
    * they are an active owner or admin of the organisation (the role is read
    * at the re-check, not at delegation), and its refusal is the call's. Its
    * locks are not held into the repository's own transaction, as the bus
-   * holds them into a command's. Absent, `bindConsent` refuses a person's
+   * holds them into a command's; `bindConsent` hands the same `credentialId`
+   * to `bindOAuthConsent`, whose transaction reads the membership and that
+   * credential again under lock before it writes (ruling 234 (c)). Absent,
+   * `bindConsent` refuses a person's
    * context. `revokeGrant` does not run it: called directly, it re-checks no
    * session; core's revocation handler runs the re-check in its own
    * transaction before it calls it (`../agent-administration.ts`).
@@ -247,6 +250,10 @@ export function createAgentGrantService(dependencies: {
         scopes,
         laneIds: [...new Set(input.laneIds)],
         userId: context.actor.id,
+        // Read again, with the membership, in the binding's own transaction
+        // (ruling 234 (c)): a session revoked or expired since the re-check
+        // above is refused there, before anything is written.
+        personCredentialId: context.credentialId,
         correlationId: context.correlationId,
         fingerprintSecret: dependencies.fingerprintSecret,
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1_000),

@@ -80,12 +80,18 @@ export const ROUTE_TABLE: readonly RouteEntry[] = [
 /**
  * Routes Next serves under a family that the host deliberately leaves to
  * the fallback, by their path pattern as Next derives it from the route's
- * folder (`/api/v1/example/[id]`), each with its reason. There are none.
+ * folder (`/api/v1/example/[id]`), each with its reason.
  */
 export const FALLBACK_UNDER_FAMILY: readonly {
   readonly pattern: string;
   readonly reason: string;
-}[] = [];
+}[] = [
+  {
+    pattern: "/.well-known/security.txt",
+    reason:
+      "RFC 9116's security.txt (Plan 13, J.4): the web serves it from its own route, with no handler in this package, so the host hands it to the fallback.",
+  },
+];
 
 /** The entry that serves `pathname`: the first that matches, or none. */
 export function matchRoute(

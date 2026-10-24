@@ -39,6 +39,7 @@ import {
   withTenantRead,
 } from "../tenant-context.js";
 import type { Tx } from "../transaction.js";
+import { assertCurrentPersonOn } from "./command-authorization.js";
 import {
   lockMutationReceipt,
   type MutationReceiptKey,
@@ -347,8 +348,27 @@ export function createAgentAuthRepository(database: AgentAuthDatabase) {
   ) => withTenantRead(organizationId, work, { database, readOnly });
 
   return {
+    /**
+     * Reserves a key's issuance for `actorUserId`, in a transaction of its
+     * own: the organisation, the membership and the project are locked `FOR
+     * SHARE`, the person must be an active owner or admin, or an active
+     * maintainer of the project, and a pending receipt is saved, or an
+     * earlier one answered.
+     *
+     * `personCredentialId` is the credential the person's call names (ruling
+     * 234 (c)). Given it, the bus's re-check of a person
+     * (`assertCurrentPersonOn`) runs in this transaction once the organisation,
+     * the membership and the project are found active, before the role is
+     * judged and before an earlier receipt is answered or a new one saved,
+     * and its rows stay locked `FOR SHARE` until this transaction ends. A
+     * session that is no
+     * longer live, or not the person's, is refused in the bus's words,
+     * "Current human authorization is no longer active", and nothing is
+     * saved. Absent, the person is checked by role alone, as before.
+     */
     async reserveCredentialIssuance(input: {
       actorUserId: string;
+      personCredentialId?: string;
       organizationId: string;
       projectId: string;
       idempotencyKey: string;
@@ -413,6 +433,13 @@ export function createAgentAuthRepository(database: AgentAuthDatabase) {
               "forbidden",
               "Agent credential issuance is denied",
             );
+          }
+          if (input.personCredentialId !== undefined) {
+            await assertCurrentPersonOn(tx, {
+              organizationId: input.organizationId,
+              userId: input.actorUserId,
+              credentialId: input.personCredentialId,
+            });
           }
           if (membership.role !== "owner" && membership.role !== "admin") {
             const [projectManager] = await tx
@@ -645,10 +672,25 @@ export function createAgentAuthRepository(database: AgentAuthDatabase) {
         : null;
     },
 
+    /**
+     * Binds the person's OAuth consent to an agent grant, in a transaction
+     * of its own. `personCredentialId` is the credential the person's call
+     * names (ruling 234 (c)): given it, the bus's re-check of a person
+     * (`assertCurrentPersonOn`) runs in this transaction once the
+     * organisation and the membership are found active, before the client,
+     * the project and the lanes are read, before the role is judged, and
+     * before anything is written or an earlier binding answered, and its
+     * rows stay locked `FOR SHARE` until this transaction ends. A session
+     * that is no longer live, or not the
+     * person's, is refused in the bus's words, "Current human authorization
+     * is no longer active", and nothing is written. Absent, the person is
+     * checked by membership and role alone, as before.
+     */
     async bindOAuthConsent(input: {
       organizationId: string;
       agentPrincipalId: string;
       userId: string;
+      personCredentialId?: string;
       clientId: string;
       audience: "mcp" | "api";
       /**
@@ -728,6 +770,13 @@ export function createAgentAuthRepository(database: AgentAuthDatabase) {
           .limit(1);
         if (!membership) {
           throw new DomainError("forbidden", "OAuth agent consent is denied");
+        }
+        if (input.personCredentialId !== undefined) {
+          await assertCurrentPersonOn(tx, {
+            organizationId: input.organizationId,
+            userId: input.userId,
+            credentialId: input.personCredentialId,
+          });
         }
         const [client] = await tx
           .select({ id: oauthClients.clientId })

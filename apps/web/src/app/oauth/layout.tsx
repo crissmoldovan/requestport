@@ -32,7 +32,7 @@ import { getApplicationLayoutContext } from "../../lib/server-application-contex
  *
  * `lib/application-context.ts` carries that query out of the consent *POST*,
  * where the Server Action is holding the submission. Nothing here holds
- * anything equivalent. On the 16.3.1 in this repository the query does not
+ * anything equivalent. On the 16.4.2 in this repository the query does not
  * reach a layout at all:
  *
  * - a layout is given no `searchParams`, and Next documents why — layouts do

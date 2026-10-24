@@ -38,6 +38,10 @@ const mocks = vi.hoisted(() => ({
   recheckHandles: [] as unknown[],
   /** What the bus's re-check throws; absent, it passes. */
   recheckRefusal: undefined as Error | undefined,
+  /** Each context `assertProvisioningGrant` was asked about, in order. */
+  grantsRead: [] as unknown[],
+  /** What `assertProvisioningGrant` throws; absent, it passes. */
+  grantRefusal: undefined as Error | undefined,
   webhookServices: [] as Array<{
     production?: boolean;
     privateReceivers?: boolean;
@@ -124,7 +128,8 @@ vi.mock("@requestport/db", async (importOriginal) => {
     },
     // The Slack connection test's two repositories, on whatever transaction
     // they are handed: the re-check records its context and passes unless a
-    // case sets a refusal, and the queue answers one operation.
+    // case sets a refusal, as does the provisioning grant read, and the queue
+    // answers one operation.
     createCommandAuthorizationRepository: (tx: unknown) => {
       mocks.calls.push(`authorization ${String(tx)}`);
       mocks.recheckHandles.push(tx);
@@ -132,6 +137,10 @@ vi.mock("@requestport/db", async (importOriginal) => {
         assertCurrent: async (context: unknown) => {
           mocks.rechecked.push(context);
           if (mocks.recheckRefusal) throw mocks.recheckRefusal;
+        },
+        assertProvisioningGrant: async (context: unknown) => {
+          mocks.grantsRead.push(context);
+          if (mocks.grantRefusal) throw mocks.grantRefusal;
         },
       };
     },
@@ -167,8 +176,12 @@ vi.mock("@requestport/db", async (importOriginal) => {
         listEvents: async (...args: unknown[]) => ({ events: args }),
       };
     },
-    createWebhookRepository: (database: unknown) => ({
+    createWebhookRepository: (
+      database: unknown,
+      options?: { personCredentialId?: string },
+    ) => ({
       webhooksOver: (database as { name?: string }).name,
+      ...options,
     }),
     createOutboxRepository: (database: unknown) => ({
       createWebhookReplay: async () => {
@@ -271,6 +284,8 @@ beforeEach(() => {
   mocks.rechecked.length = 0;
   mocks.recheckHandles.length = 0;
   mocks.recheckRefusal = undefined;
+  mocks.grantsRead.length = 0;
+  mocks.grantRefusal = undefined;
 });
 
 describe("creating a RequestPort", () => {
@@ -1259,6 +1274,36 @@ describe("query, the agent queries, the MCP-only capabilities and the composed m
     expect(mocks.webhookServices).toHaveLength(2);
   });
 
+  test("mcpOnly.webhooks runs a person's call over db's webhook repository built on its storage's handle with the person's credentialId, which its locked checks read again, and an agent's over one given none (ruling 234 (c))", async () => {
+    const application = recordingStorage("application");
+    const requestPort = port({
+      storage: application.storage,
+      secrets: {
+        ...recordingSecrets([]),
+        commandFingerprintKey: "request-port-test-signing-material-0001",
+        webhookKeys,
+      },
+    });
+    const person = {
+      actor: { type: "user" as const, id: "user-request-port" },
+      organizationId,
+      scopes: new Set(["webhook:manage"]),
+      credentialId: "session-request-port",
+      correlationId: "018f0000-0000-7000-8000-0000000c1314",
+    };
+
+    await requestPort.mcpOnly.webhooks?.list(person, organizationId);
+    await requestPort.mcpOnly.webhooks?.list(agent, organizationId);
+
+    expect(mocks.webhookServices.map(({ repository }) => repository)).toEqual([
+      {
+        webhooksOver: "application",
+        personCredentialId: "session-request-port",
+      },
+      { webhooksOver: "application" },
+    ]);
+  });
+
   test("mcpOnly.provisionAgent's key issuance re-checks the delegated context with the bus's re-check over its storage's handle, and mints nothing when it refuses (ruling 233 item 2)", async () => {
     const application = recordingStorage("application");
     const createAgentApiKey = vi.fn();
@@ -1296,8 +1341,51 @@ describe("query, the agent queries, the MCP-only capabilities and the composed m
         credentialId: grant,
       }),
     ]);
-    expect(mocks.recheckHandles).toHaveLength(1);
-    expect(mocks.recheckHandles[0]).toBe(application.db);
+    // Two repositories over the storage's handle: the grant read's, before
+    // the bus, and the key service's re-check.
+    expect(mocks.recheckHandles).toEqual([application.db, application.db]);
+    expect(createAgentApiKey).not.toHaveBeenCalled();
+  });
+
+  test("mcpOnly.provisionAgent reads its grant (assertProvisioningGrant) over its storage's handle before anything runs on the bus, and its refusal is the call's (ruling 233 item 4)", async () => {
+    const application = recordingStorage("application");
+    const createAgentApiKey = vi.fn();
+    const requestPort = port({
+      storage: application.storage,
+      betterAuth: { createAgentApiKey },
+    });
+    const bus = vi.spyOn(requestPort.commandBus, "execute");
+    const refusal = new DomainError(
+      "forbidden",
+      "Current human authorization is no longer active",
+    );
+    mocks.grantRefusal = refusal;
+    const grant = "018f0000-0000-7000-8000-0000000c1313";
+
+    await expect(
+      requestPort.mcpOnly.provisionAgent({
+        idempotencyKey: "request-port-provision-grant-read",
+        delegatedByUserId: "user-delegating",
+        issuingGrantId: grant,
+        organizationId,
+        provision: {
+          displayName: "Agent",
+          projectId,
+          scopes: ["request:read"],
+          slug: "agent",
+        },
+      }),
+    ).rejects.toBe(refusal);
+    expect(mocks.grantsRead).toEqual([
+      expect.objectContaining({
+        actor: { type: "user", id: "user-delegating" },
+        organizationId,
+        credentialId: grant,
+      }),
+    ]);
+    expect(mocks.recheckHandles).toEqual([application.db]);
+    expect(bus).not.toHaveBeenCalled();
+    expect(mocks.rechecked).toEqual([]);
     expect(createAgentApiKey).not.toHaveBeenCalled();
   });
 

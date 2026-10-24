@@ -57,7 +57,9 @@ import { locateSelfHostWeb, prepareWebUi, SelfHostWebError } from "./web.js";
  *    host listens, it says once why, from the worker storages' role reports,
  *    and goes on waiting (ruling 163, item 2);
  * 6. on SIGTERM or SIGINT it stops (`ServingInstance.close`) and answers 0;
- *    a second signal exits at once with 1, as `requestport-jobs` does.
+ *    a second signal exits at once with 1. (`requestport worker` takes a
+ *    repeat less than a second after the first as the same stop, ruling 246;
+ *    whether this step should is X31.)
  * A start that cannot serve answers 1, having closed what it opened.
  */
 

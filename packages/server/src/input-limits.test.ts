@@ -143,11 +143,23 @@ describe("assertJsonDepth", () => {
     );
   });
 
-  test("refuses more than 100,000 values however shallow", () => {
-    const wide = Array.from({ length: 100_000 }, () => 0);
+  test("refuses more than 17,000 values however shallow", () => {
+    // The array and its 17,000 zeros: 17,001 values.
+    const wide = Array.from({ length: 17_000 }, () => 0);
 
     expect(() => assertJsonDepth(wide)).toThrow("JSON input is too complex");
     expect(() => assertJsonDepth(wide.slice(1))).not.toThrow();
+  });
+
+  test("counts an object member's value, not its key", () => {
+    // The object and its 17,000 members' values: 17,001 values.
+    const wide = Object.fromEntries(
+      Array.from({ length: 17_000 }, (_, index) => [`k${index}`, 0]),
+    );
+    const { k0: _dropped, ...fewer } = wide;
+
+    expect(() => assertJsonDepth(wide)).toThrow("JSON input is too complex");
+    expect(() => assertJsonDepth(fewer)).not.toThrow();
   });
 });
 

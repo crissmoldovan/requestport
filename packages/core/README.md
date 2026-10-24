@@ -127,8 +127,17 @@ What the context is checked against:
     without their `authorization`, they refuse it as `configuration_error`.
 
   The webhook methods and the agent services run the re-check before the
-  method's own work, and its locks are not held into that work, as the bus
-  holds them into a command's. `revoke` and `revokeGrant` of
+  method's own work, so a refusal comes before any network call, and its
+  locks are not held into that work, as the bus holds them into a command's.
+  Their locked checks then read the context's `credentialId` again, with
+  the membership, each in its own transaction and under its locks: the
+  webhook methods' `list`, each subscription they read and each write they
+  make; `issue`'s reservation, before the key is minted; and `bindConsent`'s
+  binding. A session revoked or expired after the early re-check is refused
+  there, and nothing is written. A session revoked after `issue`'s
+  reservation, while the key is minted and its credential written (and, for
+  `rotate`, the old key's overlap set), is not read again. `revoke` and
+  `revokeGrant` of
   `@requestport/core/agent-services` do not run it: called directly, they
   re-check no session, and the off-bus handlers run it before they call
   them. Build a person's context only from a session your own code has

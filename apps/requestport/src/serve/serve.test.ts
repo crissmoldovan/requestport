@@ -41,13 +41,29 @@ vi.mock("@requestport/auth/create-auth", () => ({
   createAuth: () => ({ createAgentApiKey: async () => undefined }),
 }));
 
-vi.mock("@requestport/db", async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  createWorkerStorages: () => ({
-    close: async () => undefined,
-    roleReports: async () => null,
-  }),
-}));
+/*
+ * The worker's storages are a stand-in too, except in the cases that set
+ * `realWorkerStorages.on`, which hand `@requestport/db`'s own
+ * `createWorkerStorages` what `serveInstance` hands it.
+ */
+const realWorkerStorages = vi.hoisted(() => ({ on: false }));
+
+vi.mock("@requestport/db", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@requestport/db")>();
+
+  return {
+    ...original,
+    createWorkerStorages: (
+      ...args: Parameters<typeof original.createWorkerStorages>
+    ) =>
+      realWorkerStorages.on
+        ? original.createWorkerStorages(...args)
+        : {
+            close: async () => undefined,
+            roleReports: async () => null,
+          },
+  };
+});
 
 vi.mock("@requestport/server", () => ({
   createRequestPortHost: () => () => undefined,
@@ -160,6 +176,37 @@ describe("requestport start's composition", () => {
       expect(handed).toHaveLength(1);
       expect(handed[0]?.privateWebhookReceivers).toBe(admitted);
       expect(handed[0]?.environment).toBe("production");
+    },
+  );
+});
+
+describe("requestport start's worker guard modes (X30)", () => {
+  test.each(["pg", "pglite"] as const)(
+    "on %s, a leftover warn handed as workerGuardModes reaches createWorkerStorages, which refuses it, so core is never composed",
+    async (storage) => {
+      const { configuration, environment } = instance(storage);
+
+      realWorkerStorages.on = true;
+      try {
+        await expect(
+          serveInstance(
+            {
+              configuration,
+              serverEnv: parseServerEnv(environment),
+              env: environment,
+              logger,
+              // warn left the type with its code path (X30).
+              workerGuardModes: { role: "warn" } as never,
+            },
+            () => storageStandIn,
+          ),
+        ).rejects.toThrow(
+          /has no other, warn mode included: it was handed role: "warn"\.$/u,
+        );
+      } finally {
+        realWorkerStorages.on = false;
+      }
+      expect(handed).toEqual([]);
     },
   );
 });

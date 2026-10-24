@@ -29,7 +29,9 @@ import { createKeyRingEncryption } from "../secrets.js";
   web's webhooks page runs it for the signed-in person; the service checks
   each caller itself (`@requestport/webhooks`). For a person's context, each
   method here first runs the bus's own re-check of a person (`assertCurrent`),
-  which the service does not (ruling 233 item 2). Replaying a delivery is not
+  which the service does not (ruling 233 item 2), and runs the service over a
+  repository whose locked checks read that person's credential again in each
+  write's transaction (ruling 234 (c)). Replaying a delivery is not
   the service's: `createWebhookReplay`, below, moved from the MCP route's
   inline `replay_webhook_delivery` tool with ruling 137, writes it for an
   agent.
@@ -40,8 +42,17 @@ export type WebhookManagementService = ReturnType<
 >;
 
 export interface WebhookManagementOptions {
-  /** The repository the service runs over, built each time a method runs. */
-  repository(): ReturnType<typeof createWebhookRepository>;
+  /**
+   * The repository the service runs over, built each time a method runs. For
+   * a person's call it is handed the credential the context names
+   * (`credentialId`), and `undefined` for any other: a RequestPort builds
+   * db's `createWebhookRepository` with it as `personCredentialId`, so each
+   * of the repository's locked checks of that person reads it again in that
+   * check's own transaction, the writes' included (ruling 234 (c)).
+   */
+  repository(
+    personCredentialId: string | undefined,
+  ): ReturnType<typeof createWebhookRepository>;
   /**
    * The bus's own re-check (`assertCurrent`), built each time a person's call
    * runs, before the service is. A RequestPort builds it on its storage's
@@ -92,11 +103,26 @@ export interface WebhookManagementOptions {
  * or an active organisation-wide provisioning grant they delegated, while
  * they are an active owner or admin of the organisation (the role is read at
  * the re-check, not at delegation). The service then checks the role
- * (`canManage`), as before, and its writes check it again under lock. The
- * re-check's locks are not held into the service's own transactions, as the
- * bus holds them into a command's. Any other context reaches the service as
- * before, which refuses all but an agent's, and re-reads an agent's
- * credential.
+ * (`canManage`), as before.
+ *
+ * That re-check is taken at one point in time, and its locks are not held
+ * into the service's own transactions, as the bus holds them into a
+ * command's: the service's work includes an endpoint's DNS resolution
+ * (`create`, `verify`) and the verification POST (`verify`). It stays as the
+ * early refusal, before any network work. What closes the window after it is
+ * the repository's locked checks (ruling 234 (c)): the service runs over a
+ * repository built with the person's `credentialId`, and each of its locked
+ * checks of that person (`list`, `find`, and each write the service makes
+ * for them) reads the membership, that credential and the role again in its
+ * own transaction, under `FOR SHARE` until that transaction ends. A session
+ * revoked or expired after the early re-check is then refused at the next
+ * of those checks, at the latest the write's own, and nothing is written: in
+ * the bus's words while the person is still an active member, and by the
+ * role check, as before, once they are not.
+ *
+ * Any other context reaches the service as before, over a repository given
+ * no credential: the service refuses all but an agent's, and re-reads an
+ * agent's credential.
  */
 export function createWebhookManagement(
   options: WebhookManagementOptions,
@@ -105,9 +131,11 @@ export function createWebhookManagement(
   const encryption = createKeyRingEncryption(options.keys);
   const fingerprintSecret = options.secrets.commandFingerprintKey;
   const { production, privateReceivers } = options;
-  const service = () =>
+  const service = (context: AuthorizedCommandContext) =>
     createWebhookManagementService({
-      repository: options.repository(),
+      repository: options.repository(
+        context.actor.type === "user" ? context.credentialId : undefined,
+      ),
       encryption,
       fingerprintSecret,
       production,
@@ -122,23 +150,23 @@ export function createWebhookManagement(
   return {
     list: async (context, organizationId) => {
       await admitted(context);
-      return service().list(context, organizationId);
+      return service(context).list(context, organizationId);
     },
     create: async (context, rawInput, meta) => {
       await admitted(context);
-      return service().create(context, rawInput, meta);
+      return service(context).create(context, rawInput, meta);
     },
     verify: async (context, input, meta) => {
       await admitted(context);
-      return service().verify(context, input, meta);
+      return service(context).verify(context, input, meta);
     },
     rotate: async (context, input, meta) => {
       await admitted(context);
-      return service().rotate(context, input, meta);
+      return service(context).rotate(context, input, meta);
     },
     setStatus: async (context, input, meta) => {
       await admitted(context);
-      return service().setStatus(context, input, meta);
+      return service(context).setStatus(context, input, meta);
     },
   };
 }

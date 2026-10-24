@@ -198,6 +198,9 @@ const publicDomainMessages: Record<string, string> = {
   version_conflict: "The resource changed. Reload it and retry.",
 };
 
+/** The bounds a free-form input's refusal may name (ruling 237 item 3). */
+const freeFormBounds: readonly string[] = ["elements", "depth", "bytes"];
+
 function publicDomainDetails(error: DomainError) {
   const details: Record<string, string | number> = {};
   if (
@@ -205,6 +208,18 @@ function publicDomainDetails(error: DomainError) {
     /^[A-Za-z0-9_.-]{1,128}$/u.test(error.details.field)
   ) {
     details.field = error.details.field;
+  }
+  // The bound a free-form input exceeded, and its value, as the domain's
+  // bus names them: published together, or not at all.
+  if (
+    typeof error.details.bound === "string" &&
+    freeFormBounds.includes(error.details.bound) &&
+    typeof error.details.maximum === "number" &&
+    Number.isSafeInteger(error.details.maximum) &&
+    error.details.maximum > 0
+  ) {
+    details.bound = error.details.bound;
+    details.maximum = error.details.maximum;
   }
   if (
     typeof error.details.retryAfterSeconds === "number" &&
@@ -432,25 +447,28 @@ function suggestedNextActions(name: string) {
  * tool does not run. Both legs of `handleMcpRequest` serve the server built
  * below, so it holds on each.
  *
- * It is 100,000, the JSON values packages/server's MCP handler lets one
- * message hold (`assertJsonDepth`) before it calls `handleMcpRequest`. Each
- * element or key counted here is a value that walk visits, and it also visits
- * the message, its `params` and `arguments`, so a call that handler admits is
- * under this limit: behind it, as on production's `/mcp`, the limit refuses
- * nothing. It guards a caller of `handleMcpRequest` with no such handler in
- * front. packages/server's `mcp.tool-input-limit.test.ts` fails if either
- * number moves without the other.
+ * It is 17,000, the JSON values packages/server's MCP handler lets one
+ * message hold (`assertJsonDepth`'s bound) before it calls
+ * `handleMcpRequest`. Each element or key counted here is a value that
+ * walk visits, and it also visits the message, its `params` and `arguments`,
+ * so a call that handler admits is under this limit: behind it, as on
+ * production's `/mcp`, the limit refuses nothing. It guards a caller of
+ * `handleMcpRequest` with no such handler in front. packages/server's
+ * `mcp.tool-input-limit.test.ts` fails if either number moves without the
+ * other.
  *
- * The largest input these tools' schemas bound is `post_work_update`'s: its
- * seven keys, 100 evidence records and 64 fields in each, 6,507 in all, with
- * each field's free-form JSON value a scalar, which the SDK does not count.
- * What those values nest (an evidence field's, `provenance`'s,
- * `privateTelemetry`'s, `structuredValue`) no tool schema bounds, though the
- * domain parses `privateTelemetry` strictly after the tool; this limit, and
- * the handler's walk, do. `server.tool-input-limit.test.ts` works the 6,507
- * out from `tools/list` and holds it under this limit.
+ * 17,000 is the largest message a legitimate call sends, rounded up to the
+ * next 1,000 (ruling 237 item 3): `post_work_update`'s, whose seven keys, 100
+ * evidence records and 64 fields in each come to 6,507 elements, and whose
+ * evidence field values the domain lets hold 10,000 more, 16,507 in all; its
+ * message on the 2026-07-28 leg, with the six-value `_meta` the tests send,
+ * holds 16,520 values. The domain bounds what
+ * the free-form values nest (an evidence field's, `provenance`'s,
+ * `structuredValue`; `privateTelemetry` it parses strictly), not these tool
+ * schemas. `server.tool-input-limit.test.ts` works the 16,507 and the 16,520
+ * out from `tools/list` and the domain's bounds, and fails if they move.
  */
-const maxToolInputElements = 100_000;
+const maxToolInputElements = 17_000;
 
 export function createRequestPortMcpServer(
   dependencies: McpServerDependencies,

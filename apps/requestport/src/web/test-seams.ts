@@ -251,13 +251,15 @@ export type ModuleClassLike = {
 };
 
 /**
- * Next 16.3.8 loads `next.config.ts` by compiling it with SWC and running it
+ * Next 16.4.2 loads `next.config.ts` by compiling it with SWC and running it
  * as `<project>/next.config.compiled.js` through `Module.prototype._compile`
  * (`next/dist/build/next-config-ts/transpile-config.js`: `handleCJS`,
- * `:105`, calls `requireFromString` with that path at `:122`; and
+ * `:101`, calls `requireFromString` with that path at `:118`; and
  * `require-hook.js`: `requireFromString`, `:77-81`, calls `m._compile`).
- * Both files are 16.3.1's byte for byte, where ruling 174's round measured
- * the hook first. This wraps `_compile` so that,
+ * `require-hook.js` is 16.3.1's byte for byte, where ruling 174's round
+ * measured the hook first, and `transpile-config.js` differs from 16.3.8's,
+ * which was 16.3.1's, only in how it throws its transpile error, without
+ * Next's error code. This wraps `_compile` so that,
  * for that file in `directory` (Next's project directory, by its real path)
  * alone, the configuration it exports (`default`, or the exports themselves,
  * as Next reads them) is given `plugin` (`withInertSeams`). It changes no

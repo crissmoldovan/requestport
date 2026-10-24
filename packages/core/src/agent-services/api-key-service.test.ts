@@ -336,6 +336,28 @@ describe("a person's issuance and rotation, re-checked first by the authorizatio
     ]);
   });
 
+  test("issue and rotate hand the person's credentialId to reserveCredentialIssuance, whose transaction reads it again with the role before anything is minted (ruling 234 (c))", async () => {
+    const { reservations, service } = harness();
+
+    await service.issue(context(), issuance(), meta);
+    await service.rotate(context(), {
+      credential: credential(),
+      meta: { ...meta, expectedVersion: 1 },
+      organizationId: ORGANIZATION,
+    });
+
+    expect(reservations).toEqual([
+      expect.objectContaining({
+        actorUserId: "user_1",
+        personCredentialId: "session_1",
+      }),
+      expect.objectContaining({
+        actorUserId: "user_1",
+        personCredentialId: "session_1",
+      }),
+    ]);
+  });
+
   test("a person the re-check admits who does not manage the project's agents is refused by the role check, in its words, and nothing is minted", async () => {
     const { calls, createdKeyNames, service } = harness({ canManage: false });
 

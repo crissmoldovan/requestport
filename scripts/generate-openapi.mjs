@@ -210,12 +210,16 @@ export const errorAnswers = [
 
 /**
  * What survives into `details`, per `publicDomainDetails` in the route's
- * handlers (`packages/server/src/rest.ts`).
+ * handlers (`packages/server/src/rest.ts`). `bound` and `maximum` come
+ * together, on a refusal of a free-form input past one of its bounds
+ * (ruling 237 item 3): which bound, and its value.
  */
 const errorDetailsSchema = {
   type: "object",
   properties: {
     field: { type: "string", pattern: "^[A-Za-z0-9_.-]{1,128}$" },
+    bound: { type: "string", enum: ["elements", "depth", "bytes"] },
+    maximum: { type: "integer", minimum: 1 },
     retryAfterSeconds: { type: "integer", minimum: 1 },
   },
   additionalProperties: false,

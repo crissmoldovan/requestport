@@ -12,9 +12,10 @@ import { afterEach, describe, expect, test, vi } from "vitest";
  * before it loads `next`, and Next's loadConfig then returns that object
  * instead of reading next.config.ts. Nothing public promises that, so this
  * runs the installed loadConfig, resolved from apps/web as the build resolves
- * it, and fails when the variable stops being read or `next` leaves 16.3.8
+ * it, and fails when the variable stops being read or `next` leaves 16.4.2
  * (the manifest's Re-check when; re-checked at 16.3.8 on 2026-10-09, after
- * #213 moved apps/web from 16.3.1, by the three cases below).
+ * #213 moved apps/web from 16.3.1, and at 16.4.2 on 2026-10-23, after ruling
+ * 247 moved it from 16.3.8, by the three cases below).
  *
  * `requestport start` also relies on the configuration being cached per
  * phase and directory in the process (`../serve/web.ts`): it loads it once
@@ -58,10 +59,10 @@ afterEach(() => {
 });
 
 describe("the private standalone variable, in the installed next", () => {
-  test("next is 16.3.8", () => {
+  test("next is 16.4.2", () => {
     expect(
       (webRequire("next/package.json") as { version: string }).version,
-    ).toBe("16.3.8");
+    ).toBe("16.4.2");
   });
 
   test("loadConfig returns the variable's config as it was given", async () => {

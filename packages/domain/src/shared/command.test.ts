@@ -347,6 +347,111 @@ describe("shared atomic command execution", () => {
     });
   });
 
+  /**
+   * A free-form input's bound, carried through (ruling 237 item 3). The bus
+   * publishes a custom issue's `params.bound` and `params.maximum` as the
+   * refusal's `bound` and `maximum` details when the bound is one of the
+   * three `freeFormJsonRefusal` names and the maximum a positive integer;
+   * anything else in `params`, and a `params` that fails either check, stays
+   * inside.
+   */
+  test.each([
+    {
+      params: { bound: "elements", maximum: 3, extra: "kept inside" },
+      details: { field: "value", bound: "elements", maximum: 3 },
+    },
+    {
+      params: { bound: "depth", maximum: 8 },
+      details: { field: "value", bound: "depth", maximum: 8 },
+    },
+    {
+      params: { bound: "bytes", maximum: 65_536 },
+      details: { field: "value", bound: "bytes", maximum: 65_536 },
+    },
+    { params: { bound: "keys", maximum: 3 }, details: { field: "value" } },
+    { params: { bound: "elements", maximum: 0 }, details: { field: "value" } },
+    {
+      params: { bound: "elements", maximum: 2.5 },
+      details: { field: "value" },
+    },
+    {
+      params: { bound: "elements", maximum: "3" },
+      details: { field: "value" },
+    },
+    { params: { maximum: 3 }, details: { field: "value" } },
+    { params: undefined, details: { field: "value" } },
+  ])(
+    "publishes the bound a refusal's params name, checked: $params",
+    async ({ params, details }) => {
+      const environment = harness();
+      const registry = new CommandRegistry<CommandActorContext>();
+      const bounded = z.object({
+        value: z.string().superRefine((_value, context) => {
+          context.addIssue({
+            code: "custom",
+            message: "internal wording",
+            ...(params === undefined ? {} : { params }),
+          });
+        }),
+      });
+      registry.register({
+        ...echoCommand<CommandActorContext>("bounded"),
+        parse: (input) => bounded.parse(input),
+      });
+      const bus = new AtomicCommandBus<CommandActorContext>({
+        registry,
+        transactions: environment.transactions,
+        fingerprintSecret,
+      });
+
+      const refused = await bus
+        .execute({
+          name: "bounded",
+          input: { value: "x" },
+          context: tenantContext(),
+          meta: {
+            idempotencyKey: "shared-command-key-bound",
+            expectedVersion: 0,
+          },
+        })
+        .then(
+          () => undefined,
+          (error: unknown) => error as { code?: string; details?: unknown },
+        );
+      expect({ code: refused?.code, details: refused?.details }).toEqual({
+        code: "validation_failed",
+        details,
+      });
+    },
+  );
+
+  test("a refusal by a schema's built-in check names the field alone", async () => {
+    const environment = harness();
+    const registry = new CommandRegistry<CommandActorContext>();
+    registry.register(echoCommand<CommandActorContext>("echo"));
+    const bus = new AtomicCommandBus<CommandActorContext>({
+      registry,
+      transactions: environment.transactions,
+      fingerprintSecret,
+    });
+
+    const refused = await bus
+      .execute({
+        name: "echo",
+        input: { value: "" },
+        context: tenantContext(),
+        meta: {
+          idempotencyKey: "shared-command-key-no-bound",
+          expectedVersion: 0,
+        },
+      })
+      .then(
+        () => undefined,
+        (error: unknown) => error as { details?: unknown },
+      );
+    expect(refused?.details).toEqual({ field: "value" });
+  });
+
   test("keeps receipt time-to-live and metrics identical on both buses", async () => {
     const environment = harness();
     const metrics = metricSink();

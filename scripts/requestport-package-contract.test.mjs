@@ -954,7 +954,7 @@ function installedForWeb(name) {
 /**
  * Each package `WEB.beyondClosure` names, by name, as this tree installs it
  * where Next's webpack configuration finds it: resolved from `next`'s own
- * directory, as `next` 16.3.8's `dist/build/webpack-config.js` resolves
+ * directory, as `next` 16.4.2's `dist/build/webpack-config.js` resolves
  * `process` there, which reaches the copy pnpm's store hoists. Each with its
  * `name@version` key and its directory, so that an entry of
  * `@requestport/web`'s notices for it, or for a package vendored in it, is

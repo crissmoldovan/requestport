@@ -5,7 +5,7 @@ import {
   identitySchema,
   type Tx,
 } from "@requestport/db";
-import { usePrivateJwksTable } from "@requestport/db/testing";
+import { queueQueriesOn, usePrivateJwksTable } from "@requestport/db/testing";
 import { storageOptionsFromEnv } from "@requestport/db/wiring";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -57,10 +57,18 @@ async function openFileTransaction() {
       // theirs. This transaction reads and writes an empty `jwks` of its own,
       // without locking the shared table's rows (`usePrivateJwksTable`).
       await usePrivateJwksTable(transaction);
-      await new Promise<void>((resolve) => {
-        finishTransaction = resolve;
-        ready();
-      });
+      // Better Auth, composed over this transaction, issues some of its
+      // queries at once, which all land on the transaction's one client:
+      // queued, it is handed them in turn (queueQueriesOn; X25's remainder).
+      const restore = queueQueriesOn(transaction);
+      try {
+        await new Promise<void>((resolve) => {
+          finishTransaction = resolve;
+          ready();
+        });
+      } finally {
+        restore();
+      }
       throw new TestRollback();
     })
     .catch((error: unknown) => {

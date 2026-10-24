@@ -22,7 +22,9 @@ import {
  * transaction it opens, before `ProjectService` reads the organisation
  * (ruling 230 item 2). `provision_agent` also refuses without the grant to
  * record on the key, with a grant id that is not a UUID, and without the
- * caller's Better Auth minter, before either write, and otherwise runs
+ * caller's Better Auth minter, before either write, and otherwise reads its
+ * grant (`provisioningGrant`'s `assertProvisioningGrant`), whose refusal is
+ * the call's before either write (ruling 233 item 4), then runs
  * `create_agent_principal` on the bus and issues the key through the agent
  * key service with that minter, which first re-checks the delegated context
  * with the re-check the key repositories carry (ruling 233 item 2). The
@@ -42,18 +44,30 @@ const secret = "project-provisioning-test-signing-material-0001";
 /**
  * `recheck`, when given, is what the bus's re-check throws in
  * `create_project`'s transaction; `keyRecheck`, what the re-check the key
- * repositories carry throws when the key service asks it. Absent, each
- * passes.
+ * repositories carry throws when the key service asks it; `grantRead`, what
+ * `provisionAgent`'s read of its grant (`assertProvisioningGrant`) throws.
+ * Absent, each passes.
  */
 function recordingOptions(
   overrides: Partial<ProjectProvisioningOptions> = {},
   recheck?: Error,
   keyRecheck?: Error,
+  grantRead?: Error,
 ) {
   const calls: string[] = [];
   const assertCurrent = vi.fn(async (context: AuthorizedCommandContext) => {
     calls.push(`assertCurrent ${context.actor.id} ${context.credentialId}`);
     if (recheck) throw recheck;
+  });
+  const assertProvisioningGrant = vi.fn(
+    async (context: AuthorizedCommandContext) => {
+      calls.push(`grant ${context.actor.id} ${context.credentialId}`);
+      if (grantRead) throw grantRead;
+    },
+  );
+  const provisioningGrant = vi.fn(() => {
+    calls.push("provisioningGrant");
+    return { assertProvisioningGrant };
   });
   const keyAssertCurrent = vi.fn(async (context: AuthorizedCommandContext) => {
     calls.push(`key assertCurrent ${context.actor.id} ${context.credentialId}`);
@@ -146,6 +160,7 @@ function recordingOptions(
   });
   const options: ProjectProvisioningOptions = {
     transaction,
+    provisioningGrant,
     agentKeyRepositories,
     commandBus,
     secrets: { commandFingerprintKey: secret },
@@ -156,6 +171,7 @@ function recordingOptions(
     options,
     calls,
     assertCurrent,
+    assertProvisioningGrant,
     keyAssertCurrent,
     commandBus,
     createAgentApiKey,
@@ -417,10 +433,11 @@ describe("provisionAgent", () => {
     },
   );
 
-  test("creates the principal on the bus as the delegating person, then issues its key through the caller's minter, the key service re-checking the grant with the re-check the key repositories carry, recording the grant", async () => {
+  test("reads its grant first, then creates the principal on the bus as the delegating person, then issues its key through the caller's minter, the key service re-checking the grant with the re-check the key repositories carry and its reservation reading it again, recording the grant", async () => {
     const {
       options,
       calls,
+      assertProvisioningGrant,
       keyAssertCurrent,
       commandBus,
       createAgentApiKey,
@@ -444,6 +461,8 @@ describe("provisionAgent", () => {
     });
 
     expect(calls).toEqual([
+      "provisioningGrant",
+      `grant ${userId} ${grantId}`,
       "commandBus",
       "agentKeyRepositories",
       `key assertCurrent ${userId} ${grantId}`,
@@ -452,6 +471,7 @@ describe("provisionAgent", () => {
       "createAgentApiKey",
       "createCredential",
     ]);
+    expect(assertProvisioningGrant.mock.calls).toEqual([[delegatedContext]]);
     expect(commandBus.mock.calls).toEqual([
       [
         {
@@ -477,6 +497,7 @@ describe("provisionAgent", () => {
     expect(authRepository.reserveCredentialIssuance).toHaveBeenCalledWith(
       expect.objectContaining({
         actorUserId: userId,
+        personCredentialId: grantId,
         expectedVersion: 0,
         idempotencyKey,
         fingerprintSecret: secret,
@@ -516,6 +537,8 @@ describe("provisionAgent", () => {
       }),
     ).rejects.toBe(refusal);
     expect(calls).toEqual([
+      "provisioningGrant",
+      `grant ${userId} ${grantId}`,
       "commandBus",
       "agentKeyRepositories",
       `key assertCurrent ${userId} ${grantId}`,
@@ -523,6 +546,37 @@ describe("provisionAgent", () => {
     expect(createAgentApiKey).not.toHaveBeenCalled();
     expect(authRepository.reserveCredentialIssuance).not.toHaveBeenCalled();
     expect(authRepository.createCredential).not.toHaveBeenCalled();
+  });
+
+  /*
+   * J.10's F9, its remainder (ruling 233 item 4): the bus's re-check admits
+   * a live session of the delegating person in the grant's place, so the
+   * grant itself is read before either write, and its refusal is the call's.
+   * db's `assertProvisioningGrant` refuses anything but an active
+   * organisation-wide provisioning grant of this person while they are an
+   * active owner or admin; here it is a stand-in that refuses in its words.
+   */
+  test("refuses before either write when the read of its grant refuses: the bus is never called, no key repository is built, and nothing is minted", async () => {
+    const refusal = new DomainError(
+      "forbidden",
+      "Current human authorization is no longer active",
+    );
+    const { options, calls, commandBus, createAgentApiKey, authRepository } =
+      recordingOptions({}, undefined, undefined, refusal);
+
+    await expect(
+      createProjectProvisioning(options).provisionAgent({
+        idempotencyKey,
+        delegatedByUserId: userId,
+        issuingGrantId: grantId,
+        organizationId,
+        provision,
+      }),
+    ).rejects.toBe(refusal);
+    expect(calls).toEqual(["provisioningGrant", `grant ${userId} ${grantId}`]);
+    expect(commandBus).not.toHaveBeenCalled();
+    expect(createAgentApiKey).not.toHaveBeenCalled();
+    expect(authRepository.reserveCredentialIssuance).not.toHaveBeenCalled();
   });
 
   test("leaves the software name out of the principal's input when none is given", async () => {
@@ -734,7 +788,11 @@ describe("a delegated command, for a person who is not a member or lacks the rol
       );
 
       expect(error).toBe(refusalOnTheBus);
-      expect(calls).toEqual([]);
+      // Only the read of the grant, which the stand-in admits, ran before.
+      expect(calls).toEqual([
+        "provisioningGrant",
+        `grant ${memberId} ${grantId}`,
+      ]);
       expect(createAgentApiKey).not.toHaveBeenCalled();
       expect(authRepository.createCredential).not.toHaveBeenCalled();
     },

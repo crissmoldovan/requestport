@@ -103,10 +103,10 @@
     },
     {
       "holder": "next",
-      "version": "16.3.8",
+      "version": "16.4.2",
       "path": "dist/compiled/@edge-runtime/cookies/index.js",
       "sha256": "078a208032232fcedaa17a3471421688e4be15f5cb71cb1f189d0514b393ed94",
-      "reviewed": "J.8, ruling 210's round, 2026-10-14, at next 16.3.8. Ruling 209's round's scan of the self-host build's contained files (track-j.md, 'Item 3', at 333625be's seed) found this file, the @edge-runtime/cookies 6.0.0 next compiles into its dist/compiled (whose package.json the nested scan enters as vendored in next), binding seven of esbuild's runtime helpers in esbuild's CommonJS form ('\"use strict\";' then 'var __defProp = Object.defineProperty;'): __copyProps, __defProp, __export, __getOwnPropDesc, __getOwnPropNames, __hasOwnProp and __toCommonJS. It carries no source map and no licence comment. The entry is keyed by next, the installed package that holds the copy, with the copy's path from next's directory. The holder's build records no version of the esbuild that wrote it: the entry gives esbuild 0.28.2, the esbuild packages/core installs, and its LICENSE.md, which is byte for byte the LICENSE.md of each esbuild this tree installs (0.18.20, 0.23.1, 0.25.12 and 0.28.2) (ruling 210 item 2).",
+      "reviewed": "J.8, ruling 210's round, 2026-10-14, at next 16.3.8; re-reviewed at next 16.4.2 on 2026-10-23 (ruling 247), where the file is byte for byte 16.3.8's, at the same SHA-256, and its package.json still names @edge-runtime/cookies 6.0.0. Ruling 209's round's scan of the self-host build's contained files (track-j.md, 'Item 3', at 333625be's seed) found this file, the @edge-runtime/cookies 6.0.0 next compiles into its dist/compiled (whose package.json the nested scan enters as vendored in next), binding seven of esbuild's runtime helpers in esbuild's CommonJS form ('\"use strict\";' then 'var __defProp = Object.defineProperty;'): __copyProps, __defProp, __export, __getOwnPropDesc, __getOwnPropNames, __hasOwnProp and __toCommonJS. It carries no source map and no licence comment. The entry is keyed by next, the installed package that holds the copy, with the copy's path from next's directory. The holder's build records no version of the esbuild that wrote it: the entry gives esbuild 0.28.2, the esbuild packages/core installs, and its LICENSE.md, which is byte for byte the LICENSE.md of each esbuild this tree installs (0.18.20, 0.23.1, 0.25.12 and 0.28.2) (ruling 210 item 2).",
       "bundles": [
         {
           "name": "esbuild",

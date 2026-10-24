@@ -63,24 +63,22 @@
  *
  * **The modes are code, chosen for each check when it runs**, from the
  * surface the guard judges then; nothing in the environment is read for
- * them. A check in warn mode — which no check runs in since I.2 step 7,
- * because every surface's modes enforce every check and a guard's `modes`
- * option can only raise one (below); each check landed in it first
- * (manifest-i2.md §2.2, "Modes") — writes one structured line to the console per storage and check whenever that
- * check's status becomes `warned` or `failed`, records what it found in the
- * guard's report (`report()`, which the worker's `roleReports()` returns
- * for each of its storages), and lets the storage serve. A check in enforce
- * mode that objects throws instead, on every use, and writes no line,
- * though its finding is recorded; a role check that could not run writes
- * its `failed` line and then, in enforce mode, throws the connection's
- * error (in warn mode it would answer `failed`, let the use go ahead, and
- * write again once it ran and objected). In either mode a worker storage's
- * role check writes one `info` line when it passes (`announcePassed`),
- * naming the mode it ran in. Unless the guard is handed `write`, a `passed`
- * line goes to `console.info` and a `warned` or `failed` one to
- * `console.warn` (ruling 215 item 7: Trigger.dev records each
- * `console.warn` as a warning, and b4 found every worker run marked so by
- * its `passed` lines).
+ * them. Enforce is the only mode, and every check of every guard runs in it
+ * (since I.2 step 7, ruling 224 item 2). Warn mode, in which each check
+ * landed first (manifest-i2.md §2.2, "Modes"), was removed once no check
+ * could run in it (Plan 13, X30; ruling 225 item 4), and a guard handed it,
+ * or any mode but enforce, is refused as it is built
+ * (`ROLE_GUARD_MODE_MESSAGE`). A check that objects throws, on every use,
+ * and writes no line, though its finding is recorded in the guard's report
+ * (`report()`, which the worker's `roleReports()` returns for each of its
+ * storages). A role check that could not run writes one structured `failed`
+ * line whenever its status becomes `failed`, and throws the connection's
+ * error; the next use asks again. A worker storage's role check also writes
+ * one `info` line when it passes (`announcePassed`), naming the mode it ran
+ * in. Unless the guard is handed `write`, a `passed` line goes to
+ * `console.info` and a `failed` one to `console.warn` (ruling 215 item 7:
+ * Trigger.dev records each `console.warn` as a warning, and b4 found every
+ * worker run marked so by its `passed` lines).
  *
  * - **The worker's** (`WORKER_ROLE_GUARD_MODES`; Plan 13, I.2b's b5,
  *   ruling 214 item 2, and b6, ruling 217 item 1): every check enforces —
@@ -105,8 +103,9 @@
  *   sets of modes are the same, every check enforcing; they stay two
  *   because a worker storage's guard takes the worker's whatever surface it
  *   judges.
- * - **A guard's `modes` option raises a check to enforce and relaxes
- *   none:** the stricter of it and the surface's mode is the one used.
+ * - **A guard's `modes` option can only name enforce,** which every check
+ *   already runs in, so it changes nothing; anything else it hands is
+ *   refused as the guard is built.
  *
  * Nothing here writes: the role check is one `select` over `pg_catalog`,
  * which needs no privilege beyond what every role has.
@@ -215,8 +214,20 @@ export function resetDatabaseSurfaceDeclaration(
 }
 
 export type RoleGuardCheck = "declaration" | "role" | "environment";
-export type RoleGuardMode = "warn" | "enforce";
+/** Enforce is the only mode since warn mode was removed (X30; the header). */
+export type RoleGuardMode = "enforce";
 export type RoleGuardModes = Readonly<Record<RoleGuardCheck, RoleGuardMode>>;
+
+/**
+ * The start of the error thrown when a `modes` option hands a check
+ * anything but `enforce`, a leftover `warn` among them, or names a check a
+ * guard does not have (X30): as a guard is built, or as
+ * `createWorkerStorages` is called (`refuseModesOtherThanEnforce`). The
+ * message goes on to name what it was handed.
+ */
+export const ROLE_GUARD_MODE_MESSAGE =
+  "RequestPort's role guard runs every check in enforce mode and has no " +
+  "other, warn mode included";
 
 const ROLE_GUARD_CHECKS: readonly RoleGuardCheck[] = Object.freeze([
   "declaration",
@@ -465,12 +476,7 @@ export function environmentObjections(
   return judgesEnvironment(surface) ? ownerCapableVariableNames(env) : [];
 }
 
-export type RoleGuardStatus =
-  | "passed"
-  | "warned"
-  | "refused"
-  | "skipped"
-  | "failed";
+export type RoleGuardStatus = "passed" | "refused" | "skipped" | "failed";
 
 export interface RoleGuardFinding {
   check: RoleGuardCheck;
@@ -501,16 +507,17 @@ export interface DatabaseRoleGuard {
   beforeConnect(): void;
   /**
    * The role check, through `query`; before the storage's first use runs.
-   * Answers the status it recorded: `failed` means the check could not run,
-   * and the caller asks again on the next use.
+   * Answers `passed`, or `skipped` for a surface it does not judge. A role
+   * it objects to is refused (`DatabaseRoleGuardError`); a check that could
+   * not run records `failed` and throws the query's error, and the caller
+   * asks again on the next use.
    */
-  checkRole(query: RoleCheckQuery): Promise<RoleGuardStatus>;
+  checkRole(query: RoleCheckQuery): Promise<"passed" | "skipped">;
   report(): RoleGuardReport;
   /**
    * The modes its checks would run in now, for the surface it reads when
    * asked: `WORKER_ROLE_GUARD_MODES` for `worker` or a worker storage's
-   * guard, otherwise `ROLE_GUARD_MODES`, each check raised to enforce where
-   * its `modes` option asks.
+   * guard, otherwise `ROLE_GUARD_MODES`.
    */
   readonly modes: RoleGuardModes;
 }
@@ -529,15 +536,17 @@ export class DatabaseRoleGuardError extends Error {
 export interface RoleGuardOptions {
   env?: NodeJS.ProcessEnv;
   /**
-   * Checks to raise to `enforce`, read once, as the guard is built. A `warn`
-   * here relaxes nothing: each check runs in the stricter of this and its
-   * surface's mode (above).
+   * Checks named to run in enforce mode, read once, as the guard is built.
+   * Every check already does, so naming one changes nothing. A check named
+   * with any other value, a leftover `warn` among them, or a name that is no
+   * check, is refused as the guard is built (`ROLE_GUARD_MODE_MESSAGE`), so
+   * a caller that once relaxed a check is told it no longer can (X30).
    */
   modes?: Partial<Record<RoleGuardCheck, RoleGuardMode>>;
   /**
    * Where every line goes. By default a `passed` line goes to
-   * `console.info`, and every `warned` or `failed` line to `console.warn`
-   * (ruling 215 item 7: Trigger.dev records a `console.warn` as a warning).
+   * `console.info`, and every `failed` line to `console.warn` (ruling 215
+   * item 7: Trigger.dev records a `console.warn` as a warning).
    */
   write?: (line: string) => void;
   /** The declared surface; this process's declaration by default. */
@@ -566,20 +575,45 @@ const EVENTS: Record<RoleGuardCheck, string> = {
 };
 
 /**
- * A guard for one storage. Each check records one finding and, in warn
- * mode, writes one line whenever its status becomes `warned` or `failed`
- * — not on every connection. In enforce mode a check that objects throws every time it
- * runs, so the storage fails closed. Each check's mode is chosen when it
- * runs, from the surface the guard reads then (`modesFor`, the header).
+ * Refuses a `modes` option that hands a check anything but `enforce`, a
+ * leftover `warn` among them, or names something that is no check (X30).
+ * An entry left `undefined` names nothing, as an absent one does. Every
+ * guard runs it as it is built, and `createWorkerStorages`
+ * (`tenant-context.ts`) runs it on its `guard.modes` before it reads its
+ * environment or the storage it is handed, so a leftover warn is refused
+ * on its unbound path too, which builds no guard.
+ */
+export function refuseModesOtherThanEnforce(
+  modes: RoleGuardOptions["modes"] | undefined,
+): void {
+  for (const [check, mode] of Object.entries(modes ?? {})) {
+    if (mode === undefined) continue;
+    if (
+      mode !== "enforce" ||
+      !ROLE_GUARD_CHECKS.includes(check as RoleGuardCheck)
+    ) {
+      throw new TypeError(
+        `${ROLE_GUARD_MODE_MESSAGE}: it was handed ${check}: ` +
+          `${JSON.stringify(mode)}.`,
+      );
+    }
+  }
+}
+
+/**
+ * A guard for one storage. Each check records one finding, and a check that
+ * objects throws every time it runs, so the storage fails closed; a role
+ * check that could not run writes one line whenever its status becomes
+ * `failed`, not on every connection. Each check's mode, which is enforce, is
+ * read when it runs, from the surface the guard reads then (`modesFor`, the
+ * header). A `modes` option naming anything but enforce is refused here.
  */
 export function createDatabaseRoleGuard(
   options: RoleGuardOptions = {},
 ): DatabaseRoleGuard {
+  refuseModesOtherThanEnforce(options.modes);
   const env = options.env ?? process.env;
   const expectedGroup = options.expectedGroup;
-  const raised: Partial<Record<RoleGuardCheck, RoleGuardMode>> = {
-    ...options.modes,
-  };
   const write = (line: string, status: RoleGuardStatus) => {
     if (options.write !== undefined) options.write(line);
     else if (status === "passed") console.info(line);
@@ -590,23 +624,12 @@ export function createDatabaseRoleGuard(
 
   /**
    * The modes for `surface`: the worker's when it is `worker` or this guard
-   * watches a worker storage, otherwise `ROLE_GUARD_MODES`; a check the
-   * options raise is `enforce`, and nothing lowers one.
+   * watches a worker storage, otherwise `ROLE_GUARD_MODES`.
    */
   function modesFor(surface: DatabaseSurface | undefined): RoleGuardModes {
-    const base =
-      surface === "worker" || expectedGroup !== undefined
-        ? WORKER_ROLE_GUARD_MODES
-        : ROLE_GUARD_MODES;
-
-    return Object.freeze(
-      Object.fromEntries(
-        ROLE_GUARD_CHECKS.map((check) => [
-          check,
-          raised[check] === "enforce" ? "enforce" : base[check],
-        ]),
-      ) as Record<RoleGuardCheck, RoleGuardMode>,
-    );
+    return surface === "worker" || expectedGroup !== undefined
+      ? WORKER_ROLE_GUARD_MODES
+      : ROLE_GUARD_MODES;
   }
 
   function record(finding: RoleGuardFinding, message: string) {
@@ -643,15 +666,9 @@ export function createDatabaseRoleGuard(
     );
   }
 
-  function judged(
-    check: RoleGuardCheck,
-    surface: DatabaseSurface | undefined,
-    objections: string[],
-  ) {
-    if (objections.length === 0) return "passed" as const;
-    return modesFor(surface)[check] === "enforce"
-      ? ("refused" as const)
-      : ("warned" as const);
+  /** Every check enforces: an objection is a refusal. */
+  function judged(objections: string[]) {
+    return objections.length === 0 ? ("passed" as const) : ("refused" as const);
   }
 
   return {
@@ -665,11 +682,7 @@ export function createDatabaseRoleGuard(
       record(
         {
           check: "declaration",
-          status: judged(
-            "declaration",
-            surface,
-            surface === undefined ? ["undeclared"] : [],
-          ),
+          status: judged(surface === undefined ? ["undeclared"] : []),
           surface,
           objections: surface === undefined ? ["undeclared"] : [],
         },
@@ -681,9 +694,7 @@ export function createDatabaseRoleGuard(
       record(
         {
           check: "environment",
-          status: judgesEnvironment(surface)
-            ? judged("environment", surface, names)
-            : "skipped",
+          status: judgesEnvironment(surface) ? judged(names) : "skipped",
           surface,
           objections: names,
         },
@@ -720,17 +731,15 @@ export function createDatabaseRoleGuard(
         }
       } catch (error) {
         // The check could not run — most likely the connection failed, and
-        // the use that triggered it will fail on its own. Warn mode lets
-        // the use go ahead; enforce mode, which every role check that runs
-        // is in since I.2 step 5, refuses it. Either way this answers
-        // `failed` or throws something other than a refusal, and the caller
-        // (`installRoleCheck`) asks again on the next use.
+        // the use that triggered it would fail on its own. It records and
+        // writes `failed`, and throws the query's error, which is not a
+        // refusal, so the caller (`installRoleCheck`) asks again on the next
+        // use.
         record(
           { check: "role", status: "failed", surface, objections: [] },
           "",
         );
-        if (modesFor(surface).role === "enforce") throw error;
-        return "failed";
+        throw error;
       }
 
       const { current, session } = resolved;
@@ -742,7 +751,7 @@ export function createDatabaseRoleGuard(
           ? []
           : groupObjections(expectedGroup, memberships)),
       ];
-      const status = judged("role", surface, objections);
+      const status = judged(objections);
       const loggedInAs =
         session.role === current.role ? "" : `, logged in as ${session.role}`;
 
@@ -760,7 +769,8 @@ export function createDatabaseRoleGuard(
         `${ROLE_NOT_PERMITTED_MESSAGE} for the ${surface} surface: ` +
           `${current.role}${loggedInAs} (${objections.join(", ")}).`,
       );
-      return status;
+      // `record` threw for a refusal, so the check passed.
+      return "passed";
     },
 
     report() {

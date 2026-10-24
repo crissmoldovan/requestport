@@ -147,6 +147,9 @@ const publicDomainMessages: Record<string, string> = {
   version_conflict: "The resource changed. Reload it and retry.",
 };
 
+/** The bounds a free-form input's refusal may name (ruling 237 item 3). */
+const freeFormBounds: readonly string[] = ["elements", "depth", "bytes"];
+
 function publicDomainDetails(error: DomainError) {
   const details: Record<string, string | number> = {};
   if (
@@ -154,6 +157,18 @@ function publicDomainDetails(error: DomainError) {
     /^[A-Za-z0-9_.-]{1,128}$/u.test(error.details.field)
   ) {
     details.field = error.details.field;
+  }
+  // The bound a free-form input exceeded, and its value, as the domain's
+  // bus names them: published together, or not at all.
+  if (
+    typeof error.details.bound === "string" &&
+    freeFormBounds.includes(error.details.bound) &&
+    typeof error.details.maximum === "number" &&
+    Number.isSafeInteger(error.details.maximum) &&
+    error.details.maximum > 0
+  ) {
+    details.bound = error.details.bound;
+    details.maximum = error.details.maximum;
   }
   if (
     typeof error.details.retryAfterSeconds === "number" &&

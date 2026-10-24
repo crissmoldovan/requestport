@@ -295,6 +295,27 @@ describe("a person's consent binding, re-checked first by the authorization the 
     ]);
   });
 
+  test("bindConsent hands the person's credentialId to bindOAuthConsent, whose transaction reads it again with the membership before anything is written (ruling 234 (c))", async () => {
+    const { bindings, service } = harness();
+
+    await service.bindConsent(context(), consent());
+    await service.bindConsent(
+      context(),
+      consent({ scopes: ["project:provision"], projectId: null }),
+    );
+
+    expect(bindings).toEqual([
+      expect.objectContaining({
+        userId: "user_1",
+        personCredentialId: "session_1",
+      }),
+      expect.objectContaining({
+        userId: "user_1",
+        personCredentialId: "session_1",
+      }),
+    ]);
+  });
+
   test("a person the re-check admits who is not an owner or admin is refused a provisioning consent by the role check, in its words", async () => {
     const { calls, service } = harness({ canManage: false });
 

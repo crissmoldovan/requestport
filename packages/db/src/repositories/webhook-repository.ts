@@ -40,6 +40,7 @@ import {
   lockActiveApiKeyAuthorization,
   lockActiveOAuthAuthorization,
 } from "./agent-authorization.js";
+import { assertCurrentPersonOn } from "./command-authorization.js";
 import {
   lockMutationReceipt,
   saveMutationReceipt,
@@ -84,11 +85,28 @@ function receiptVersion(value: unknown) {
   return result.version;
 }
 
+/**
+ * Whether `userId` may manage the organisation's webhooks: an active owner or
+ * admin of the active organisation. `lock` reads both rows `FOR SHARE`, as
+ * the locked checks (`list`, `find`, `listForProject` and the writes) do,
+ * each in its own transaction.
+ *
+ * `personCredentialId` is the credential a person's call names (ruling 234
+ * (c)). Given it, a locked check also runs the bus's re-check of a person on
+ * the same transaction (`assertCurrentPersonOn`), once the membership is
+ * found active and before the role is judged: the session must be live and
+ * that person's, or the credential an active provisioning grant they
+ * delegated, while they are an active owner or admin, and the rows it reads
+ * stay locked `FOR SHARE` until that transaction ends. Otherwise the call is
+ * refused in the bus's words, "Current human authorization is no longer
+ * active". An unlocked check never reads it.
+ */
 async function canManage(
   database: WebhookDatabase,
   organizationId: string,
   userId: string,
   lock = false,
+  personCredentialId?: string,
 ) {
   let organizationQuery = database
     .select({ id: organizations.id })
@@ -119,19 +137,42 @@ async function canManage(
     .limit(1);
   if (lock) memberQuery = memberQuery.for("share") as typeof memberQuery;
   const [member] = await memberQuery;
-  return member?.role === "owner" || member?.role === "admin";
+  if (!member) return false;
+  if (lock && personCredentialId !== undefined) {
+    await assertCurrentPersonOn(database, {
+      organizationId,
+      userId,
+      credentialId: personCredentialId,
+    });
+  }
+  return member.role === "owner" || member.role === "admin";
 }
 
+/**
+ * The locked check the writes, `find` and `listForProject` make, each in its
+ * own transaction. For a person (`actorType` `user`) it is `canManage`,
+ * locked, with the credential the repository was given for that person's
+ * call.
+ */
 async function authorizeMutation(
   database: WebhookDatabase,
   organizationId: string,
   projectId: string | null,
   laneIds: readonly string[],
   context: WebhookAuditContext,
+  personCredentialId: string | undefined,
 ) {
   if (context.actorType === "system") return { laneIds: [] as string[] };
   if (context.actorType === "user") {
-    if (await canManage(database, organizationId, context.actorId, true)) {
+    if (
+      await canManage(
+        database,
+        organizationId,
+        context.actorId,
+        true,
+        personCredentialId,
+      )
+    ) {
       return { laneIds: [] as string[] };
     }
   } else if (context.actorType === "agent") {
@@ -326,8 +367,21 @@ async function appendConfigurationEvent(
   await database.insert(outbox).values({ eventId, state: "pending" });
 }
 
+/**
+ * The webhook repository over `database`.
+ *
+ * `options.personCredentialId` is for a repository built for one person's
+ * call: the credential that call's context names (`credentialId`). Each
+ * locked check of a person then reads it in its own transaction, as
+ * `canManage` describes: `list`, `find`, `listForProject`, and the writes
+ * (`create`, `markVerified`, `setStatus`, `setNextSecret`, `promoteSecret`).
+ * The webhook service reaches `list`, `find` and the first four writes for a
+ * person. Absent, a person is checked by role alone, as before; an agent's
+ * and the system's checks never read it.
+ */
 export function createWebhookRepository(
   database: Database,
+  options: { personCredentialId?: string } = {},
 ): WebhookManagementRepository {
   /**
    * The two checks the web makes on the pool are wrapped as manifest-i2.md
@@ -339,6 +393,22 @@ export function createWebhookRepository(
     work: (database: Database) => Promise<T>,
     readOnly = false,
   ) => withTenantRead(organizationId, work, { database, readOnly });
+  const { personCredentialId } = options;
+  const authorize = (
+    tx: WebhookDatabase,
+    organizationId: string,
+    projectId: string | null,
+    laneIds: readonly string[],
+    context: WebhookAuditContext,
+  ) =>
+    authorizeMutation(
+      tx,
+      organizationId,
+      projectId,
+      laneIds,
+      context,
+      personCredentialId,
+    );
 
   return {
     async canManage(organizationId, userId) {
@@ -380,7 +450,7 @@ export function createWebhookRepository(
           if (!existing) {
             throw new Error("Webhook command receipt aggregate is missing");
           }
-          await authorizeMutation(
+          await authorize(
             tx,
             input.organizationId,
             existing.projectId,
@@ -392,7 +462,7 @@ export function createWebhookRepository(
             "Webhook creation already completed; plaintext secrets are revealed only once",
           );
         }
-        await authorizeMutation(
+        await authorize(
           tx,
           input.organizationId,
           input.projectId,
@@ -466,7 +536,7 @@ export function createWebhookRepository(
           .for("share")
           .limit(1);
         if (!row) return null;
-        await authorizeMutation(
+        await authorize(
           tx,
           organizationId,
           row.projectId,
@@ -478,7 +548,16 @@ export function createWebhookRepository(
     },
     async list(organizationId, userId) {
       return inTenantTransaction(database, organizationId, async (tx) => {
-        if (!(await canManage(tx, organizationId, userId, true))) return [];
+        if (
+          !(await canManage(
+            tx,
+            organizationId,
+            userId,
+            true,
+            personCredentialId,
+          ))
+        )
+          return [];
         const rows = await tx
           .select()
           .from(webhookSubscriptions)
@@ -499,7 +578,7 @@ export function createWebhookRepository(
         // Listing is authorized against the agent's grant, then the service
         // narrows the returned subscriptions to the granted lanes. Passing an
         // empty lane set here would incorrectly deny every lane-scoped agent.
-        const authorization = await authorizeMutation(
+        const authorization = await authorize(
           tx,
           organizationId,
           projectId,
@@ -560,7 +639,7 @@ export function createWebhookRepository(
               "Webhook subscription was not found",
             );
           }
-          await authorizeMutation(
+          await authorize(
             tx,
             organizationId,
             existing.projectId,
@@ -603,7 +682,7 @@ export function createWebhookRepository(
             "conflict",
             "A revoked webhook cannot be verified",
           );
-        await authorizeMutation(
+        await authorize(
           tx,
           organizationId,
           current.projectId,
@@ -676,7 +755,7 @@ export function createWebhookRepository(
               "Webhook subscription was not found",
             );
           }
-          await authorizeMutation(
+          await authorize(
             tx,
             organizationId,
             existing.projectId,
@@ -719,7 +798,7 @@ export function createWebhookRepository(
             "conflict",
             "A revoked webhook cannot change status",
           );
-        await authorizeMutation(
+        await authorize(
           tx,
           organizationId,
           current.projectId,
@@ -791,7 +870,7 @@ export function createWebhookRepository(
               "Webhook subscription was not found",
             );
           }
-          await authorizeMutation(
+          await authorize(
             tx,
             input.organizationId,
             existing.projectId,
@@ -835,7 +914,7 @@ export function createWebhookRepository(
             "conflict",
             "A revoked webhook cannot rotate secrets",
           );
-        await authorizeMutation(
+        await authorize(
           tx,
           input.organizationId,
           current.projectId,
@@ -981,7 +1060,7 @@ export function createWebhookRepository(
         if (current.status === "revoked") return;
         if (!current.nextSecretKeyId) return;
         if (current.nextSecretKeyId !== input.expectedNextSecretKeyId) return;
-        await authorizeMutation(
+        await authorize(
           tx,
           input.organizationId,
           current.projectId,

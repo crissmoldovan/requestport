@@ -25,6 +25,7 @@ import {
   declaredDatabaseSurface,
   type RoleGuardOptions,
   type RoleGuardReport,
+  refuseModesOtherThanEnforce,
 } from "./role-guard.js";
 import type { Tx } from "./transaction.js";
 
@@ -483,8 +484,9 @@ export function withIsolatedTenantBinding<T>(
  * (`WORKER_ROLE_GUARD_MODES`, `role-guard.ts`; ruling 214 item 2), whatever
  * surface it judges: its declaration and role checks enforce, so a storage
  * used before any declaration, or whose role the role check objects to, is
- * refused on every use, and a mode its caller hands it can raise a check
- * but relax none. Since b6 its environment check enforces too (ruling 217):
+ * refused on every use, and a mode its caller hands it can name only
+ * enforce, which every check runs in (X30). Since b6 its environment check
+ * enforces too (ruling 217):
  * a storage whose `env`, the one handed here, names an owner-capable
  * variable is refused at its first use.
  */
@@ -713,13 +715,17 @@ export function createWorkerStorages(
   options: {
     poolSizes?: Partial<Record<WorkerStorageRole, number>>;
     /**
-     * The guards' output, and checks to raise to enforce: a test's, and
-     * the modes `apps/requestport/src/serve/serve.ts`'s `workerGuardModes`
-     * hands them (Done when 5). The guards run in the worker's modes, which
-     * `modes` can raise and cannot lower (`role-guard.ts`). Their surface is
-     * not the caller's to give: each judges `worker` (`workerSurface`,
-     * above; ruling 215 item 4), and only `modes` and `write` are read from
-     * this.
+     * The guards' output, and the modes `apps/requestport/src/serve/serve.ts`'s
+     * `workerGuardModes` hands them (Done when 5). The guards run in the
+     * worker's modes, every check enforcing; `modes` can name only enforce,
+     * and anything else it hands, a leftover warn among them, is refused
+     * once the host's handoff has admitted the call (which reads only its
+     * construction token) and before `env` or `storage` is read, so before
+     * any storage is built, on the bound path and the unbound path alike,
+     * though the unbound path builds no guard (`role-guard.ts`'s
+     * `refuseModesOtherThanEnforce`, X30). Their surface is not the
+     * caller's to give: each judges `worker` (`workerSurface`, above;
+     * ruling 215 item 4), and only `modes` and `write` are read from this.
      */
     guard?: Pick<RoleGuardOptions, "modes" | "write">;
     /**
@@ -737,6 +743,7 @@ export function createWorkerStorages(
   } = {},
 ): WorkerStorages {
   refuseUnlessHostAdmits("createWorkerStorages", options);
+  refuseModesOtherThanEnforce(options.guard?.modes);
   const token = hostConstructionTokenOf(options);
   const urls = workerDatabaseUrls(env);
 

@@ -7,6 +7,7 @@ import {
   actorFingerprint,
   type CommandActorContext,
 } from "./authorization.js";
+import { freeFormJsonBoundNames } from "./bounded-json.js";
 import { DomainError } from "./errors.js";
 import {
   canonicalJson,
@@ -185,18 +186,41 @@ export class AtomicCommandBus<
             field name, which is schema rather than data, and the MCP layer
             already knows how to publish one: `publicDomainDetails` passes a
             `field` detail through after checking it against a strict pattern.
-            The message and the value stay here.
+
+            So is a free-form input's bound (ruling 237 item 3). When the issue
+            is a custom one whose `params` name one of the three bounds and a
+            positive integer maximum, as `freeFormJsonRefusal` writes them,
+            the two go out as `bound` and `maximum`, and nothing else of
+            `params` does. A caller can then tell an elements refusal from a
+            depth or a bytes one, and each from the input's other checks. The
+            REST route's and the MCP server's `publicDomainDetails` publish
+            them, checked again. The message and the value stay here.
           */
-          const field = error.issues[0]?.path
+          const issue = error.issues[0];
+          const field = issue?.path
             .filter((segment) => typeof segment !== "symbol")
             .join(".");
+          const details: Record<string, string | number> =
+            typeof field === "string" && /^[A-Za-z0-9_.-]{1,128}$/u.test(field)
+              ? { field }
+              : {};
+          const params = issue?.code === "custom" ? issue.params : undefined;
+          if (
+            typeof params?.bound === "string" &&
+            (freeFormJsonBoundNames as readonly string[]).includes(
+              params.bound,
+            ) &&
+            Number.isSafeInteger(params.maximum) &&
+            params.maximum > 0
+          ) {
+            details.bound = params.bound;
+            details.maximum = params.maximum;
+          }
 
           throw new DomainError(
             "validation_failed",
             "Command input is invalid",
-            typeof field === "string" && /^[A-Za-z0-9_.-]{1,128}$/u.test(field)
-              ? { field }
-              : {},
+            details,
           );
         }
         throw error;

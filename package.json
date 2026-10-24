@@ -19,7 +19,8 @@
     "db:generate": "node scripts/with-root-env.mjs pnpm --filter @requestport/db db:generate",
     "db:migrate": "node scripts/with-root-env.mjs pnpm --filter @requestport/db db:migrate",
     "docs:diagrams": "for f in docs/diagrams/*.mmd; do mmdc -i \"$f\" -o \"${f%.mmd}.svg\" -b white; done",
-    "lint:scripts": "biome check scripts"
+    "lint:scripts": "biome check scripts",
+    "seed:scripts": "node scripts/seed-scripts-check.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.8",

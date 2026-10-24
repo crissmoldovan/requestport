@@ -349,11 +349,14 @@ function compose(options: RequestPortOptions): RequestPortComposition {
   // The MCP-only capabilities, over `storage` and `secrets`, each building
   // its repositories, or opening its transaction, when it runs. The bus's
   // re-check that the key service and the webhook service's methods run for
-  // a person (ruling 233 item 2) is built on the storage's handle without the
-  // deployment's operator switch: a person's context is never an operator's,
-  // and one that claims to be is refused either way.
+  // a person (ruling 233 item 2), and the provisioning grant read
+  // `provisionAgent` makes before either write (ruling 233 item 4), are
+  // built on the storage's handle without the deployment's operator switch:
+  // a person's context is never an operator's, and one that claims to be is
+  // refused either way.
   const { createProject, provisionAgent } = createProjectProvisioning({
     transaction: projectProvisioningTransaction(storage),
+    provisioningGrant: () => createCommandAuthorizationRepository(db),
     agentKeyRepositories: () => ({
       authRepository: createAgentAuthRepository(db),
       agentRepository: createAgentRepository(db),
@@ -374,7 +377,13 @@ function compose(options: RequestPortOptions): RequestPortComposition {
     let webhookService: ReturnType<typeof createWebhookManagement>;
     try {
       webhookService = createWebhookManagement({
-        repository: () => createWebhookRepository(db),
+        // A person's call hands the credential its context names, which the
+        // repository's locked checks read again (ruling 234 (c)).
+        repository: (personCredentialId) =>
+          createWebhookRepository(
+            db,
+            personCredentialId === undefined ? {} : { personCredentialId },
+          ),
         authorization: () => createCommandAuthorizationRepository(db),
         keys: secrets.webhookKeys,
         secrets,

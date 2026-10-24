@@ -41,10 +41,74 @@ DATABASE_URL_* name, any PG* name or any POSTGRES_* name.
   --ready-file <path>  Written with this process's id once the worker has
                        reached the database; removed when it stops.
 
-SIGTERM or SIGINT stops claiming work and waits for what is running; a second
-signal exits at once.`;
+SIGTERM or SIGINT stops claiming work and waits for what is running. Another
+SIGTERM or SIGINT less than 1 s after the first is the same stop: a
+terminal's Ctrl-C can arrive twice when pnpm or npm runs this from a
+script, once from the terminal and once passed on. One 1 s or more after
+the first exits at once.`;
 
 type Arguments = { readyFile?: string };
+
+type Logger = ReturnType<typeof createLogger>;
+
+/**
+ * How long after the first stop signal another SIGTERM or SIGINT is the same
+ * stop (ruling 246). A terminal's Ctrl-C, or a stop sent to the process
+ * group, is sent to this process twice when pnpm or npm runs it from a
+ * script, or `scripts/with-root-env.mjs` starts it, as this package's
+ * `worker` script does: once to the group, and once passed on. The two
+ * arrive milliseconds apart, so both fall inside the window, and a person
+ * who means a second signal still gets the exit by sending it a second
+ * later.
+ */
+const SAME_STOP_WINDOW_MS = 1_000;
+
+/**
+ * The worker's SIGTERM and SIGINT handler. The first signal logs
+ * `worker.stopping` and calls `stop`, which starts the drain. Another one
+ * less than `SAME_STOP_WINDOW_MS` after the first is the same stop: it logs
+ * `worker.stop_repeated`, with the signal and the whole milliseconds since
+ * the first, and the drain goes on. One `SAME_STOP_WINDOW_MS` or more after
+ * the first logs `worker.forced_exit` and calls `exit(1)`, skipping the
+ * drain, the ready file's removal and the storages' close. The window is
+ * counted from the first signal, not from the last repeat.
+ *
+ * `now` is a monotonic clock in milliseconds, `performance.now` unless a test
+ * hands its own; `exit` is `process.exit` in `runJobWorkerCli`.
+ */
+export function createStopSignalHandler({
+  stop,
+  logger,
+  exit,
+  now = () => performance.now(),
+}: {
+  stop: () => void;
+  logger: Pick<Logger, "info" | "warn">;
+  exit: (code: number) => void;
+  now?: () => number;
+}): (signal: NodeJS.Signals) => void {
+  let firstAt: number | undefined;
+  return (signal) => {
+    const status = signal.toLowerCase();
+    const at = now();
+    if (firstAt === undefined) {
+      firstAt = at;
+      logger.info("worker.stopping", { status });
+      stop();
+      return;
+    }
+    const sinceFirstMs = at - firstAt;
+    if (sinceFirstMs < SAME_STOP_WINDOW_MS) {
+      logger.info("worker.stop_repeated", {
+        status,
+        durationMs: Math.floor(sinceFirstMs),
+      });
+      return;
+    }
+    logger.warn("worker.forced_exit", { status });
+    exit(1);
+  };
+}
 
 function parseArguments(argv: readonly string[]): Arguments | "help" | string {
   const parsed: Arguments = {};
@@ -178,16 +242,13 @@ export async function runJobWorkerCli(
   });
 
   const stopped = new Promise<{ drained: boolean }>((resolveStopped) => {
-    let stopping = false;
-    const onSignal = (signal: NodeJS.Signals) => {
-      if (stopping) {
-        logger.warn("worker.forced_exit", { status: signal.toLowerCase() });
-        process.exit(1);
-      }
-      stopping = true;
-      logger.info("worker.stopping", { status: signal.toLowerCase() });
-      void worker.stop().then(resolveStopped);
-    };
+    const onSignal = createStopSignalHandler({
+      stop: () => {
+        void worker.stop().then(resolveStopped);
+      },
+      logger,
+      exit: (code) => process.exit(code),
+    });
     process.on("SIGTERM", onSignal);
     process.on("SIGINT", onSignal);
   });

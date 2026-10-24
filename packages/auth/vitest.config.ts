@@ -8,8 +8,14 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.{ts,tsx}"],
     // The `test` database surface (manifest-i2.md §2.2), declared before any
-    // suite is imported.
-    setupFiles: ["../db/src/test-support/declare-test-surface.ts"],
+    // suite is imported; then the guard that fails a case issuing a query on
+    // a pg client while another is in flight on it (X24), which patches
+    // @requestport/db's pg, the one every storage here loads (X25's
+    // remainder, ruling 232 item 7).
+    setupFiles: [
+      "../db/src/test-support/declare-test-surface.ts",
+      "../db/src/test-support/one-query-at-a-time.ts",
+    ],
     // A test file here opens the database @requestport/db tests against when it
     // queries a storage it builds over it (`createStorage`, or the application
     // root's through @requestport/db/wiring), or reaches a pool through

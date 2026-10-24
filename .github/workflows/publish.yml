@@ -1,0 +1,352 @@
+# Publishes a release's npm packages from this repository, through npm's
+# trusted publishing (OpenID Connect): no npm token and no one-time password.
+#
+# It runs only when started by hand (workflow_dispatch), with two inputs: the
+# release's tag, and the SHA-256 of that release's SHA256SUMS asset as the
+# release's own record gives it. It checks out, installs, builds and tests
+# nothing of this repository. It downloads the tag's release assets (the
+# tarballs, build-record.json and SHA256SUMS), refuses unless SHA256SUMS has
+# the SHA-256 it was given and every file matches SHA256SUMS, checks each
+# tarball's sha512 against build-record.json, that its package.json names
+# this repository as repository.url and has no publishConfig, and that each
+# package is published after every requestport package it depends on. It
+# then reads every package's document on the registry, and stops before
+# publishing any if one cannot be read, is not there at all (a trusted
+# publisher can be made only for a package that exists), or holds this
+# version with another integrity. Then it publishes those same files, in
+# build-record.json's order, with
+# `npm publish <file> --access public --provenance`. Nothing is rebuilt.
+#
+# A package the registry already holds at that version with the same
+# integrity is skipped, so a run that stopped can be started again with the
+# same inputs. With --provenance, npm fails a publish it cannot sign a
+# provenance attestation for, rather than publish the package without one.
+# The last step reads the registry until every package is there with
+# build-record.json's integrity, and every package published through trusted
+# publishing, by this run or an earlier one, carries a provenance
+# attestation. Its summary says how each was published: by this run,
+# earlier through a trusted publisher, or earlier without one (by hand).
+#
+# The job runs in the environment npm. A required reviewer set on that
+# environment holds the job until they approve it, and each package's
+# trusted publisher on npmjs.com names this repository, this file
+# (publish.yml) and that environment.
+name: publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release tag whose assets are published, for example v0.2.0
+        required: true
+        type: string
+      sha256sums:
+        description: The SHA-256 of that release's SHA256SUMS asset, as the release's record gives it
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    environment: npm
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      TAG: ${{ inputs.tag }}
+      SUMS_SHA256: ${{ inputs.sha256sums }}
+      REGISTRY: https://registry.npmjs.org
+      SETTLE_ATTEMPTS: 30
+      SETTLE_SECONDS: 60
+    steps:
+      - id: inputs
+        name: Refuse a run from another ref, and inputs that are not a tag and a SHA-256
+        run: |
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::run this workflow from main, not $GITHUB_REF"
+            exit 1
+          fi
+          tag_pattern='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          if ! [[ $TAG =~ $tag_pattern ]]; then
+            echo "::error::the tag must be v<major>.<minor>.<patch>, for example v0.2.0"
+            exit 1
+          fi
+          sum_pattern='^[0-9a-f]{64}$'
+          if ! [[ $SUMS_SHA256 =~ $sum_pattern ]]; then
+            echo "::error::sha256sums must be 64 lower-case hex characters"
+            exit 1
+          fi
+          mkdir "$RUNNER_TEMP/release"
+          echo "tag $TAG, version ${TAG#v}; SHA256SUMS must have SHA-256 $SUMS_SHA256"
+
+      - id: node
+        name: Node.js 24.22.1, which bundles npm 11.19.1
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.22.1
+          package-manager-cache: false
+
+      - id: tools
+        name: Refuse an npm or Node.js older than trusted publishing needs, or a registry other than npm's
+        run: |
+          cd "$RUNNER_TEMP/release"
+          node --version
+          have_npm=$(npm --version)
+          have_registry=$(npm config get registry)
+          have_scoped=$(npm config get @requestport:registry)
+          export have_npm have_registry have_scoped
+          node --input-type=module <<'NODE'
+          // docs.npmjs.com/trusted-publishers: npm 11.5.1 or later, Node.js 22.14.0 or later.
+          const parts = (text) => text.replace(/^v/, "").split(".").map(Number);
+          const atLeast = (have, want) => {
+            for (const [i, part] of want.entries()) {
+              if (have[i] !== part) return have[i] > part;
+            }
+            return true;
+          };
+          const problems = [];
+          const npm = process.env.have_npm;
+          if (!atLeast(parts(npm), [11, 5, 1])) problems.push(`npm ${npm} is older than 11.5.1`);
+          if (!atLeast(parts(process.version), [22, 14, 0])) problems.push(`Node.js ${process.version} is older than 22.14.0`);
+          if (process.env.have_registry !== "https://registry.npmjs.org/") problems.push(`the registry is ${process.env.have_registry}`);
+          if (process.env.have_scoped !== "undefined") problems.push(`@requestport:registry is ${process.env.have_scoped}`);
+          for (const problem of problems) console.log(`::error::${problem}`);
+          if (problems.length > 0) process.exit(1);
+          console.log(`npm ${npm}, Node.js ${process.version}, registry https://registry.npmjs.org/, no other for @requestport`);
+          NODE
+
+      - id: sums
+        name: Download SHA256SUMS, and refuse unless its SHA-256 is the input
+        run: |
+          cd "$RUNNER_TEMP/release"
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          curl --fail --silent --show-error --location --retry 5 --retry-all-errors --output SHA256SUMS "$base/SHA256SUMS"
+          got=$(sha256sum SHA256SUMS | cut -d ' ' -f 1)
+          if [ "$got" != "$SUMS_SHA256" ]; then
+            echo "::error::the SHA256SUMS of $TAG has SHA-256 $got, not the input $SUMS_SHA256"
+            exit 1
+          fi
+          echo "SHA256SUMS of $TAG: SHA-256 $got, the input"
+
+      - id: download
+        name: Download every file SHA256SUMS lists
+        run: |
+          cd "$RUNNER_TEMP/release"
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          line_pattern='^[0-9a-f]{64}  ([A-Za-z0-9][A-Za-z0-9._-]*)$'
+          lines=()
+          while IFS= read -r line || [ -n "$line" ]; do
+            lines+=("$line")
+          done < SHA256SUMS
+          files=()
+          for line in "${lines[@]}"; do
+            if ! [[ $line =~ $line_pattern ]]; then
+              echo "::error::SHA256SUMS holds a line that is not a SHA-256, two spaces and a file name: $line"
+              exit 1
+            fi
+            file=${BASH_REMATCH[1]}
+            for other in SHA256SUMS "${files[@]}"; do
+              if [ "$file" = "$other" ]; then
+                echo "::error::SHA256SUMS names $file twice, or itself"
+                exit 1
+              fi
+            done
+            files+=("$file")
+          done
+          for file in "${files[@]}"; do
+            curl --fail --silent --show-error --location --retry 5 --retry-all-errors --output "$file" "$base/$file"
+          done
+          echo "downloaded the ${#files[@]} files SHA256SUMS lists"
+
+      - id: check
+        name: Check every file against SHA256SUMS
+        run: |
+          cd "$RUNNER_TEMP/release"
+          sha256sum --check --strict SHA256SUMS | tee "$RUNNER_TEMP/sha256sum-check.txt"
+          lines=$(grep -c '' SHA256SUMS)
+          ok=$(grep -c ': OK$' "$RUNNER_TEMP/sha256sum-check.txt")
+          if [ "$ok" != "$lines" ]; then
+            echo "::error::$ok of $lines files OK"
+            exit 1
+          fi
+          echo "$ok of $lines OK"
+
+      - id: verify
+        name: Check each tarball against build-record.json and this repository, and that each follows what it depends on
+        run: |
+          cd "$RUNNER_TEMP/release"
+          node --input-type=module <<'NODE'
+          import { execFileSync } from "node:child_process";
+          import { createHash } from "node:crypto";
+          import { readFileSync } from "node:fs";
+
+          const fail = (message) => {
+            console.log(`::error::${message}`);
+            process.exit(1);
+          };
+          const version = process.env.TAG.slice(1);
+          const repository = `https://github.com/${process.env.GITHUB_REPOSITORY}`;
+          const record = JSON.parse(readFileSync("build-record.json", "utf8"));
+          const tarballs = record.tarballs;
+          if (!Array.isArray(tarballs) || tarballs.length === 0) fail("build-record.json lists no tarballs");
+          const listed = readFileSync("SHA256SUMS", "utf8").split("\n").filter((line) => line !== "").map((line) => line.slice(66)).sort();
+          const expected = [...tarballs.map((t) => t.file), "build-record.json"].sort();
+          if (JSON.stringify(listed) !== JSON.stringify(expected)) {
+            fail(`SHA256SUMS lists ${listed.join(", ")}; build-record.json's tarballs and itself are ${expected.join(", ")}`);
+          }
+          const seen = new Map();
+          for (const [index, t] of tarballs.entries()) {
+            if (typeof t.name !== "string" || !(t.name === "requestport" || /^@requestport\/[a-z0-9][a-z0-9._-]*$/.test(t.name))) {
+              fail(`${t.name} is not requestport or an @requestport/ package`);
+            }
+            if (seen.has(t.name)) fail(`build-record.json lists ${t.name} twice`);
+            if (t.version !== version) fail(`${t.name} is at ${t.version}, not the tag's ${version}`);
+            if (typeof t.file !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]*\.tgz$/.test(t.file)) fail(`${t.name}: the file ${t.file} is not a tarball's name`);
+            const integrity = `sha512-${createHash("sha512").update(readFileSync(t.file)).digest("base64")}`;
+            if (integrity !== t.integrity) fail(`${t.file}: sha512 ${integrity}; build-record.json records ${t.integrity}`);
+            const manifest = JSON.parse(execFileSync("tar", ["-xzOf", t.file, "package/package.json"], { encoding: "utf8" }));
+            if (manifest.name !== t.name || manifest.version !== t.version) {
+              fail(`${t.file} holds ${manifest.name}@${manifest.version}; build-record.json says ${t.name}@${t.version}`);
+            }
+            if (manifest.private === true) fail(`${t.file}: its package.json says private`);
+            // npm applies a packed manifest's publishConfig to its publish,
+            // for every setting the command line does not name: the registry,
+            // the tag or provenance, for example (npm 11.19.1,
+            // lib/commands/publish.js).
+            if (manifest.publishConfig !== undefined) fail(`${t.file}: its package.json has a publishConfig, which would change how npm publishes it`);
+            // docs.npmjs.com/trusted-publishers: "To publish from GitHub, your package's
+            // repository.url field in package.json must exactly match your GitHub repository."
+            // The prefix "git+" and the suffix ".git" are set aside: the pack writes
+            // "git+https://github.com/<owner>/<name>.git", and packages published
+            // with provenance carry that form on the registry.
+            const declared = manifest.repository?.url;
+            if (typeof declared !== "string" || declared.replace(/^git\+/, "").replace(/\.git$/, "") !== repository) {
+              fail(`${t.file}: its repository.url is ${declared ?? "missing"}, not ${repository}, which a package published from GitHub must name`);
+            }
+            for (const field of ["dependencies", "peerDependencies", "optionalDependencies"]) {
+              for (const [name, spec] of Object.entries(manifest[field] ?? {})) {
+                if (name !== "requestport" && !name.startsWith("@requestport/")) continue;
+                const earlier = seen.get(name);
+                if (earlier === undefined) fail(`${t.name} ${field} names ${name}, which build-record.json does not list before it`);
+                if (spec !== earlier) fail(`${t.name} ${field} names ${name}@${spec}; build-record.json publishes it at ${earlier}`);
+              }
+            }
+            seen.set(t.name, t.version);
+            console.log(`${index + 1}. ${t.name}@${t.version} (${t.file}): sha512 equal to build-record.json's; repository ${repository}; every requestport package it depends on comes before it`);
+          }
+          console.log(`${tarballs.length} tarballs, in build-record.json's order; its commit of record is ${record.commit}`);
+          NODE
+
+      - id: publish
+        name: Publish each tarball, in build-record.json's order
+        run: |
+          cd "$RUNNER_TEMP/release"
+          node --input-type=module <<'NODE'
+          import { spawnSync } from "node:child_process";
+          import { readFileSync, writeFileSync } from "node:fs";
+
+          const fail = (message) => {
+            console.log(`::error::${message}`);
+            process.exit(1);
+          };
+          const record = JSON.parse(readFileSync("build-record.json", "utf8"));
+          // Every package's document first, before anything is published. A
+          // package the registry does not hold can have no trusted publisher
+          // (docs.npmjs.com/cli/v11/commands/npm-trust: "The package you're
+          // configuring must already exist on the npm registry"), so its
+          // publish would fail after the ones before it were published.
+          const toPublish = [];
+          for (const t of record.tarballs) {
+            const response = await fetch(`${process.env.REGISTRY}/${t.name.replace("/", "%2f")}`, { headers: { accept: "application/json" } });
+            if (response.status === 404) fail(`${t.name} is not on the registry, so it can have no trusted publisher (a package must exist before one is made); stopping before any publish`);
+            if (!response.ok) fail(`${t.name}: the registry answered ${response.status}; stopping before any publish`);
+            const held = (await response.json()).versions?.[t.version];
+            if (held === undefined) {
+              toPublish.push(t);
+            } else if (held.dist?.integrity === t.integrity) {
+              console.log(`${t.name}@${t.version}: already on the registry with this integrity; skipped`);
+            } else {
+              fail(`${t.name}@${t.version} is on the registry with integrity ${held.dist?.integrity}, not build-record.json's ${t.integrity}; stopping before any publish`);
+            }
+          }
+          const published = [];
+          for (const t of toPublish) {
+            console.log(`${t.name}@${t.version}: publishing ./${t.file} --access public --provenance`);
+            const run = spawnSync("npm", ["publish", `./${t.file}`, "--access", "public", "--provenance"], { stdio: "inherit" });
+            if (run.status !== 0) {
+              writeFileSync(`${process.env.RUNNER_TEMP}/published.json`, JSON.stringify(published));
+              fail(`the publish of ./${t.file} exited ${run.status}; stopping. What was published before it stays published.`);
+            }
+            published.push(t.name);
+          }
+          writeFileSync(`${process.env.RUNNER_TEMP}/published.json`, JSON.stringify(published));
+          console.log(`published by this run: ${published.length === 0 ? "none" : published.join(", ")}`);
+          NODE
+
+      - id: registry
+        name: Read the registry until it serves every tarball's integrity, with provenance for those published through trusted publishing
+        run: |
+          cd "$RUNNER_TEMP/release"
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from "node:fs";
+          import { setTimeout as sleep } from "node:timers/promises";
+
+          // The registry can serve a new version some minutes after its
+          // upload (staged publishing), so a version not there yet is read
+          // again; a different integrity is not.
+          const record = JSON.parse(readFileSync("build-record.json", "utf8"));
+          const ran = new Set(JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/published.json`, "utf8")));
+          const attempts = Number(process.env.SETTLE_ATTEMPTS);
+          const seconds = Number(process.env.SETTLE_SECONDS);
+          const total = record.tarballs.length;
+          for (let attempt = 1; ; attempt += 1) {
+            const rows = [];
+            const waiting = [];
+            for (const t of record.tarballs) {
+              const response = await fetch(`${process.env.REGISTRY}/${t.name.replace("/", "%2f")}`, { headers: { accept: "application/json" } });
+              const held = response.ok ? (await response.json()).versions?.[t.version] : undefined;
+              if (held === undefined) {
+                waiting.push(`${t.name}: no ${t.version} yet`);
+                continue;
+              }
+              if (held.dist?.integrity !== t.integrity) {
+                console.log(`::error::${t.name}@${t.version}: the registry's integrity is ${held.dist?.integrity}, not build-record.json's ${t.integrity}`);
+                process.exit(1);
+              }
+              const provenance = held.dist?.attestations?.provenance?.predicateType;
+              // A version published through trusted publishing names its
+              // trusted publisher in _npmUser, and one published by hand does
+              // not. Each of the first kind must carry provenance, whether
+              // this run published it or an earlier run did (a run started
+              // again skips what it finds on the registry).
+              const trusted = ran.has(t.name) || held._npmUser?.trustedPublisher !== undefined;
+              if (trusted && typeof provenance !== "string") {
+                waiting.push(`${t.name}: ${t.version} has no provenance`);
+                continue;
+              }
+              const by = ran.has(t.name) ? "this run" : trusted ? "earlier, trusted publisher" : "earlier, no trusted publisher";
+              rows.push(`| ${t.name}@${t.version} | ${by} | equal | ${provenance ?? "none"} |`);
+            }
+            console.log(`attempt ${attempt} of ${attempts}: ${rows.length} of ${total} on the registry with build-record.json's integrity`);
+            if (waiting.length === 0) {
+              for (const row of rows) console.log(row);
+              appendFileSync(process.env.GITHUB_STEP_SUMMARY, ["| package | published | integrity | provenance |", "| --- | --- | --- | --- |", ...rows, ""].join("\n"));
+              break;
+            }
+            for (const line of waiting) console.log(`  ${line}`);
+            if (attempt >= attempts) {
+              console.log(`::error::after ${attempts} reads, ${waiting.length} of ${total} are not on the registry as published`);
+              process.exit(1);
+            }
+            await sleep(seconds * 1000);
+          }
+          NODE

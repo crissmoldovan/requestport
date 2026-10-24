@@ -13,7 +13,7 @@ import { join } from "node:path";
  * directory, which `scripts/pack-requestport.mjs`'s `buildWeb` does and
  * nothing else does. Once each compilation is sealed (child compilations
  * among them), the plugin records its compiler's name (Next names its three
- * `client`, `server` and `edge-server`: `next@16.3.8`'s
+ * `client`, `server` and `edge-server`: `next@16.4.2`'s
  * `dist/build/webpack/config/blocks/base.js:27`, which webpack gives the
  * compiler as its `name`), and the file of every module webpack put in a
  * chunk of it; a module that webpack concatenated into another is recorded

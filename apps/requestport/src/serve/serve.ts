@@ -91,11 +91,14 @@ export interface ServeOptions {
   /** Where core's dispatch, the worker and MCP write their lines. */
   logger: RequestPortLogger;
   /**
-   * For tests: modes handed to the worker storages' guards, which can raise
-   * a check to `enforce` and relax none (`@requestport/db`'s role guard):
-   * Done when 5 hands every check at `warn` and is still refused. Unset, the
-   * guards' default modes, in which the worker's declaration and role checks
-   * enforce (I.2b's b5; ruling 214 item 2).
+   * For tests: modes handed to the worker storages' guards, which can name
+   * only `enforce` (`@requestport/db`'s role guard): every check already
+   * runs in it. Anything else, a leftover `warn` among them, is refused by
+   * `createWorkerStorages` before it builds a worker storage, on pg and on
+   * PGlite alike (X30), so `serveInstance` rejects before it composes Better
+   * Auth or core; the application storage has been built by then. Unset, the
+   * guards' default modes, in which every check of the worker's enforces
+   * (I.2b's b5 and b6; rulings 214 item 2 and 217 item 1).
    */
   workerGuardModes?: RoleGuardOptions["modes"];
   /**

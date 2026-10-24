@@ -38,6 +38,7 @@ import {
   groupObjections,
   ownerCapableVariableNames,
   ROLE_CHECK_SQL,
+  ROLE_GUARD_MODE_MESSAGE,
   ROLE_GUARD_MODES,
   ROLE_NOT_PERMITTED_MESSAGE,
   type RoleGuardCheck,
@@ -89,13 +90,6 @@ const ENFORCE: Record<RoleGuardCheck, RoleGuardMode> = {
   declaration: "enforce",
   role: "enforce",
   environment: "enforce",
-};
-
-/** Every check handed to a guard at warn: what no option may relax a check to. */
-const ALL_WARN: Record<RoleGuardCheck, RoleGuardMode> = {
-  declaration: "warn",
-  role: "warn",
-  environment: "warn",
 };
 
 afterAll(async () => {
@@ -595,16 +589,100 @@ describe("a worker storage's group check, without a connection", () => {
     }
   });
 
-  test("a mode handed to it raises a check and relaxes none: with every check handed at warn, its modes are still the worker's, and it still refuses", async () => {
-    const relaxed = guardFor(ALL_WARN);
+  test("has no warn mode (X30): warn handed for any check, any other value but enforce, and a check it does not know are each refused as the guard is built, naming what it was handed", () => {
+    // @ts-expect-error: warn left the type with its code path (X30).
+    expect(() => guardFor({ declaration: "warn" })).toThrow(
+      `${ROLE_GUARD_MODE_MESSAGE}: it was handed declaration: "warn".`,
+    );
+    // @ts-expect-error: warn left the type with its code path (X30).
+    expect(() => guardFor({ role: "warn" })).toThrow(
+      `${ROLE_GUARD_MODE_MESSAGE}: it was handed role: "warn".`,
+    );
+    // @ts-expect-error: warn left the type with its code path (X30).
+    expect(() => guardFor({ environment: "warn" })).toThrow(
+      `${ROLE_GUARD_MODE_MESSAGE}: it was handed environment: "warn".`,
+    );
+    for (const [modes, handed] of [
+      [{ role: "off" }, 'role: "off"'],
+      [{ role: "" }, 'role: ""'],
+      [{ role: null }, "role: null"],
+      [{ roles: "enforce" }, 'roles: "enforce"'],
+    ] as const) {
+      expect(() => guardFor(modes as never), handed).toThrow(
+        `${ROLE_GUARD_MODE_MESSAGE}: it was handed ${handed}.`,
+      );
+    }
+    expect(guardFor({ role: undefined }).modes).toEqual(
+      WORKER_ROLE_GUARD_MODES,
+    );
+  });
+
+  test("a leftover warn handed for the worker storages' guards is refused before createWorkerStorages reads its environment or the storage it is handed, so before any storage is built: on the bound path, as serve.ts hands workerGuardModes on pg, and on the unbound path's two exceptions, as it hands them on PGlite (X30)", () => {
+    const bound = {
+      [DATABASE_DRIVER_VARIABLE]: "pg",
+      [WORKER_DATABASE_URL_VARIABLES.dispatcher]:
+        "postgresql://dispatcher@127.0.0.1:1/x30",
+      [WORKER_DATABASE_URL_VARIABLES.processor]:
+        "postgresql://processor@127.0.0.1:1/x30",
+      [WORKER_DATABASE_URL_VARIABLES.maintenance]:
+        "postgresql://maintenance@127.0.0.1:1/x30",
+    };
+    const standIn = (driver: string) =>
+      ({ db: {}, driver, close: async () => undefined }) as unknown as Storage;
+
+    for (const [path, variables, exception] of [
+      ["bound", bound, {}],
+      ["unbound, the test exception", {}, { unbound: "test" as const }],
+      ["unbound, the embedded exception", {}, { unbound: "embedded" as const }],
+    ] as const) {
+      // Every read of the environment, and of the storage, is recorded: the
+      // bound path builds its storages from the first, the unbound path
+      // hands out the second.
+      const reads: string[] = [];
+      const env = new Proxy(
+        { ...variables },
+        {
+          get: (target, name, receiver) => {
+            reads.push(`env.${String(name)}`);
+            return Reflect.get(target, name, receiver);
+          },
+          has: (target, name) => {
+            reads.push(`${String(name)} in env`);
+            return Reflect.has(target, name);
+          },
+          ownKeys: (target) => {
+            reads.push("env's names");
+            return Reflect.ownKeys(target);
+          },
+        },
+      ) as NodeJS.ProcessEnv;
+      const storage = standIn(path === "bound" ? "pg" : "pglite");
+
+      expect(() =>
+        createWorkerStorages(env, {
+          ...exception,
+          get storage() {
+            reads.push("storage");
+            return storage;
+          },
+          // @ts-expect-error: warn left the type with its code path (X30).
+          guard: { modes: { role: "warn" } },
+        }),
+      ).toThrow(`${ROLE_GUARD_MODE_MESSAGE}: it was handed role: "warn".`);
+      expect(reads, path).toEqual([]);
+    }
+  });
+
+  test("a mode handed to it can name only enforce, which changes nothing: with every check handed enforce, its modes are still the worker's, and it still refuses", async () => {
+    const handed = guardFor(ENFORCE);
 
     await expect(
-      relaxed.checkRole(answering(["requestport_tenant_processor"])),
+      handed.checkRole(answering(["requestport_tenant_processor"])),
     ).rejects.toMatchObject({
       name: "DatabaseRoleGuardError",
       finding: { check: "role", status: "refused" },
     });
-    expect(relaxed.modes).toEqual(WORKER_ROLE_GUARD_MODES);
+    expect(handed.modes).toEqual(WORKER_ROLE_GUARD_MODES);
     expect(guardFor({ environment: "enforce" }).modes).toEqual({
       declaration: "enforce",
       role: "enforce",
@@ -695,7 +773,7 @@ describe("the modes, chosen for each check when it runs", () => {
   const bypassing = answering(row({ bypass_rls: true }));
 
   test("a guard with no group that judges worker, as each root's storage's does in a process declared worker, refuses an owner-shaped role, whatever mode it is handed", async () => {
-    for (const modes of [{}, ALL_WARN]) {
+    for (const modes of [{}, ENFORCE]) {
       const lines: string[] = [];
       const guard = createDatabaseRoleGuard({
         surface: () => "worker",
@@ -717,12 +795,12 @@ describe("the modes, chosen for each check when it runs", () => {
     }
   });
 
-  test("the application's and the operator's role checks refuse in their default modes, and with every check handed at warn, writing no line", async () => {
+  test("the application's and the operator's role checks refuse in their default modes, and with every check handed enforce, writing no line", async () => {
     for (const [surface, answer, objection] of [
       ["application", bypassing, "bypassrls"],
       ["operator", answering(row()), "cannot_bypass_row_security"],
     ] as const) {
-      for (const modes of [{}, ALL_WARN]) {
+      for (const modes of [{}, ENFORCE]) {
         const label = `${surface} ${JSON.stringify(modes)}`;
         const lines: string[] = [];
         const guard = createDatabaseRoleGuard({
@@ -857,8 +935,8 @@ describe("the declaration and environment checks, without a connection", () => {
     ]);
   });
 
-  test("an undeclared process is refused every time, in the default modes, with every check handed at warn, and in enforce mode, and no line is written", () => {
-    for (const modes of [{}, ALL_WARN, ENFORCE]) {
+  test("an undeclared process is refused every time, in the default modes and with every check handed enforce, and no line is written", () => {
+    for (const modes of [{}, ENFORCE]) {
       const lines: string[] = [];
       const guard = createDatabaseRoleGuard({
         surface: () => undefined,
@@ -885,10 +963,10 @@ describe("the declaration and environment checks, without a connection", () => {
     }
   });
 
-  test("refuses an application process naming an owner-capable variable in its default modes, and with every check handed at warn, every time, naming the variable and never its value, and passes one naming only the application variable (I.2 step 7)", () => {
+  test("refuses an application process naming an owner-capable variable in its default modes, and with every check handed enforce, every time, naming the variable and never its value, and passes one naming only the application variable (I.2 step 7)", () => {
     const secret = "S3NT1NEL-owner-value-never-printed";
 
-    for (const modes of [{}, ALL_WARN]) {
+    for (const modes of [{}, ENFORCE]) {
       for (const name of [
         "DATABASE_URL",
         "DATABASE_URL_UNPOOLED",
@@ -1622,8 +1700,8 @@ describe.sequential("the role check, as each kind of role (Done when 6)", () => 
     expect(lines).toEqual([]);
   });
 
-  test("as worker, in its default modes, refuses the local superuser, and refuses it with every check handed at warn", async () => {
-    for (const modes of [{}, ALL_WARN]) {
+  test("as worker, in its default modes, refuses the local superuser, and refuses it with every check handed enforce", async () => {
+    for (const modes of [{}, ENFORCE]) {
       const storage = guardedStorage(
         process.env.DATABASE_URL as string,
         "worker",
@@ -1642,7 +1720,7 @@ describe.sequential("the role check, as each kind of role (Done when 6)", () => 
     }
   });
 
-  test("as application, in its default modes, refuses the local superuser and each owner-shaped role, and refuses them with every check handed at warn, writing no line", async () => {
+  test("as application, in its default modes, refuses the local superuser and each owner-shaped role, and refuses them with every check handed enforce, writing no line", async () => {
     const cases = [
       [process.env.DATABASE_URL as string, "superuser, bypassrls"],
       [urlFor(roles.bypass), "bypassrls"],
@@ -1650,7 +1728,7 @@ describe.sequential("the role check, as each kind of role (Done when 6)", () => 
       [urlFor(roles.member), "member_of_bypassing_role"],
     ] as const;
 
-    for (const modes of [{}, ALL_WARN]) {
+    for (const modes of [{}, ENFORCE]) {
       for (const [url, objections] of cases) {
         const label = `${new URL(url).username} ${JSON.stringify(modes)}`;
         const lines: string[] = [];
@@ -1672,13 +1750,13 @@ describe.sequential("the role check, as each kind of role (Done when 6)", () => 
     }
   });
 
-  test("as application, in its default modes, refuses at its first use a login that is only a member of a superuser group, and one that is only a member of a group owning a table in public, and refuses them with every check handed at warn, writing no line", async () => {
+  test("as application, in its default modes, refuses at its first use a login that is only a member of a superuser group, and one that is only a member of a group owning a table in public, and refuses them with every check handed enforce, writing no line", async () => {
     const cases = [
       [roles.superMember, "member_of_bypassing_role"],
       [roles.ownerMember, "owns_public_table"],
     ] as const;
 
-    for (const modes of [{}, ALL_WARN]) {
+    for (const modes of [{}, ENFORCE]) {
       for (const [role, objection] of cases) {
         const label = `${role} ${JSON.stringify(modes)}`;
         const lines: string[] = [];
@@ -1704,8 +1782,8 @@ describe.sequential("the role check, as each kind of role (Done when 6)", () => 
     }
   });
 
-  test("as operator, in its default modes, refuses the application group's login, and refuses it with every check handed at warn, writing no line; the local superuser and a NOSUPERUSER BYPASSRLS role pass", async () => {
-    for (const modes of [{}, ALL_WARN]) {
+  test("as operator, in its default modes, refuses the application group's login, and refuses it with every check handed enforce, writing no line; the local superuser and a NOSUPERUSER BYPASSRLS role pass", async () => {
+    for (const modes of [{}, ENFORCE]) {
       const lines: string[] = [];
       const application = guardedStorage(
         urlFor(roles.application),
@@ -1779,13 +1857,13 @@ describe.sequential("the role check, as each kind of role (Done when 6)", () => 
     ]);
   });
 
-  test("a role check that could not run writes its failed line and is asked again on the next use, which judges the role: the application's refuses the local superuser and the operator's passes it, with the role check handed at warn as without", async () => {
+  test("a role check that could not run writes its failed line and is asked again on the next use, which judges the role: the application's refuses the local superuser and the operator's passes it, with the role check handed enforce as without", async () => {
     const reachable = process.env.DATABASE_URL as string;
     const unreachable = new URL(reachable);
     unreachable.port = "1";
 
     for (const surface of ["application", "operator"] as const) {
-      for (const modes of [{}, { role: "warn" as const }]) {
+      for (const modes of [{}, { role: "enforce" as const }]) {
         const label = `${surface} ${JSON.stringify(modes)}`;
         let down = true;
         const lines: string[] = [];

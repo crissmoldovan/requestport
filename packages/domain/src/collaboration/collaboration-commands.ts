@@ -19,6 +19,11 @@ import {
   requireOrganization,
   requireScope,
 } from "../shared/authorization.js";
+import {
+  type FreeFormJsonExcess,
+  freeFormJsonExcess,
+  freeFormJsonRefusal,
+} from "../shared/bounded-json.js";
 import type { CommandDefinition, DomainEvent } from "../shared/command.js";
 import { DomainError } from "../shared/errors.js";
 import type { JsonObject, JsonValue } from "../shared/idempotency.js";
@@ -216,6 +221,35 @@ const questionInput = z
     }
   });
 
+/**
+ * What `structuredValue` may hold (ruling 237 item 3): 2,000 elements,
+ * counted as `freeFormJsonExcess` counts them; nesting at most 8 deep; and at
+ * most 65,536 bytes of compact JSON.
+ */
+const structuredValueBounds = { elements: 2_000, depth: 8, bytes: 65_536 };
+
+const structuredValueRefusals: Record<FreeFormJsonExcess, string> = {
+  elements: "A structured answer may hold at most 2,000 elements",
+  depth: "A structured answer may nest at most 8 levels deep",
+  bytes: "A structured answer may take at most 65,536 bytes as compact JSON",
+};
+
+/**
+ * What `provenance`'s free-form field values may hold (ruling 237 item 3):
+ * 2,000 elements across its values together, counted as `freeFormJsonExcess`
+ * counts them; each value nested at most 8 deep from its own root; and the
+ * whole object at most 65,536 bytes of compact JSON. Its keys are bounded
+ * apart: at most 64.
+ */
+const provenanceBounds = { elements: 2_000, depth: 8, bytes: 65_536 };
+
+const provenanceRefusals: Record<FreeFormJsonExcess, string> = {
+  elements:
+    "Artifact provenance field values may hold at most 2,000 elements in all",
+  depth: "An artifact provenance field value may nest at most 8 levels deep",
+  bytes: "Artifact provenance may take at most 65,536 bytes as compact JSON",
+};
+
 const answerInput = z.object({
   organizationId: z.uuid(),
   questionId: z.uuid(),
@@ -232,12 +266,27 @@ const answerInput = z.object({
       (value) => !containsSensitiveContent(value),
       "Answer contains private or secret material",
     ),
+  // One check, not two: given a second, zod's `toJSONSchema` writes this
+  // recursive schema inline beside its `$ref`, which would change the
+  // published OpenAPI document for no change in what it accepts.
   structuredValue: z
     .json()
-    .refine(
-      (value) => !containsSensitiveJson(value),
-      "Structured answer contains private or secret material",
-    )
+    .superRefine((value, context) => {
+      const excess = freeFormJsonExcess([value], value, structuredValueBounds);
+      if (excess) {
+        context.addIssue({
+          code: "custom",
+          message: structuredValueRefusals[excess],
+          params: freeFormJsonRefusal(excess, structuredValueBounds),
+        });
+      }
+      if (containsSensitiveJson(value)) {
+        context.addIssue({
+          code: "custom",
+          message: "Structured answer contains private or secret material",
+        });
+      }
+    })
     .nullable()
     .optional(),
   sourceChannel: z.enum(["web", "mcp", "slack", "email", "import"]),
@@ -308,6 +357,20 @@ const artifactInput = z.object({
         context.addIssue({
           code: "custom",
           message: "Artifact provenance contains private or secret material",
+        });
+      }
+    })
+    .superRefine((value, context) => {
+      const excess = freeFormJsonExcess(
+        Object.values(value),
+        value,
+        provenanceBounds,
+      );
+      if (excess) {
+        context.addIssue({
+          code: "custom",
+          message: provenanceRefusals[excess],
+          params: freeFormJsonRefusal(excess, provenanceBounds),
         });
       }
     })

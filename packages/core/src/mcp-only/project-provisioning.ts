@@ -36,7 +36,9 @@ import type { RequestPortBetterAuth, RequestPortSecrets } from "../options.js";
   in the agent key service, before the key is minted (ruling 233 item 2);
   `create_project` in the transaction it opens, before `ProjectService`
   checks the role (ruling 230 item 2), with the grant over MCP or the
-  person's session in process.
+  person's session in process. `provision_agent` first reads the grant
+  itself, before either write, and admits nothing but a live provisioning
+  grant (ruling 233 item 4).
 
   `provision_agent` mints the agent's key through the caller's
   `betterAuth.createAgentApiKey`: the key is Better Auth's, and core imports
@@ -106,6 +108,21 @@ export interface ProjectProvisioningOptions {
    * re-checked on it, and then `ProjectService` runs on it.
    */
   transaction: ProjectProvisioningTransaction;
+  /**
+   * The read of the grant `provisionAgent` names, which it makes before
+   * either of its writes (J.10's F9, ruling 233 item 4): db's
+   * `createCommandAuthorizationRepository`'s `assertProvisioningGrant`,
+   * which admits only an active organisation-wide provisioning grant the
+   * delegating person delegated, while they are an active owner or admin of
+   * the active organisation, and refuses anything else, a session included,
+   * in the bus's words. A RequestPort builds it on its storage's handle,
+   * where it runs in a transaction of its own (or, with the tenant binding
+   * off, on the handle itself).
+   */
+  provisioningGrant(): Pick<
+    ReturnType<typeof createCommandAuthorizationRepository>,
+    "assertProvisioningGrant"
+  >;
   /**
    * The repositories the agent key service runs over, built when a key is
    * issued, after the principal is written: with them the bus's own re-check
@@ -252,31 +269,35 @@ export function createProjectProvisioning(options: ProjectProvisioningOptions) {
    * a signed-in person carries in the UI (`humanScopes`), whose credential is
    * the grant. Over MCP, only a grant holding `project:provision`, which is
    * exclusive, reaches this; in process, any caller holding a `RequestPort`
-   * or this factory does (ruling 63). Either way the bus re-checks the
-   * credential as it re-checks a person's (`assertCurrent`): a grant passes
-   * while it is active and organisation-wide, this person delegated it, and
-   * this person is an active owner or admin. `create_agent_principal`'s own
-   * check then requires that the person manage the project's agents: an
-   * owner or admin, or an active maintainer of the project. The key service
-   * re-checks the same context with the re-check `agentKeyRepositories`
-   * carries before it reads or mints anything (ruling 233 item 2), so a
-   * grant that stopped being active after the principal was written mints
-   * nothing. The grant is recorded on the key, so revoking it revokes the
-   * key too.
+   * or this factory does (ruling 63).
    *
-   * The bus's re-check also admits a live session of this person, while an
-   * active member, named in the grant's place, as it does for any person's
-   * command. So a grant id that is not a UUID is refused here, before either
-   * write: the key service refuses one as its `issuedByGrantId`, but only
-   * after the principal is written, which left a principal with no key
-   * (J.10's F9). The sessions in this repository are Better Auth's, and no
-   * id generator is configured for them, so their ids are Better Auth's
-   * default, 32 letters and digits, never a UUID. A session id that were a
-   * UUID would pass this refusal and the re-check; db's `createCredential`
-   * would then refuse it, as no active grant of the organisation, after the
-   * principal is written.
+   * Before either write, the grant is read (`provisioningGrant`'s
+   * `assertProvisioningGrant`; J.10's F9, ruling 233 item 4): it must be an
+   * active organisation-wide provisioning grant this person delegated, while
+   * this person is an active owner or admin of the active organisation. A
+   * grant that is missing, revoked, expired, not a provisioning grant, or
+   * whose person is no longer an owner or admin, is refused there in the
+   * bus's words, and so is a session's id in the grant's place, whatever its
+   * shape: the bus's re-check admits a live session of this person, while an
+   * active member, as it does for any person's command, so without this read
+   * a session id shaped as a UUID had the principal written and the key then
+   * refused, which left a principal with no key. A grant id that is not a
+   * UUID is refused before that read, in words of its own: the key service
+   * records only a UUID as its `issuedByGrantId`. The read is taken at one
+   * point in time; it is not held into the bus's transaction.
    *
-   * The four refusals this function makes come before either write.
+   * Then the bus re-checks the credential as it re-checks a person's
+   * (`assertCurrent`), in the command's own transaction, and
+   * `create_agent_principal`'s own check requires that the person manage
+   * the project's agents: an owner or admin, or an active maintainer of the
+   * project. The key service re-checks the same context with the re-check
+   * `agentKeyRepositories` carries before it reads or mints anything (ruling
+   * 233 item 2), and its reservation reads that grant again under lock
+   * (ruling 234 (c)), so a grant that stopped being active after the
+   * principal was written mints nothing. The grant is recorded on the key,
+   * so revoking it revokes the key too.
+   *
+   * The five refusals this function makes come before either write.
    */
   async function provisionAgent(input: ProvisionAgentAsDelegateInput) {
     if (!input.delegatedByUserId) {
@@ -299,9 +320,8 @@ export function createProjectProvisioning(options: ProjectProvisioningOptions) {
     if (!grantIdShape.safeParse(input.issuingGrantId).success) {
       // A grant's id is a UUID, and the key service records only a UUID as
       // the issuing grant (`issuedByGrantId`). Refused here, before either
-      // write: the bus's re-check admits a live session of this person named
-      // in the grant's place, so a session's id, which is not a UUID, would
-      // have the principal written and the key then refused (J.10's F9).
+      // write and before anything is read, in words that say so; the grant
+      // read below refuses such an id too, in the bus's words.
       throw new DomainError(
         "forbidden",
         "The issuing grant id is not a UUID, so it names no grant this credential could be revoked with",
@@ -323,6 +343,12 @@ export function createProjectProvisioning(options: ProjectProvisioningOptions) {
       credentialId: issuingGrantId,
       correlationId: idempotencyKey,
     });
+
+    // The grant itself, before either write: a live provisioning grant of
+    // this person, never a session in its place (J.10's F9).
+    await options
+      .provisioningGrant()
+      .assertProvisioningGrant(delegatedContext());
 
     const principal = (await options.commandBus({
       name: "create_agent_principal",

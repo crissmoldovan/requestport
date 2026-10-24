@@ -155,7 +155,11 @@ export function createCommandAuthorizationRepository(
 
       if (context.actor.type === "user") {
         return forContext(context, (database) =>
-          assertCurrentPerson(database, context),
+          assertCurrentPersonOn(database, {
+            organizationId: context.organizationId,
+            userId: context.actor.id,
+            credentialId: context.credentialId,
+          }),
         );
       }
 
@@ -199,18 +203,69 @@ export function createCommandAuthorizationRepository(
         );
       }
     },
+
+    /**
+     * Whether a person's context acts on a live provisioning grant (J.10's
+     * F9, ruling 233 item 4), the read `provisionAgent` makes before either
+     * of its writes: the context's `credentialId` must name an active,
+     * unrevoked, unexpired, organisation-wide grant (no project, which the
+     * database permits only for the exclusive `project:provision`) of an
+     * active principal that names no project, through an enabled OAuth
+     * client, that the context's person delegated, while that person is an
+     * active owner or admin of the active organisation
+     * (`lockActiveProvisioningAuthorization`). It is bound to the context's
+     * organisation as `assertCurrent` binds it: on a transaction it is
+     * handed, or in one of its own on the pool (on the pool itself with the
+     * tenant binding off). Unlike `assertCurrent`, a session never passes,
+     * whatever its id. Anything else is refused in the bus's words, "Current
+     * human authorization is no longer active"; a context that is not a
+     * person's, or whose credential is not a UUID, before anything is read.
+     */
+    async assertProvisioningGrant(context: AuthorizedCommandContext) {
+      const refused = () =>
+        new DomainError(
+          "forbidden",
+          "Current human authorization is no longer active",
+        );
+      if (
+        context.actor.type !== "user" ||
+        !uuidShape.test(context.credentialId)
+      )
+        throw refused();
+      const userId = context.actor.id;
+      const grant = await forContext(context, (database) =>
+        lockActiveProvisioningAuthorization(database, {
+          organizationId: context.organizationId,
+          authorizationId: context.credentialId,
+          delegatedByUserId: userId,
+        }),
+      );
+      if (!grant) throw refused();
+    },
   };
 }
 
 /**
- * The re-check of a person, on the bound transaction: a live session with an
- * active membership of an active organisation, or the delegated provisioning
- * grant below.
+ * The bus's re-check of a person, on `database`: a live session of the
+ * person, while they are an active member of the active organisation
+ * `person.organizationId`, or the delegated provisioning grant below;
+ * otherwise refused as `forbidden`, "Current human authorization is no
+ * longer active". Every row it reads is locked `FOR SHARE` to the end of the
+ * transaction it runs in, so a revocation (Better Auth deletes the session
+ * row) waits for that transaction to end.
+ *
+ * `assertCurrent` runs it for a person's context, bound to the context's
+ * organisation (`forContext`): on the command's transaction, in one of its
+ * own, or, with the tenant binding off, on the pool. The locked checks of
+ * three writes run it in the write's own transaction, which
+ * `inTenantTransaction` has bound, for the credential a person's call names
+ * (ruling 234 (c)): the webhook repository's `canManage`, the agent auth
+ * repository's `reserveCredentialIssuance` and its `bindOAuthConsent`.
  */
-async function assertCurrentPerson(
+export async function assertCurrentPersonOn(
   database: AuthorizationDatabase,
-  context: AuthorizedCommandContext,
-) {
+  person: { organizationId: string; userId: string; credentialId: string },
+): Promise<void> {
   const [authorized] = await database
     .select({ id: organizationMembers.id })
     .from(session)
@@ -218,7 +273,7 @@ async function assertCurrentPerson(
       organizationMembers,
       and(
         eq(organizationMembers.userId, session.userId),
-        eq(organizationMembers.organizationId, context.organizationId),
+        eq(organizationMembers.organizationId, person.organizationId),
         eq(organizationMembers.status, "active"),
       ),
     )
@@ -231,8 +286,8 @@ async function assertCurrentPerson(
     )
     .where(
       and(
-        eq(session.id, context.credentialId),
-        eq(session.userId, context.actor.id),
+        eq(session.id, person.credentialId),
+        eq(session.userId, person.userId),
         sql`${session.expiresAt} > clock_timestamp()`,
       ),
     )
@@ -285,11 +340,11 @@ async function assertCurrentPerson(
     the web server is) and by the grant re-check below, which admits only an
     active, organization-wide provisioning grant delegated by that user.
   */
-  const delegated = uuidShape.test(context.credentialId)
+  const delegated = uuidShape.test(person.credentialId)
     ? await lockActiveProvisioningAuthorization(database, {
-        organizationId: context.organizationId,
-        authorizationId: context.credentialId,
-        delegatedByUserId: context.actor.id,
+        organizationId: person.organizationId,
+        authorizationId: person.credentialId,
+        delegatedByUserId: person.userId,
       })
     : null;
   if (delegated) return;

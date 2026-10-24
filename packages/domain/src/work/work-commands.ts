@@ -16,6 +16,11 @@ import {
   requireOrganization,
   requireScope,
 } from "../shared/authorization.js";
+import {
+  type FreeFormJsonExcess,
+  freeFormJsonExcess,
+  freeFormJsonRefusal,
+} from "../shared/bounded-json.js";
 import type { CommandDefinition } from "../shared/command.js";
 import { DomainError } from "../shared/errors.js";
 import type { JsonObject } from "../shared/idempotency.js";
@@ -107,6 +112,23 @@ const stateInput = baseSessionInput.extend({
     .optional(),
 });
 
+/**
+ * What `evidence`'s free-form field values may hold (ruling 237 item 3):
+ * 10,000 elements across every record's values together, counted as
+ * `freeFormJsonExcess` counts them; each value nested at most 8 deep from its
+ * own root; and the whole array at most 262,144 bytes of compact JSON. The
+ * records and their keys are bounded apart: at most 100 records, of at most
+ * 64 fields each.
+ */
+const evidenceBounds = { elements: 10_000, depth: 8, bytes: 262_144 };
+
+const evidenceRefusals: Record<FreeFormJsonExcess, string> = {
+  elements:
+    "Work evidence field values may hold at most 10,000 elements in all",
+  depth: "A work evidence field value may nest at most 8 levels deep",
+  bytes: "Work evidence may take at most 262,144 bytes as compact JSON",
+};
+
 const progressInput = baseSessionInput.extend({
   kind: z.enum(["progress", "checkpoint", "blocker", "note"]),
   bodyMd: z
@@ -143,6 +165,20 @@ const progressInput = baseSessionInput.extend({
         }),
     )
     .max(100)
+    .superRefine((records, context) => {
+      const excess = freeFormJsonExcess(
+        records.flatMap((record) => Object.values(record)),
+        records,
+        evidenceBounds,
+      );
+      if (excess) {
+        context.addIssue({
+          code: "custom",
+          message: evidenceRefusals[excess],
+          params: freeFormJsonRefusal(excess, evidenceBounds),
+        });
+      }
+    })
     .default([]),
 });
 

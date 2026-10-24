@@ -52,6 +52,7 @@ import * as schema from "./schema/index.js";
  */
 export { HOSTED_DRIVER_PACKAGES } from "./hosted-driver.js";
 export { usePrivateJwksTable } from "./test-support/private-jwks-table.js";
+export { queueQueriesOn } from "./test-support/queue-queries.js";
 export {
   endingEachCommandBinding,
   endingEachMethodBinding,

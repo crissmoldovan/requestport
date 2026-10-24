@@ -1666,7 +1666,7 @@ describe("@requestport/web, staged from a self-host build (a fixture tree of the
       copied.message,
     );
     assert.deepEqual(copied.lines, [
-      `.next-self-host/static/chunks/copied-0123456789abcdef.js is, byte for byte, next@16.3.8's dist/client/app-index.js, which the build copies as it is, and ${VERBATIM.file} names no file of SHA-256 ${sha256}: review what it bundles, and list it`,
+      `.next-self-host/static/chunks/copied-0123456789abcdef.js is, byte for byte, next@16.4.2's dist/client/app-index.js, which the build copies as it is, and ${VERBATIM.file} names no file of SHA-256 ${sha256}: review what it bundles, and list it`,
       `${VERBATIM.file} lists next's ${listed.path} (SHA-256 ${listed.sha256}), and the build copies no file of it: review the list`,
     ]);
     assert.equal(copied.copied, false, "nothing is copied");
@@ -4608,7 +4608,7 @@ describe("README.md and THIRD-PARTY-NOTICES", () => {
     );
   });
 
-  test("bundlerPackages enters the bundler WEB.bundler names, webpack, as vendored in next at the directory of its file, with no file of it as contained; refuses a holder the closure lacks, a file that is not there, and one with no package.json of its own; the real one is next 16.3.8's dist/compiled/webpack", () => {
+  test("bundlerPackages enters the bundler WEB.bundler names, webpack, as vendored in next at the directory of its file, with no file of it as contained; refuses a holder the closure lacks, a file that is not there, and one with no package.json of its own; the real one is next 16.4.2's dist/compiled/webpack", () => {
     const root = join(scratch, "bundler-fixture");
     writeTree(root, {
       "node_modules/host/package.json": '{"name":"host","version":"1.0.0"}\n',
@@ -4679,7 +4679,7 @@ describe("README.md and THIRD-PARTY-NOTICES", () => {
       ]),
       [
         [
-          `webpack (vendored in next@16.3.8 at dist/compiled/webpack)`,
+          `webpack (vendored in next@16.4.2 at dist/compiled/webpack)`,
           {
             name: "webpack",
             main: "bundle5.js",
@@ -5080,7 +5080,7 @@ describe("verbatimPackages: the files the build copies as they are, by the revie
     );
   });
 
-  test("the reviewed list is this tree's: each entry's file is, byte for byte, its holder's file as apps/web installs it, at the SHA-256 it gives; each package it bundles has a version, a licence and its licence file's text, at the SHA-256 this case pins for it (its npm tarball's file, its trailing white space dropped), and the store's, byte for byte, where this tree installs that version (object-assign 4.1.1); the polyfills Next 16.3.8 copies bundle core-js, object-assign and whatwg-fetch", () => {
+  test("the reviewed list is this tree's: each entry's file is, byte for byte, its holder's file as apps/web installs it, at the SHA-256 it gives; each package it bundles has a version, a licence and its licence file's text, at the SHA-256 this case pins for it (its npm tarball's file, its trailing white space dropped), and the store's, byte for byte, where this tree installs that version (object-assign 4.1.1); the polyfills Next 16.4.2 copies bundle core-js, object-assign and whatwg-fetch", () => {
     // Each bundled text, by the SHA-256 of the text the list holds: the
     // licence file of that version's npm tarball, which the entry's from
     // names by its sha512, its trailing white space dropped; measured after
@@ -5515,7 +5515,7 @@ describe("listedVendoredPackages: the packages a vendored copy with no package.j
     ]);
   });
 
-  test("the reviewed list is this tree's: each entry's file is, byte for byte, at the SHA-256 it gives, in each copy of its holder apps/web's production closure holds, at the version it gives; each package it bundles has a version, MIT and its licence file's text, at the SHA-256 this case pins for it (its npm tarball's file, its trailing white space dropped); @trigger.dev/core 4.6.4's two superjson bundles bundle copy-anything 3.0.5, is-what 4.1.16 and superjson 2.2.1, and one file each of drizzle-orm 0.45.2, @electric-sql/client 1.0.14 and next 16.3.8 carries esbuild's runtime helpers and one each of @modelcontextprotocol/server 2.3.0 and @better-auth/oauth-provider 1.7.6 rolldown's runtime, entered as esbuild 0.28.2 and rolldown 1.2.4 (ruling 210 item 2), which listedVendoredPackages enters over apps/web's production closure", () => {
+  test("the reviewed list is this tree's: each entry's file is, byte for byte, at the SHA-256 it gives, in each copy of its holder apps/web's production closure holds, at the version it gives; each package it bundles has a version, MIT and its licence file's text, at the SHA-256 this case pins for it (its npm tarball's file, its trailing white space dropped); @trigger.dev/core 4.6.4's two superjson bundles bundle copy-anything 3.0.5, is-what 4.1.16 and superjson 2.2.1, and one file each of drizzle-orm 0.45.2, @electric-sql/client 1.0.14 and next 16.4.2 carries esbuild's runtime helpers and one each of @modelcontextprotocol/server 2.3.0 and @better-auth/oauth-provider 1.7.6 rolldown's runtime, entered as esbuild 0.28.2 and rolldown 1.2.4 (ruling 210 item 2), which listedVendoredPackages enters over apps/web's production closure", () => {
     // Each bundled text, by the SHA-256 of the text the list holds: the
     // licence file of that version's npm tarball, which the entry's from
     // names by its sha512, its trailing white space dropped; measured at

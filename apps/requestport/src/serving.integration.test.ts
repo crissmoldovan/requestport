@@ -118,13 +118,6 @@ const ENFORCE = {
   environment: "enforce",
 } as const;
 
-/** Every check at warn: what a mode handed to a worker storage's guard cannot relax it to. */
-const ALL_WARN = {
-  declaration: "warn",
-  role: "warn",
-  environment: "warn",
-} as const;
-
 const silent = {
   debug() {},
   info() {},
@@ -899,7 +892,7 @@ describe("a serving start whose worker logins cannot authenticate (ruling 163, i
 });
 
 describe("Done when 5's enforce modes and Done when 10's second group, serving in this process", () => {
-  test("with the application storage's guard forced to enforce and the worker storages' guards in their default modes, the four pass their role checks; a worker login added to a second group is then refused by its storage's role check, in the default modes and with every check handed to the worker storages' guards at warn", async () => {
+  test("with the application storage's guard forced to enforce and the worker storages' guards in their default modes, the four pass their role checks; a worker login added to a second group is then refused by its storage's role check, in the default modes and with every check handed to the worker storages' guards enforce", async () => {
     const database = await scratchDatabase();
     const directory = mkdtempSync(join(scratch, "enforce-"));
     const instanceId = newInstanceId();
@@ -1021,12 +1014,13 @@ describe("Done when 5's enforce modes and Done when 10's second group, serving i
 
     // The converse: the dispatcher's login in a second group, refused in the
     // worker storages' default modes, and with every check handed to their
-    // guards at warn, which relaxes none (ruling 214 item 2).
+    // guards enforce, the only mode a guard takes (X30).
     const second = INSTANCE_LOGIN_GROUPS.maintenance;
     await sql(`grant "${second}" to "${logins.dispatcher}"`);
     try {
-      for (const workerGuardModes of [undefined, ALL_WARN]) {
-        const handed = workerGuardModes === undefined ? "default" : "all warn";
+      for (const workerGuardModes of [undefined, ENFORCE]) {
+        const handed =
+          workerGuardModes === undefined ? "default" : "all enforce";
         const refusedPort = await freePort();
         const refused = await serveInstance(
           {

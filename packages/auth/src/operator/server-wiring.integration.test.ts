@@ -1,4 +1,5 @@
 import type { Storage, Tx } from "@requestport/db";
+import { queueQueriesOn } from "@requestport/db/testing";
 import type { AuthorizedCommandContext } from "@requestport/domain";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, test, vi } from "vitest";
@@ -108,9 +109,16 @@ async function inRollbackTransaction(run: (tx: Tx) => Promise<void>) {
   try {
     await realDatabase().transaction(async (tx) => {
       state.tx = tx;
+      // The Better Auth composition `server.ts` builds runs over this
+      // transaction here, and its API key plugin sweeps expired keys in the
+      // background, on the transaction's one client beside the case's own
+      // queries: queued, it is handed them in turn (queueQueriesOn; X25's
+      // remainder).
+      const restore = queueQueriesOn(tx);
       try {
         await run(tx);
       } finally {
+        restore();
         state.tx = undefined;
       }
       throw new TestRollback();

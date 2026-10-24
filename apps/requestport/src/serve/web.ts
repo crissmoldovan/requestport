@@ -24,14 +24,14 @@ import { SELF_HOST_DIST_DIR } from "../web/self-host-dist-dir.js";
  *   opens anything.
  * - `prepareWebUi` sets `__NEXT_PRIVATE_STANDALONE_CONFIG` to that
  *   configuration, as Next's generated `server.js` does (a private Next
- *   internal, pinned to 16.3.8 by `../web/standalone-config.test.ts`), and
+ *   internal, pinned to 16.4.2 by `../web/standalone-config.test.ts`), and
  *   `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` to the data directory's
  *   server-action key it is handed (`../server-action-key.ts`; ruling 201
  *   item 4), before it loads `next`. Next reads that variable, in place of
  *   the key its build wrote into `server/server-reference-manifest.json`,
  *   when it first encrypts or decrypts a server action's bound argument,
- *   and keeps the key it read for the life of the process (`next@16.3.8`
- *   `dist/server/app-render/encryption-utils.js:73-91`, which the build
+ *   and keeps the key it read for the life of the process (`next@16.4.2`
+ *   `dist/server/app-render/encryption-utils.js:73-87`, which the build
  *   compiles into its server chunks). It loads `next` by
  *   resolving it from
  *   the build's directory, because this workspace has no `next` of its own:
@@ -45,16 +45,20 @@ import { SELF_HOST_DIST_DIR } from "../web/self-host-dist-dir.js";
  *   (`serve.ts`), so what Next evaluates as it prepares already finds it.
  *
  * **On-demand revalidation (ruling 202 item 1).** The build's
- * `prerender-manifest.json` holds Next's preview-mode id, the same in every
- * install of `@requestport/web`, and `next@16.3.8`'s node runtime has no
- * override for it. For a request whose `x-prerender-revalidate` equals it,
- * Next skips middleware (`dist/server/next-server.js:1129-1137`), here
- * `apps/web/src/proxy.ts`, and the answer carries none of the proxy's
+ * `server/preview-props.json` holds Next's preview-mode id, the same in every
+ * install of `@requestport/web` (`prerender-manifest.json` carries the same
+ * props), and `next@16.4.2`'s node runtime reads it from that file and has no
+ * override for it (`dist/server/next-server.js:1279-1285`, `getPreviewProps`,
+ * which `dist/server/base-server.js:383` hands the render, and
+ * `dist/server/route-modules/route-module.js:170`; 16.3.8 read
+ * `prerender-manifest.json`'s). For a request whose `x-prerender-revalidate`
+ * equals it, Next skips middleware (`dist/server/next-server.js:1144-1152`),
+ * here `apps/web/src/proxy.ts`, and the answer carries none of the proxy's
  * headers. So the `handle` `prepareWebUi` answers removes
  * `x-prerender-revalidate` and `x-prerender-revalidate-if-generated` from
  * each request's `headers` before it hands the request to Next's handler,
  * which reads them from there (`checkIsOnDemandRevalidate`,
- * `dist/server/api-utils/index.js:103-122`, handed `req.headers`). That
+ * `dist/server/api-utils/index.js:99-118`, handed `req.headers`). That
  * `handle` is the one place every request Next sees passes: Next's handler is
  * held in its closure and nowhere else, and `serve.ts` hands it to `listen`
  * as the fallback for every path the host does not serve. No route of
@@ -64,8 +68,8 @@ import { SELF_HOST_DIST_DIR } from "../web/self-host-dist-dir.js";
  * **Standard output.** As it prepares, Next's router loads its
  * configuration with logging on and, unless that load is a cache hit, writes
  * "✓ Running next.config took …" to standard output
- * (`next@16.3.8` `dist/server/config.js:1332-1342` and
- * `dist/server/lib/router-server.js:115-120`, **read**), where
+ * (`next@16.4.2` `dist/server/config.js:1190-1201` and
+ * `dist/server/lib/router-server.js:133-138`, **read**), where
  * `requestport start` writes the owner's credential and its JSON log lines
  * and nothing else (`first-start.integration.test.ts`; measured: that line
  * was the one extra). Next caches a configuration per phase, directory and

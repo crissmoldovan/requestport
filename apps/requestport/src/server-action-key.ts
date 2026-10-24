@@ -14,8 +14,8 @@ import { writeFileAtomic } from "./atomic-file.js";
 /**
  * The web UI's server-action key (Plan 13, ruling 201 item 4): the AES-GCM
  * key Next encrypts and decrypts server actions' bound arguments with
- * (`next@16.3.8` `dist/server/app-render/encryption.js:44-85`, through
- * `getActionEncryptionKey`, `encryption-utils.js:73-91` beside it).
+ * (`next@16.4.2` `dist/server/app-render/encryption.js:44-73`, through
+ * `getActionEncryptionKey`, `encryption-utils.js:73-87` beside it).
  * Next's build generates one and writes it into
  * `server/server-reference-manifest.json`, which `@requestport/web`'s tarball
  * carries, so every install would share a key anyone can read from the

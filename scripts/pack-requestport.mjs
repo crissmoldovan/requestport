@@ -202,8 +202,9 @@
     carry (ruling 210 item 2): esbuild's helpers, which ruling 209's scan
     found bound in `drizzle-orm` 0.45.2's `.cjs` files, in
     `@electric-sql/client` 1.0.14's `dist/index.mjs` and in the
-    `@edge-runtime/cookies` that `next` 16.3.8 compiles into its
-    `dist/compiled`, and rolldown's, which is `@modelcontextprotocol/server`
+    `@edge-runtime/cookies` that `next` compiles into its
+    `dist/compiled` (scanned at 16.3.8; 16.4.2's is byte for byte the
+    same), and rolldown's, which is `@modelcontextprotocol/server`
     2.3.0's `dist/chunk-Br0eD_fh.mjs` and `@better-auth/oauth-provider`
     1.7.6's `dist/rolldown-runtime-wcPFST8Q.mjs`: one file of each holder,
     entered as esbuild 0.28.2 and rolldown 1.2.4, the versions
@@ -763,8 +764,8 @@ export const REQUESTPORT = Object.freeze({
  *   ship: those three, and the fifteen platform-independent packages H.7's
  *   survey found the trace bring with them (`next` 16.3.1; each is a
  *   dependency, an optional dependency or a peer of a package on this list),
- *   which still hold at the 16.3.8 `apps/web` pins (`stageWeb` accepted its
- *   trace in H.7, round 4).
+ *   which still hold at the 16.4.2 `apps/web` pins (`stageWeb` accepted its
+ *   trace in H.7, round 4, at 16.3.8, and again at 16.4.2).
  *   `sharp`'s platform packages are `SHARP_PLATFORM`'s;
  * - `license` and `licenseText`: H's licence mapping entry, as
  *   `REQUESTPORT`'s;
@@ -779,13 +780,13 @@ export const REQUESTPORT = Object.freeze({
  * - `beyondClosure`: the packages the build compiles in that `apps/web`'s
  *   production closure does not reach: `process`, which Next's webpack
  *   configuration provides to the client's code (`ProvidePlugin`, with
- *   `require.resolve('process')`, `next` 16.3.8's
- *   `dist/build/webpack-config.js:1674`) from Next's own directory, where
+ *   `require.resolve('process')`, `next` 16.4.2's
+ *   `dist/build/webpack-config.js:1661`) from Next's own directory, where
  *   pnpm's store hoists it (`node_modules/.pnpm/node_modules/process`, a
  *   dependency of `path`'s, 0.12.7); `next` does not declare it. Measured by
  *   H.7 round 5's first pack, which refused the build for it;
  * - `compilers`: the webpack compilers Next's build runs, by the name
- *   `next@16.3.8`'s `dist/build/webpack/config/blocks/base.js:27` gives
+ *   `next@16.4.2`'s `dist/build/webpack/config/blocks/base.js:27` gives
  *   each configuration (`client`, `server`, `edge-server`; H.7 round 5's
  *   packs sealed one compilation of each). The build's record must name a
  *   sealed compilation of each, or nothing says what that compilation put
@@ -796,7 +797,7 @@ export const REQUESTPORT = Object.freeze({
  *   no entry;
  * - `bundler`: the bundler Next's build runs, by the package that vendors
  *   it (`holder`) and a file of it there (`path`): `webpack`, which `next`
- *   16.3.8 keeps in `dist/compiled/webpack` (its `package.json` names
+ *   16.4.2 keeps in `dist/compiled/webpack` (its `package.json` names
  *   `webpack`, with no version, MIT, and `bundle5.js` as its main) and
  *   whose runtime, the code of its runtime modules (the module loader and
  *   the chunk loading code), is in the runtime chunk of each compilation
@@ -1701,7 +1702,7 @@ export function privateModuleBuildProblems(
  * `node_modules/@<scope>/<name>`), as pnpm's install lays them out, by its
  * manifest's `name@version`; unless a `package.json` between that
  * directory and the file names another package, which the installed one
- * vendors: then it is that package's. Next 16.3.8 keeps the packages it
+ * vendors: then it is that package's. Next 16.4.2 keeps the packages it
  * compiles under its `dist/compiled/<name>`, each with its own manifest and
  * licence files, and the self-host build compiles some of them in
  * (fourteen in H.7 round 5's build and round 6's: `ua-parser-js`, `cookie`
@@ -2017,10 +2018,11 @@ export function emittedPackages(
  * copy of a package's, and a file as short as `export {};` matches files of
  * many packages. No chunk holds such a file, so the recorder of chunk
  * modules does not see it, and it may bundle other packages' code without
- * naming them: `next` 16.3.8's polyfills chunk is, byte for byte, its
+ * naming them: `next` 16.4.2's polyfills chunk is, byte for byte, its
  * `dist/build/polyfills/polyfill-nomodule.js`, which bundles `core-js`,
  * `whatwg-fetch` and `object-assign` and carries no licence comment and no
- * source map (H.7 round 6).
+ * source map (H.7 round 6, at 16.3.8, whose file 16.4.2's is byte for
+ * byte).
  *
  * `list` (`VERBATIM.files`, unless a test names another) must name each such
  * file by its SHA-256, with the package that ships it (`holder`) and its
@@ -2350,7 +2352,7 @@ export function bundledPackages(
  * The entry of the bundler Next's build runs (`WEB.bundler`, unless a test
  * names another): the package that `bundler.holder`, a package of
  * `closure`, vendors at the directory of its file `bundler.path`, as
- * `containedPackages` keys it (`webpack (vendored in next@16.3.8 at
+ * `containedPackages` keys it (`webpack (vendored in next@16.4.2 at
  * dist/compiled/webpack)`), with no file of it as contained, since what the
  * build holds of it is its runtime, in the build's runtime chunks, and the
  * chunk format around each other chunk's modules (`WEB.bundler`), not that

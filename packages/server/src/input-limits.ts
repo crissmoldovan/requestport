@@ -109,6 +109,37 @@ export async function readBoundedRequestText(
   }
 }
 
+/*
+  The most JSON values `assertJsonDepth` lets one body hold (ruling 237
+  item 3): the largest input a legitimate call carries, rounded up to the
+  next 1,000. That call is `post_work_update`'s on MCP's 2026-07-28 leg, with
+  the 10,000 elements the domain lets its evidence's free-form values hold
+  and the six-value `_meta` packages/mcp's tests send: 16,520 values.
+
+  packages/mcp's `server.tool-input-limit.test.ts` works that out from the
+  tools' schemas, and this package's `rest.input-limit.test.ts` does the
+  same for the REST commands' published schemas, whose largest body holds
+  16,509; each fails when a schema change moves its figure. `McpServer`'s
+  `maxToolInputElements` in packages/mcp is the same number, which
+  `mcp.tool-input-limit.test.ts` holds it to.
+*/
+const MAX_JSON_VALUES = 17_000;
+
+/**
+ * Refuses JSON that nests deeper than `maxDepth`, 20 unless given, or holds
+ * more than 17,000 values, counting every value the walk visits: the root,
+ * each array element and each object member's value, at every level.
+ *
+ * Four routes walk a JSON body here, all of it, before they read any of
+ * it: a REST command's body (`rest.ts`), an MCP message (`mcp.ts`), an
+ * artifact import's body (`artifact-import.ts`) and apps/web's Slack
+ * interaction payload. The bound is per body. An MCP message that is a
+ * legacy JSON-RPC batch is one body, so the calls in it share the 17,000.
+ * The import and Slack carry far fewer: the import's largest body holds 55
+ * values, and Slack's payload for RequestPort's largest question message
+ * about 170 (track J's record, after the independent review of ruling 237
+ * item 3).
+ */
 export function assertJsonDepth(value: unknown, maxDepth = 20) {
   const stack: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }];
   let visited = 0;
@@ -116,7 +147,7 @@ export function assertJsonDepth(value: unknown, maxDepth = 20) {
     const current = stack.pop();
     if (!current) break;
     visited += 1;
-    if (visited > 100_000) {
+    if (visited > MAX_JSON_VALUES) {
       throw new DomainError("validation_failed", "JSON input is too complex");
     }
     if (current.depth > maxDepth) {

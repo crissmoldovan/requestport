@@ -350,3 +350,152 @@ describe.sequential("delegated provisioning authorization", () => {
     });
   });
 });
+
+/*
+ * The read `provisionAgent` makes of its grant before either write (J.10's
+ * F9, ruling 233 item 4): `assertProvisioningGrant` admits only what
+ * `lockActiveProvisioningAuthorization` admits. Unlike `assertCurrent`, whose
+ * person branch tries a session first, a live session of the same person
+ * never passes, whatever its id, so a session id shaped as a UUID can no
+ * longer stand in for the grant.
+ */
+describe.sequential("the provisioning grant read before provisionAgent writes (ruling 233 item 4)", () => {
+  const refusal = {
+    code: "forbidden",
+    message: "Current human authorization is no longer active",
+  };
+
+  test("admits the owner or admin a live organization-wide grant delegates to", {
+    timeout: 30_000,
+  }, async () => {
+    await inRollbackTransaction(async (tx) => {
+      const owner = await seedProvisioningGrant(tx);
+      const admin = await seedProvisioningGrant(tx, { role: "admin" });
+      const repository = authorizationOn(tx);
+
+      await expect(
+        repository.assertProvisioningGrant(delegatedProvisioningContext(owner)),
+      ).resolves.toBeUndefined();
+      await expect(
+        repository.assertProvisioningGrant(delegatedProvisioningContext(admin)),
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  test("refuses a revoked, an expired, a foreign and an unknown grant, a project's grant, a disabled client's, and one whose person is no longer an owner or admin, in the bus's words", {
+    timeout: 30_000,
+  }, async () => {
+    await inRollbackTransaction(async (tx) => {
+      const revoked = await seedProvisioningGrant(tx, { revoked: true });
+      const expired = await seedProvisioningGrant(tx);
+      await tx.execute(sql`
+        update "agent_oauth_grants"
+        set "expires_at" = now() - interval '1 minute'
+        where "id" = ${expired.grantId}
+      `);
+      const live = await seedProvisioningGrant(tx);
+      const other = await seedProvisioningGrant(tx);
+      // A working grant of a project: the same person, an active grant, but
+      // not a provisioning one.
+      const scoped = await seedProvisioningGrant(tx);
+      const projectId = crypto.randomUUID();
+      await tx.execute(sql`
+        insert into "projects"
+          ("id", "organization_id", "name", "slug", "key_prefix", "status")
+        values (${projectId}, ${scoped.organizationId}, 'Scoped project',
+          ${`scoped-${projectId}`}, 'SCP', 'active')
+      `);
+      await tx.execute(sql`
+        update "agent_oauth_grants"
+        set "project_id" = ${projectId},
+          "scopes" = ${JSON.stringify(["request:read"])}::jsonb
+        where "id" = ${scoped.grantId}
+      `);
+      const disabled = await seedProvisioningGrant(tx);
+      await tx.execute(sql`
+        update "oauth_client" set "disabled" = true
+        where "client_id" = ${disabled.clientId}
+      `);
+      // An owner when the grant was delegated, a member now.
+      const demoted = await seedProvisioningGrant(tx);
+      await tx.execute(sql`
+        update "organization_members" set "role" = 'member'
+        where "organization_id" = ${demoted.organizationId}
+          and "user_id" = ${demoted.userId}
+      `);
+      const repository = authorizationOn(tx);
+
+      for (const context of [
+        delegatedProvisioningContext(revoked),
+        delegatedProvisioningContext(expired),
+        delegatedProvisioningContext({ ...live, grantId: other.grantId }),
+        delegatedProvisioningContext({
+          ...live,
+          grantId: crypto.randomUUID(),
+        }),
+        delegatedProvisioningContext(scoped),
+        delegatedProvisioningContext(disabled),
+        delegatedProvisioningContext(demoted),
+      ]) {
+        await expect(
+          repository.assertProvisioningGrant(context),
+        ).rejects.toMatchObject(refusal);
+      }
+    });
+  });
+
+  test("refuses the person's own live session in the grant's place, whatever its id, though assertCurrent admits it", {
+    timeout: 30_000,
+  }, async () => {
+    await inRollbackTransaction(async (tx) => {
+      const seeded = await seedProvisioningGrant(tx);
+      // Better Auth's ids here are 32 letters and digits; an embedder's
+      // generator could make them UUIDs, the shape a grant id has.
+      const sessionIds = [
+        crypto.randomUUID(),
+        `session_${crypto.randomUUID()}`,
+      ];
+      for (const sessionId of sessionIds) {
+        await tx.execute(sql`
+          insert into "session" ("id", "expires_at", "token", "updated_at", "user_id")
+          values (${sessionId}, now() + interval '1 hour',
+            ${`token_${crypto.randomUUID()}`}, now(), ${seeded.userId})
+        `);
+      }
+      const repository = authorizationOn(tx);
+
+      for (const sessionId of sessionIds) {
+        const context = {
+          ...delegatedProvisioningContext(seeded),
+          credentialId: sessionId,
+        };
+        await expect(
+          repository.assertCurrent(context),
+        ).resolves.toBeUndefined();
+        await expect(
+          repository.assertProvisioningGrant(context),
+        ).rejects.toMatchObject(refusal);
+      }
+    });
+  });
+
+  test("refuses an agent's context naming the same grant, even with the delegating person's id as the agent's", {
+    timeout: 30_000,
+  }, async () => {
+    await inRollbackTransaction(async (tx) => {
+      const seeded = await seedProvisioningGrant(tx);
+      const repository = authorizationOn(tx);
+
+      // The actor's id is the person the grant names, so the grant's own
+      // read (`lockActiveProvisioningAuthorization`, which matches the
+      // delegating person by id) would admit it: only the actor's type
+      // refuses it.
+      await expect(
+        repository.assertProvisioningGrant({
+          ...delegatedProvisioningContext(seeded),
+          actor: { type: "agent" as const, id: seeded.userId },
+        }),
+      ).rejects.toMatchObject(refusal);
+    });
+  });
+});

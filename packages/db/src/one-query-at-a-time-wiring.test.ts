@@ -13,9 +13,11 @@ import { describe, expect, it } from "vitest";
  * dropped it. This case reads each configuration that loads it, packages/db's
  * two and, since X25 (ruling 231; ruling 232 item 2), apps/web's node
  * project, packages/core's configuration, and packages/jobs' integration
- * project and worker-role lane, and fails when one stops listing it. Each
- * setup file a configuration lists is resolved from that configuration's
- * directory, as Vitest resolves it, and compared with the guard's path.
+ * project and worker-role lane, and, since X25's remainder (ruling 232 item
+ * 7), packages/auth's one configuration, and fails when one stops listing
+ * it. Each setup file a configuration lists is resolved from that
+ * configuration's directory, as Vitest resolves it, and compared with the
+ * guard's path.
  */
 const db = join(dirname(fileURLToPath(import.meta.url)), "..");
 const GUARD = join(db, "src/test-support/one-query-at-a-time.ts");
@@ -50,6 +52,7 @@ const CONFIGURATIONS: readonly { config: string; project?: string }[] = [
   { config: "packages/core/vitest.config.ts" },
   { config: "packages/jobs/vitest.config.ts", project: "integration" },
   { config: "packages/jobs/vitest.worker-role.config.ts" },
+  { config: "packages/auth/vitest.config.ts" },
 ];
 
 describe("the one-query-at-a-time guard's wiring (X24; X25)", () => {

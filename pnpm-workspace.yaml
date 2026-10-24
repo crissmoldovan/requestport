@@ -7,7 +7,7 @@ overrides:
   jose: 6.2.9
   kysely: 0.29.5
   'ws@>=8.0.0 <8.21.0': 8.21.3
-  'undici@>=8.0.0 <8.10.2': 8.11.2
+  'undici@>=8.0.0 <8.12.3': 8.12.3
   'source-map-js@>=1.0.0 <1.2.2': 1.2.2
 allowBuilds:
   '@depot/cli': false

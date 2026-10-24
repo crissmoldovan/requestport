@@ -13,11 +13,13 @@ import {
 
 /*
  * The preview-mode id the published build carries (ruling 202 item 1).
- * `@requestport/web`'s `prerender-manifest.json` holds Next's
- * `previewModeId`, the same in every install, and `next@16.3.8`'s node
- * runtime reads it from that file only. For a request whose
- * `x-prerender-revalidate` equals it, Next skips middleware
- * (`dist/server/next-server.js:1129-1137`), here `apps/web/src/proxy.ts`,
+ * `@requestport/web`'s `server/preview-props.json` holds Next's
+ * `previewModeId`, the same in every install, and `next@16.4.2`'s node
+ * runtime reads it from that file only (`dist/server/next-server.js:1279-1285`
+ * and `dist/server/route-modules/route-module.js:170`; 16.3.8 read
+ * `prerender-manifest.json`'s, which still carries the same props). For a
+ * request whose `x-prerender-revalidate` equals it, Next skips middleware
+ * (`dist/server/next-server.js:1144-1152`), here `apps/web/src/proxy.ts`,
  * which sets the content-security policy with its nonce, the other security
  * headers and `cache-control: private, no-store`. The self-host removes that
  * header and `x-prerender-revalidate-if-generated` from every request before
@@ -26,7 +28,7 @@ import {
  * One first start on PGlite, through the executable, serving the self-host
  * build the integration project's global setup made. While it serves,
  * `/sign-in` is asked for plainly, with a wrong id of the same length, with
- * the served build's own id, read from that build's prerender manifest, with
+ * the served build's own id, read from that build's preview props, with
  * that id and `x-prerender-revalidate-if-generated`, and plainly again. Each
  * must answer whole within `ANSWER_BOUND_MS`, as the first plain request
  * does, with the proxy's headers. The id is never written
@@ -35,10 +37,11 @@ import {
  * space in its name (ruling 152).
  */
 
-const PRERENDER_MANIFEST = join(
+const PREVIEW_PROPS = join(
   defaultSelfHostWebDirectory(),
   ".next-self-host",
-  "prerender-manifest.json",
+  "server",
+  "preview-props.json",
 );
 const scratch = mkdtempSync(join(tmpdir(), "requestport-preview-mode "));
 const directory = join(scratch, "data pglite");
@@ -74,14 +77,12 @@ let finished: Finished;
 beforeAll(async () => {
   // The global setup builds it; without it the start below refuses.
   locateSelfHostWeb();
-  const { previewModeId } = (
-    JSON.parse(readFileSync(PRERENDER_MANIFEST, "utf8")) as {
-      preview: { previewModeId: string };
-    }
-  ).preview;
+  const { previewModeId } = JSON.parse(readFileSync(PREVIEW_PROPS, "utf8")) as {
+    previewModeId: string;
+  };
   expect(
     /^[0-9a-f]{32}$/u.test(previewModeId),
-    "the served build's prerender manifest holds a preview-mode id of 32 hex",
+    "the served build's preview props hold a preview-mode id of 32 hex",
   ).toBe(true);
 
   const port = await freePort();

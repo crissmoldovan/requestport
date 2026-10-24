@@ -125,8 +125,17 @@ export function createAgentApiKeyService(dependencies: {
    * context is not re-checked here, and `assertManager` refuses it. The
    * re-check runs where `authorization` runs it; its locks are not held into
    * the repositories' own transactions, as the bus holds them into a
-   * command's. The role is `assertManager`'s, and the repository checks it
-   * again under lock.
+   * command's. The role is `assertManager`'s. `issue` then hands the same
+   * `credentialId` to `reserveCredentialIssuance`, whose transaction reads
+   * the membership, that credential and the role again under lock before it
+   * saves the reservation (ruling 234 (c)), so a session revoked or expired
+   * between this re-check and the reservation is refused there, before the
+   * minter is reached. `createCredential`, which writes the agent credential
+   * after the minter, does not read the person's session again. It reads
+   * again, under lock, their membership and role (an owner or admin, or the
+   * project's maintainer) and, for a key a provisioning grant issues
+   * (`issuedByGrantId`, which `provisionAgent` passes), that grant's own
+   * status: active, unrevoked and unexpired.
    */
   async function assertCurrentPerson(context: AuthorizedCommandContext) {
     if (context.actor.type !== "user") return;
@@ -238,6 +247,11 @@ export function createAgentApiKeyService(dependencies: {
     const receipt = await dependencies.authRepository.reserveCredentialIssuance(
       {
         actorUserId: userId,
+        // Read again, with the role, in the reservation's own transaction
+        // (ruling 234 (c)): a session revoked or expired between the re-check
+        // above and the reservation is refused there, before the minter is
+        // reached.
+        personCredentialId: context.credentialId,
         organizationId: input.organizationId,
         projectId: input.projectId,
         ...meta,

@@ -17,8 +17,8 @@ import { SELF_HOST_DIST_DIR } from "../web/self-host-dist-dir.js";
  *
  * 1. it fetches `/sign-in` from the start's own listener, so that Next
  *    renders an app page: it loads its manifests, which
- *    `getActionEncryptionKey` reads (`next@16.3.8`
- *    `dist/server/app-render/manifests-singleton.js:271-322`), and the
+ *    `getActionEncryptionKey` reads (`next@16.4.2`
+ *    `dist/server/app-render/manifests-singleton.js:343-394`), and the
  *    page's server chunks into the build's webpack runtime, among them the
  *    one that carries Next's `encryption-utils` compiled into the build;
  * 2. it takes that webpack runtime from the build the start serves
@@ -29,10 +29,10 @@ import { SELF_HOST_DIST_DIR } from "../web/self-host-dist-dir.js";
  *    build's server actions use for a bound argument, from
  *    `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` when it is set and from the
  *    server-reference manifest otherwise
- *    (`dist/server/app-render/encryption-utils.js:73-91`, as compiled);
+ *    (`dist/server/app-render/encryption-utils.js:73-87`, as compiled);
  * 3. it encrypts the argument `RP_H11_PROBE_ARGUMENT` names under the action
  *    id `RP_H11_PROBE_ACTION` names with that key, as
- *    Next's `encodeActionBoundArg` does (`encryption.js:70-85`: 16 random
+ *    Next's `encodeActionBoundArg` does (`encryption.js:62-73`: 16 random
  *    bytes of IV, AES-GCM over the action id and the argument, base64), and
  *    records the result, `sealed`, and the page's status.
  *

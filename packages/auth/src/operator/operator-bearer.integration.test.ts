@@ -8,7 +8,7 @@ import {
   identitySchema,
   type Tx,
 } from "@requestport/db";
-import { endTenantBinding } from "@requestport/db/testing";
+import { endTenantBinding, queueQueriesOn } from "@requestport/db/testing";
 import { storageOptionsFromEnv } from "@requestport/db/wiring";
 import {
   AtomicCommandBus,
@@ -67,7 +67,17 @@ class TestRollback extends Error {}
 async function inRollbackTransaction(run: (tx: Tx) => Promise<void>) {
   try {
     await suiteStorage.db.transaction(async (tx) => {
-      await run(tx);
+      // Better Auth, composed over this transaction, issues some of its
+      // queries in the background (the OAuth provider's seeding of resources
+      // as an instance starts, the API key plugin's sweep of expired keys),
+      // which land on the transaction's one client beside the case's own:
+      // queued, it is handed them in turn (queueQueriesOn; X25's remainder).
+      const restore = queueQueriesOn(tx);
+      try {
+        await run(tx);
+      } finally {
+        restore();
+      }
       throw new TestRollback();
     });
   } catch (error) {

@@ -500,11 +500,14 @@ describe("acceptance run evidence", () => {
   test("names every gate exactly once, in the vocabulary the document uses", () => {
     // This used to hold each gate name against a command in
     // `.github/workflows/verify-reusable.yml`, so the schema could not name a
-    // gate CI did not run. There is no CI and no workflow, and nothing writes
-    // this document any more — `scripts/write-run-evidence.mjs` went with the
-    // workflows on 2026-09-18. The format is kept, dormant, because the local
-    // gate could produce it later and the shared validator is exercised against
-    // it below; what is gone is the binding, so this asserts what is still
+    // gate CI did not run. There is no CI, and no workflow runs a gate: the
+    // only workflow is the public repository's `.github/workflows/publish.yml`,
+    // which publishes a release's tarballs and checks out, installs, builds
+    // and tests nothing of the repository. Nothing writes this document any
+    // more — `scripts/write-run-evidence.mjs` went with the CI workflows on
+    // 2026-09-18. The format is kept, dormant, because the local gate could
+    // produce it later and the shared validator is exercised against it
+    // below; what is gone is the binding, so this asserts what is still
     // checkable: the vocabulary is a set, sorted, with nothing repeated.
     const declared = resolveRef(schema, "#/$defs/gate").enum as string[];
 

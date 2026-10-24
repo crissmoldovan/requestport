@@ -650,6 +650,244 @@ describe.sequential("binding a consent to a self-registered client", () => {
   });
 });
 
+/*
+ * Ruling 234 (c): a person's credential, read again in the reservation's and
+ * the binding's own transactions. Off the bus, `./agent-services` re-checks a
+ * person in a transaction that ends before these writes start, so each write
+ * is handed the credential the person's call names (`personCredentialId`)
+ * and reads it again under its own locks: a session deleted (Better Auth's
+ * revocation) or expired since is refused in the bus's words, and nothing is
+ * written. Without one, the person is checked by membership and role alone,
+ * as every caller before ruling 234 (c) did.
+ */
+describe.sequential("a person's credential, read again inside the reservation and the binding (ruling 234 (c))", () => {
+  const refusal = {
+    code: "forbidden",
+    message: "Current human authorization is no longer active",
+  };
+
+  async function seedSessionOf(
+    tx: Tx,
+    userId: string,
+    state: "live" | "expired" | "deleted",
+  ) {
+    const sessionId = `session_${crypto.randomUUID()}`;
+    await tx.execute(sql`
+      insert into "session" ("id", "expires_at", "token", "updated_at", "user_id")
+      values (${sessionId},
+        now() + ${state === "expired" ? "-1 minute" : "1 hour"}::interval,
+        ${`token_${crypto.randomUUID()}`}, now(), ${userId})
+    `);
+    if (state === "deleted") {
+      await tx.execute(sql`delete from "session" where "id" = ${sessionId}`);
+    }
+    return sessionId;
+  }
+
+  /** Another person, with a live session and no membership. */
+  async function seedOutsiderSession(tx: Tx) {
+    const userId = `user_${crypto.randomUUID()}`;
+    const email = `${userId}@example.invalid`;
+    await tx.execute(sql`
+      insert into "signup_allowlist" ("normalized_email", "status")
+      values (${email}, 'active')
+    `);
+    await tx.execute(sql`
+      insert into "user" ("id", "name", "email", "updated_at")
+      values (${userId}, 'Outsider', ${email}, now())
+    `);
+    return seedSessionOf(tx, userId, "live");
+  }
+
+  /**
+   * Another active member of the organisation, an admin, with a live
+   * session: the membership join admits that session's own person, so only
+   * the session's owner, read against the person the call names, refuses it.
+   */
+  async function seedMemberSession(tx: Tx, organizationId: string) {
+    const sessionId = await seedOutsiderSession(tx);
+    await tx.execute(sql`
+      insert into "organization_members" ("organization_id", "user_id", "role", "status")
+      select ${organizationId}, "user_id", 'admin', 'active'
+      from "session" where "id" = ${sessionId}
+    `);
+    return sessionId;
+  }
+
+  async function countFor(tx: Tx, table: string, organizationId: string) {
+    const counted = await tx.execute(
+      sql`select count(*)::int as n from ${sql.identifier(table)} where "organization_id" = ${organizationId}`,
+    );
+    return Number((counted.rows[0] as { n: number }).n);
+  }
+
+  function reservation(
+    seeded: Awaited<ReturnType<typeof seedCredential>>,
+    personCredentialId?: string,
+  ) {
+    return {
+      actorUserId: seeded.userId,
+      ...(personCredentialId === undefined ? {} : { personCredentialId }),
+      organizationId: seeded.organizationId,
+      projectId: seeded.projectId,
+      idempotencyKey: crypto.randomUUID(),
+      expectedVersion: 0,
+      fingerprintSecret: "credential-reservation-fingerprint-secret",
+      normalizedInput: { case: crypto.randomUUID() },
+    };
+  }
+
+  test("reserveCredentialIssuance refuses an expired session, a deleted one, a non-member's and another member's, in the bus's words, and saves no receipt", {
+    timeout: seedingTimeoutMs,
+  }, async () => {
+    await inRollbackTransaction(async (tx) => {
+      const seeded = await seedCredential(tx);
+      const repository = createAgentAuthRepository(tx);
+      const credentials = [
+        await seedSessionOf(tx, seeded.userId, "expired"),
+        await seedSessionOf(tx, seeded.userId, "deleted"),
+        await seedOutsiderSession(tx),
+        await seedMemberSession(tx, seeded.organizationId),
+      ];
+
+      for (const personCredentialId of credentials) {
+        await expect(
+          repository.reserveCredentialIssuance(
+            reservation(seeded, personCredentialId),
+          ),
+        ).rejects.toMatchObject(refusal);
+      }
+      expect(
+        await countFor(tx, "command_receipts", seeded.organizationId),
+      ).toBe(0);
+    });
+  });
+
+  test("reserveCredentialIssuance reserves for the person's live session, and, given no credential, as before", {
+    timeout: seedingTimeoutMs,
+  }, async () => {
+    await inRollbackTransaction(async (tx) => {
+      const seeded = await seedCredential(tx);
+      const repository = createAgentAuthRepository(tx);
+      const live = await seedSessionOf(tx, seeded.userId, "live");
+
+      await expect(
+        repository.reserveCredentialIssuance(reservation(seeded, live)),
+      ).resolves.toMatchObject({ reserved: true });
+      await expect(
+        repository.reserveCredentialIssuance(reservation(seeded)),
+      ).resolves.toMatchObject({ reserved: true });
+      expect(
+        await countFor(tx, "command_receipts", seeded.organizationId),
+      ).toBe(2);
+    });
+  });
+
+  test("reserveCredentialIssuance refuses a replay of an earlier reservation once its session has ended, before the earlier receipt is answered", {
+    timeout: seedingTimeoutMs,
+  }, async () => {
+    await inRollbackTransaction(async (tx) => {
+      const seeded = await seedCredential(tx);
+      const repository = createAgentAuthRepository(tx);
+      const live = await seedSessionOf(tx, seeded.userId, "live");
+      // One input, so each call names the same receipt.
+      const input = reservation(seeded, live);
+
+      await expect(
+        repository.reserveCredentialIssuance(input),
+      ).resolves.toMatchObject({ reserved: true });
+      // The control: while the session is live, a replay is answered with
+      // the earlier receipt.
+      await expect(
+        repository.reserveCredentialIssuance(input),
+      ).resolves.toMatchObject({ reserved: false });
+      await tx.execute(sql`delete from "session" where "id" = ${live}`);
+
+      await expect(
+        repository.reserveCredentialIssuance(input),
+      ).rejects.toMatchObject(refusal);
+      expect(
+        await countFor(tx, "command_receipts", seeded.organizationId),
+      ).toBe(1);
+    });
+  });
+
+  function binding(
+    seeded: Awaited<ReturnType<typeof seedCredential>>,
+    clientId: string,
+    personCredentialId?: string,
+  ) {
+    return {
+      organizationId: seeded.organizationId,
+      agentPrincipalId: seeded.agentPrincipalId,
+      userId: seeded.userId,
+      ...(personCredentialId === undefined ? {} : { personCredentialId }),
+      clientId,
+      audience: "mcp" as const,
+      projectId: seeded.projectId,
+      laneIds: [],
+      scopes: ["request:read"],
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1_000),
+      correlationId: crypto.randomUUID(),
+      expectedVersion: 0 as const,
+      idempotencyKey: crypto.randomUUID(),
+      fingerprintSecret: "consent-binding-fingerprint-secret",
+    };
+  }
+
+  test("bindOAuthConsent refuses an expired session, a deleted one, a non-member's and another member's, in the bus's words, and writes no grant", {
+    timeout: seedingTimeoutMs,
+  }, async () => {
+    await inRollbackTransaction(async (tx) => {
+      const seeded = await seedCredential(tx);
+      const clientId = await seedRegisteredClient(tx, seeded.userId);
+      const repository = createAgentAuthRepository(tx);
+      const credentials = [
+        await seedSessionOf(tx, seeded.userId, "expired"),
+        await seedSessionOf(tx, seeded.userId, "deleted"),
+        await seedOutsiderSession(tx),
+        await seedMemberSession(tx, seeded.organizationId),
+      ];
+
+      for (const personCredentialId of credentials) {
+        await expect(
+          repository.bindOAuthConsent(
+            binding(seeded, clientId, personCredentialId),
+          ),
+        ).rejects.toMatchObject(refusal);
+      }
+      expect(
+        await countFor(tx, "agent_oauth_grants", seeded.organizationId),
+      ).toBe(0);
+      expect(
+        await countFor(tx, "command_receipts", seeded.organizationId),
+      ).toBe(0);
+    });
+  });
+
+  test("bindOAuthConsent binds for the person's live session, and, given no credential, as before", {
+    timeout: seedingTimeoutMs,
+  }, async () => {
+    await inRollbackTransaction(async (tx) => {
+      const seeded = await seedCredential(tx);
+      const first = await seedRegisteredClient(tx, seeded.userId);
+      const second = await seedRegisteredClient(tx, seeded.userId);
+      const repository = createAgentAuthRepository(tx);
+      const live = await seedSessionOf(tx, seeded.userId, "live");
+
+      await expect(
+        repository.bindOAuthConsent(binding(seeded, first, live)),
+      ).resolves.toMatchObject({ id: expect.any(String) });
+      await expect(
+        repository.bindOAuthConsent(binding(seeded, second)),
+      ).resolves.toMatchObject({ id: expect.any(String) });
+      expect(
+        await countFor(tx, "agent_oauth_grants", seeded.organizationId),
+      ).toBe(2);
+    });
+  });
+});
+
 describe.sequential("repairing a consent no grant stands behind", () => {
   async function seedPair(
     tx: Tx,

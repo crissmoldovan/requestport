@@ -360,12 +360,11 @@ export function loadPgDriver() {
  * and the check's own query would wait for itself. Nothing here calls
  * `query` with a callback.
  *
- * A check that refused (enforce mode) stays refused: every later use
- * rejects with the same error. A check that could not run — the connection
- * failed — is asked again on the next use, in both modes: in warn mode it
- * answers `failed` and the use goes ahead, in enforce mode it throws the
- * connection's error, and either way `checked` is cleared. A cold start that
- * cannot reach the database still has its role judged once it can.
+ * A check that refused stays refused: every later use rejects with the same
+ * error. A check that could not run — the connection failed — throws the
+ * connection's error, which is not a refusal, so `checked` is cleared and
+ * the next use asks again. A cold start that cannot reach the database still
+ * has its role judged once it can.
  */
 function installRoleCheck(
   client: StorageClient,
@@ -392,9 +391,7 @@ function installRoleCheck(
         (text) => query(text) as Promise<{ rows: Record<string, unknown>[] }>,
       )
       .then(
-        (status) => {
-          if (status === "failed") checked = undefined;
-        },
+        () => undefined,
         (error: unknown) => {
           if (!(error instanceof DatabaseRoleGuardError)) checked = undefined;
           throw error;
