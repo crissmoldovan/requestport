@@ -27,8 +27,8 @@ import type { OperatorActionState } from "./action-state.js";
   Operator credentials on the web (Plan 13, F.3): a person issues, rotates and
   revokes them here. Each action resolves the session, the organisation and
   the `mutation` limiter before it reads its submission, and answers the
-  unavailable state while F3-14's answer is off. Navigation to this page is
-  F.3.1's; until then it is reachable by its URL only.
+  unavailable state while F3-14's answer is off. The navigation entry to this
+  page is F.3.1's, in components/primary-navigation.tsx.
 */
 
 const operatorActions = createOperatorActions({

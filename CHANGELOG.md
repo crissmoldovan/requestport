@@ -3,6 +3,43 @@
 Each RequestPort release publishes its packages together, at one version.
 This file records each release, the newest first.
 
+## 0.2.3
+
+**What.** The fourteen packages at `0.2.3`, together, as before. The web
+application's navigation gains an "Operator keys" link, to the page where
+people issue operator credentials. The development tools' last four
+advisories are gone.
+
+**Why.**
+
+- **The operator credentials page was reachable only by its URL.** It
+  shipped that way so it could stay hidden until a deployment turned operator
+  credentials on. The hosted service has now turned them on, so the page gets
+  its link.
+- **`pnpm audit` still reported four moderate advisories.** vitest 4.1.10 had
+  GHSA-82fw-gwwq-j7x9 and GHSA-qxg6-89mg-rqv8, and esbuild 0.18.20 had
+  GHSA-67mh-4wv8-2f99. They were all in development tools: none of them is in
+  what `requestport start` runs.
+
+**Impact.**
+
+- **New link: Operator keys.** Every signed-in person sees it, between
+  Operations and Agents. Owners and admins see every operator credential in
+  their organization; a member sees their own.
+- **Self-hosted instances: off until you turn it on.** The page issues
+  nothing unless the server's environment sets
+  `REQUESTPORT_OPERATOR_CREDENTIALS=enabled`. With it unset, the default, the
+  link opens the page's notice that operator credentials are off.
+- **Development tools.** vitest moves to 4.1.12. esbuild 0.18.20, which only
+  drizzle-kit's `@esbuild-kit` loader carried, leaves the tree. `pnpm audit`
+  reports no known vulnerabilities. No runtime package changes.
+- **Nothing else changes.** The REST API, MCP and the web application behave
+  exactly as in 0.2.2, apart from the new link. No migration.
+- **One version, as before.** `requestport` 0.2.3 depends on each of the
+  other thirteen packages at exactly `0.2.3`, and `latest` moves to `0.2.3`.
+- **Supported versions.** Security fixes go to the latest `0.x` release only,
+  as `SECURITY.md` says, so 0.2.2 receives none from now on.
+
 ## 0.2.2
 
 **What.** The fourteen packages at `0.2.2`, together, as before. `requestport

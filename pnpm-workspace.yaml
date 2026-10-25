@@ -9,6 +9,13 @@ overrides:
   'ws@>=8.0.0 <8.21.0': 8.21.3
   'undici@>=8.0.0 <8.12.3': 8.12.3
   'source-map-js@>=1.0.0 <1.2.2': 1.2.2
+  # GHSA-67mh-4wv8-2f99 (esbuild <=0.24.2; ruling 253). drizzle-kit 0.31.10
+  # declares @esbuild-kit/esm-loader, whose core-utils asks for esbuild
+  # ~0.18.20, but no file drizzle-kit publishes loads that loader: migrate and
+  # generate load drizzle-kit's own esbuild, 0.25.12, the version given here.
+  # The selector names core-utils alone, so the trigger.dev CLI's esbuild
+  # 0.23.1, which bundles the Trigger.dev worker, does not move.
+  '@esbuild-kit/core-utils>esbuild': 0.25.12
 allowBuilds:
   '@depot/cli': false
   '@prisma/client': false

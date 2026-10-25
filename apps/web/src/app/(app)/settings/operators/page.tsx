@@ -32,11 +32,11 @@ import {
 /*
   Operator credentials (Plan 13, F.3): secrets a script, a CI job or the
   self-host CLI holds to act on /api/v1 with the live authority of the person
-  who issued them. Reachable by its URL only until F.3.1 adds the navigation
-  entry (ruling 13). While F3-14's answer is off — the migration not applied,
-  the owner's switch not set, or /change-password still mounted — it draws the
-  unavailable state and reads nothing else, because before the migration there
-  is no table to read.
+  who issued them. Its navigation entry, "Operator keys", is F.3.1's (ruling
+  13), drawn whatever the switch says. While F3-14's answer is off — the
+  migration not applied, the owner's switch not set, or /change-password still
+  mounted — it draws the unavailable state and reads nothing else, because
+  before the migration there is no table to read.
 */
 
 const description =

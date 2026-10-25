@@ -10,6 +10,7 @@ import {
   Hash,
   Import,
   Inbox,
+  KeyRound,
   LayoutDashboard,
   ListChecks,
   MessageCircleQuestion,
@@ -44,6 +45,10 @@ export const navigationDestinations = [
   { href: "/settings/members", icon: Users, label: "Members" },
   { href: "/settings/routing", icon: Route, label: "Routing" },
   { href: "/settings/operations", icon: Gauge, label: "Operations" },
+  // Plan 13, F.3.1: drawn whatever REQUESTPORT_OPERATOR_CREDENTIALS says. With
+  // operator credentials off, the page draws its unavailable state and every
+  // action on it refuses; the link is the only thing this entry adds.
+  { href: "/settings/operators", icon: KeyRound, label: "Operator keys" },
   { href: "/agents", icon: Bot, label: "Agents" },
   { href: "/webhooks", icon: Webhook, label: "Webhooks" },
   { href: "/slack", icon: Hash, label: "Slack" },

@@ -68,8 +68,8 @@ vi.mock("./actions.js", () => {
 import OperatorCredentialsPage from "./page.js";
 
 /*
-  Plan 13, F.3: `/settings/operators`, reachable by its URL only until F.3.1
-  adds the navigation entry. While F3-14's answer is off it draws the
+  Plan 13, F.3: `/settings/operators`, linked from the primary navigation
+  since F.3.1. While F3-14's answer is off it draws the
   unavailable state and reads nothing else — before the migration there is no
   table to read. Once on, it lists the organisation's credentials (a person
   who is not an owner or admin sees only their own), offers rotation to each
@@ -184,6 +184,7 @@ describe("the operator credentials page", () => {
     const html = await markup();
     expect(html).toContain("Nightly deploy");
     expect(html).not.toContain("Someone else");
+    expect(html).toContain("Issue one-time key");
   });
 
   test("an empty list says so", async () => {

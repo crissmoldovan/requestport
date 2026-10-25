@@ -23,25 +23,40 @@ const db = join(dirname(fileURLToPath(import.meta.url)), "..");
 const GUARD = join(db, "src/test-support/one-query-at-a-time.ts");
 
 /**
- * The setup files `config` lists, as paths, in the project named `project`
- * when it names one: the text from that project's `name` to the next
- * `name`, or from the start of the file.
+ * The setup files a configuration's `text` lists, as paths resolved from
+ * `directory`, in the project named `project` when it names one: the text
+ * from that project's `name` to the next `name`, or from the start of the
+ * file. Comments are dropped before the paths are read, so an entry that has
+ * been commented out does not count as loaded.
  */
-function setupFilesOf(config: string, project?: string): string[] {
-  const text = readFileSync(config, "utf8");
+function setupFilesIn(
+  text: string,
+  directory: string,
+  project?: string,
+): string[] {
   let scope = text;
   if (project !== undefined) {
     const named = `name: ${JSON.stringify(project)}`;
     const at = text.indexOf(named);
-    expect(at, `${config} names a project ${project}`).toBeGreaterThan(-1);
+    expect(at, `the configuration names a project ${project}`).toBeGreaterThan(
+      -1,
+    );
     const next = text.indexOf("name: ", at + named.length);
     scope = text.slice(at, next === -1 ? undefined : next);
   }
   const listed = /setupFiles:\s*\[([^\]]*)\]/u.exec(scope);
-  expect(listed, `${config} lists setup files`).not.toBeNull();
-  return [...(listed?.[1] ?? "").matchAll(/"([^"]+)"/gu)].map(([, path]) =>
-    resolve(dirname(config), path ?? ""),
+  expect(listed, "the configuration lists setup files").not.toBeNull();
+  const entries = (listed?.[1] ?? "")
+    .replace(/\/\*[\s\S]*?\*\//gu, "")
+    .replace(/\/\/[^\n]*/gu, "");
+  return [...entries.matchAll(/"([^"]+)"/gu)].map(([, path]) =>
+    resolve(directory, path ?? ""),
   );
+}
+
+/** The setup files the configuration file at `config` lists. */
+function setupFilesOf(config: string, project?: string): string[] {
+  return setupFilesIn(readFileSync(config, "utf8"), dirname(config), project);
 }
 
 /** Each configuration that loads the guard, from the repository's root. */
@@ -66,5 +81,22 @@ describe("the one-query-at-a-time guard's wiring (X24; X25)", () => {
     const path = resolve(db, "../..", config);
 
     expect(setupFilesOf(path, project)).toContain(GUARD);
+  });
+});
+
+describe("the wiring pin's reading of a configuration", () => {
+  it("does not count a commented-out guard entry as loaded", () => {
+    const directory = join(db, "src");
+    const guard = '"./test-support/one-query-at-a-time.ts"';
+
+    expect(setupFilesIn(`setupFiles: [\n  ${guard},\n]`, directory)).toContain(
+      GUARD,
+    );
+    expect(
+      setupFilesIn(`setupFiles: [\n  // ${guard},\n]`, directory),
+    ).not.toContain(GUARD);
+    expect(
+      setupFilesIn(`setupFiles: [\n  /* ${guard}, */\n]`, directory),
+    ).not.toContain(GUARD);
   });
 });

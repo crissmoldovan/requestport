@@ -399,7 +399,7 @@ export const routeStateInventory: readonly RouteStateEntry[] = [
     ],
   },
   {
-    // Plan 13, F.3: reachable by its URL only until F.3.1 adds navigation. It
+    // Plan 13, F.3, linked from the primary navigation since F.3.1. It
     // draws its unavailable notice as its default content while operator
     // credentials are off, which is every local acceptance run: the switch is
     // unset there. Its list, form and actions are pinned by its own suites.

@@ -38,6 +38,7 @@ const navigationHrefs = [
   "/settings/members",
   "/settings/routing",
   "/settings/operations",
+  "/settings/operators",
   "/agents",
   "/webhooks",
   "/slack",
