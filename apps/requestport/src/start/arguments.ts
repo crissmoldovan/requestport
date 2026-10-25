@@ -17,6 +17,13 @@ serves the instance at its public URL, with its background worker, until
 SIGTERM or SIGINT stops it: on PostgreSQL connecting as the instance's
 logins, on PGlite opening its database once the operator step has closed it.
 
+On SIGTERM or SIGINT it closes the listener, the worker and every storage,
+then exits. A second SIGTERM or SIGINT less than 1 s after the first is the
+same stop: a terminal's Ctrl-C can arrive twice when npx runs this, or pnpm
+or npm runs it from a script, once from the terminal and once passed on.
+One 1 s or more after the first exits at once with 1, without waiting for
+them to close.
+
 PGlite serves one user on this machine: it binds a loopback address only,
 and row-level security does not apply to it, because PGlite connects as its
 superuser.

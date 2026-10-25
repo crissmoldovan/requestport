@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
   existsSync,
@@ -7,9 +8,12 @@ import {
   realpathSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { createRequestPort } from "@requestport/core";
 import { createTestStorage, rawQuery } from "@requestport/db/testing";
@@ -48,6 +52,8 @@ import {
  * boundary, the operator child's declared surface, and the serving
  * process's environment and declared surface (`start/start.test-entry.ts`);
  * or, to crash at a boundary, `test-support/crashing-start.test-entry.ts`.
+ * The doubled stop's case (ruling 251) starts the test entry itself
+ * (`startEntry`), so that it sends its own signals.
  */
 
 const workspace = resolve(import.meta.dirname, "..");
@@ -690,4 +696,150 @@ describe("Done when 6a on PGlite: a first start killed at each of its boundaries
     },
     300_000,
   );
+});
+
+const startTestEntry = join(workspace, "src", "start", "start.test-entry.ts");
+const tsxLoader = pathToFileURL(
+  createRequire(import.meta.url).resolve("tsx/esm"),
+).href;
+
+/**
+ * `requestport start`'s test entry (`start/start.test-entry.ts`) as a
+ * process of its own, which the case signals itself; its standard output
+ * and error as they arrive, and how it ended.
+ */
+function startEntry(args: readonly string[], env: NodeJS.ProcessEnv) {
+  const child = spawn(
+    process.execPath,
+    ["--import", tsxLoader, startTestEntry, ...args],
+    { cwd: workspace, env, stdio: ["ignore", "pipe", "pipe"] },
+  );
+  const output = { stdout: "", stderr: "" };
+  child.stdout.on("data", (chunk) => {
+    output.stdout += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    output.stderr += chunk;
+  });
+  let ended: { code: number | null; signal: NodeJS.Signals | null } | null =
+    null;
+  const exited = new Promise<{
+    code: number | null;
+    signal: NodeJS.Signals | null;
+  }>((resolveExit) =>
+    child.once("exit", (code, signal) => {
+      ended = { code, signal };
+      resolveExit(ended);
+    }),
+  );
+  return { child, output, exited, ended: () => ended };
+}
+
+/** Waits until `done` holds, polling every 25 ms, for at most `ms`. */
+async function until(done: () => boolean, what: string, ms = 120_000) {
+  const deadline = Date.now() + ms;
+  while (!done()) {
+    if (Date.now() > deadline) throw new Error(`waited ${ms} ms for ${what}`);
+    await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+  }
+}
+
+/** The start's test entry's records: one JSON line each (`RP_H4_TEST_RECORD`). */
+const entryRecords = (file: string) =>
+  existsSync(file)
+    ? readFileSync(file, "utf8")
+        .trim()
+        .split("\n")
+        .filter((line) => line !== "")
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+    : [];
+
+describe("X31 on PGlite: requestport start takes a doubled stop as one (ruling 251)", () => {
+  test("SIGINT, then SIGTERM while it stops (a second signal of the other kind, as pnpm sends on a second Ctrl-C): the second is the same stop, said in one line; the listener, the worker and every storage close, it exits 0, and its PGlite database opens again, holding the owner", async () => {
+    const directory = dataDirectoryPath();
+    const port = await freePort();
+    const recordFile = join(scratch, `record ${randomUUID()}.jsonl`);
+    // The test entry holds the stop once every storage has closed, until
+    // the case writes `<record>.closed-seen`, so the second signal reaches
+    // a start that is still stopping however fast it closed.
+    const started = startEntry(
+      [
+        "--data-dir",
+        directory,
+        "--storage",
+        "pglite",
+        ...bootstrapFlags,
+        "--port",
+        String(port),
+      ],
+      {
+        ...process.env,
+        RP_H4_TEST_RECORD: recordFile,
+        RP_H4_TEST_HOLD_AFTER_CLOSE: "1",
+      },
+    );
+    const stderr = () => started.output.stderr;
+    try {
+      await until(
+        () =>
+          stderr().includes("requestport start: serving ") ||
+          started.ended() !== null,
+        "the start to serve",
+      );
+      expect(started.ended(), stderr()).toBeNull();
+
+      started.child.kill("SIGINT");
+      await until(
+        () =>
+          stderr().includes("requestport start: SIGINT: stopping.\n") ||
+          started.ended() !== null,
+        "the start to take the first signal",
+      );
+      started.child.kill("SIGTERM");
+      await until(
+        () =>
+          / SIGTERM (?:\d+ ms after the first signal|again while stopping)/u.test(
+            stderr(),
+          ) || started.ended() !== null,
+        "the start to take the second signal",
+      );
+      await until(
+        () =>
+          entryRecords(recordFile).some(
+            (record) => record.event === "closed",
+          ) || started.ended() !== null,
+        "the serving process to close its storages",
+      );
+      writeFileSync(`${recordFile}.closed-seen`, "");
+
+      expect(await started.exited, stderr()).toEqual({
+        code: 0,
+        signal: null,
+      });
+      const repeat =
+        /requestport start: SIGTERM (\d+) ms after the first signal: the same stop, which goes on\.\n/u.exec(
+          stderr(),
+        );
+      expect(repeat, stderr()).not.toBeNull();
+      expect(Number(repeat?.[1])).toBeLessThan(1_000);
+      expect(stderr()).toContain(
+        "requestport start: stopped: the listener, the worker and every storage are closed.\n",
+      );
+      expect(stderr()).not.toContain("exiting at once");
+      expect(
+        entryRecords(recordFile)
+          .filter((record) => record.process === "serve")
+          .map((record) => record.event),
+      ).toEqual(["serving", "closed"]);
+
+      // Opened again, in this process: the journal, the owner, and the
+      // credential the first start printed, which its stored hash accepts.
+      const [credential] = credentialsIn(started.output.stdout);
+      await expectConverged(directory, credential as string);
+    } finally {
+      writeFileSync(`${recordFile}.closed-seen`, "");
+      if (started.ended() === null) started.child.kill("SIGKILL");
+      await started.exited;
+    }
+  }, 300_000);
 });

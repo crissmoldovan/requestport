@@ -77,6 +77,13 @@ instance at its public URL, `http://127.0.0.1:3200` unless you choose
 another, with its background worker, until SIGTERM or SIGINT (Ctrl-C) stops
 it. A supervisor should signal `start`'s process group, or run the installed `requestport` bin, because `npm exec` runs `start` through `sh -c`, and on Debian, whose `sh` is `dash`, that shell does not pass SIGTERM on: a SIGTERM to `npx`'s own process leaves `start` serving.
 
+A second SIGTERM or SIGINT less than a second after the first is the same
+stop. `npx`, and pnpm or npm running a script, pass a terminal's Ctrl-C on
+to `start`, which can then receive it twice, and still closes its listener,
+its worker and its database before it exits. One a second or more after
+the first ends `start` at once with exit code 1, without waiting for them
+to close.
+
 A later start serves the same instance. Run `start` again with no owner URL
 and none of the owner's details: the data directory holds them.
 

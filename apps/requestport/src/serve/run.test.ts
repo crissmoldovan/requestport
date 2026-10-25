@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import {
   chmodSync,
   existsSync,
@@ -23,6 +24,7 @@ import { SERVER_ACTION_KEY_FILE } from "../server-action-key.js";
 import {
   loginPasswords,
   serveFromDataDirectory,
+  waitForSignal,
   workerNotReadyLine,
 } from "./run.js";
 
@@ -339,5 +341,135 @@ describe("the line that says why the worker is not ready", () => {
     ).toBe(
       "the in-process worker is not ready after 30 s; each worker storage runs a query (dispatcher: login rp_x_dispatcher, role check passed; processor: login rp_x_tenant_processor, role check passed; maintenance: login ?, role check not run). Still waiting.",
     );
+  });
+});
+
+/**
+ * The serving step's stop handler (`waitForSignal`) over a signal source and
+ * a clock the case sets: what it says and exits with, in order. Nothing here
+ * sends a real signal or exits. That a start drains on a doubled stop, as a
+ * process, is `pglite.integration.test.ts`'s.
+ */
+function stopHandler() {
+  const firstAt = 50_000;
+  let clock = firstAt;
+  const record: string[] = [];
+  const source = new EventEmitter();
+  const stopped = waitForSignal(
+    source as unknown as Pick<NodeJS.Process, "on" | "off">,
+    (line) => record.push(`say ${line}`),
+    (code): never => {
+      record.push(`exit ${code}`);
+      return undefined as never;
+    },
+    () => clock,
+  );
+  return {
+    record,
+    stopped,
+    source,
+    /** `signal`, arriving `afterMs` after the first signal. */
+    send(signal: NodeJS.Signals, afterMs: number) {
+      clock = firstAt + afterMs;
+      source.emit(signal, signal);
+    },
+  };
+}
+
+const stopping = (signal: string) => `say ${signal}: stopping.`;
+const sameStop = (signal: string, afterMs: number) =>
+  `say ${signal} ${afterMs} ms after the first signal: the same stop, which goes on.`;
+
+describe("the serving step's stop signals: requestport worker's rule (ruling 251; ruling 246)", () => {
+  test.each(["SIGTERM", "SIGINT"] as const)(
+    "the first %s says at once that the start stops, and settles the stop with it",
+    async (signal) => {
+      const handler = stopHandler();
+
+      handler.send(signal, 0);
+
+      expect(handler.record).toEqual([stopping(signal)]);
+      await expect(handler.stopped.signal).resolves.toBe(signal);
+    },
+  );
+
+  test.each([0, 999])(
+    "a second SIGTERM %i ms after the first is the same stop: one line, with the signal and the milliseconds since the first, and the stop goes on",
+    async (afterMs) => {
+      const handler = stopHandler();
+
+      handler.send("SIGTERM", 0);
+      handler.send("SIGTERM", afterMs);
+
+      expect(handler.record).toEqual([
+        stopping("SIGTERM"),
+        sameStop("SIGTERM", afterMs),
+      ]);
+      await expect(handler.stopped.signal).resolves.toBe("SIGTERM");
+    },
+  );
+
+  test("a repeat's milliseconds are whole ones, rounded down: one 999.9 ms after the first is the same stop, at 999 ms", () => {
+    const handler = stopHandler();
+
+    handler.send("SIGTERM", 0);
+    handler.send("SIGTERM", 999.9);
+
+    expect(handler.record).toEqual([
+      stopping("SIGTERM"),
+      sameStop("SIGTERM", 999),
+    ]);
+  });
+
+  test("a second SIGTERM 1,000 ms after the first says so and exits at once with 1", () => {
+    const handler = stopHandler();
+
+    handler.send("SIGTERM", 0);
+    handler.send("SIGTERM", 1_000);
+
+    expect(handler.record).toEqual([
+      stopping("SIGTERM"),
+      "say SIGTERM again while stopping: exiting at once.",
+      "exit 1",
+    ]);
+  });
+
+  test("SIGINT then SIGTERM counts as a repeat: a terminal's Ctrl-C and a SIGTERM passed on are one stop", async () => {
+    const handler = stopHandler();
+
+    handler.send("SIGINT", 0);
+    handler.send("SIGTERM", 12);
+
+    expect(handler.record).toEqual([
+      stopping("SIGINT"),
+      sameStop("SIGTERM", 12),
+    ]);
+    await expect(handler.stopped.signal).resolves.toBe("SIGINT");
+  });
+
+  test("the window counts from the first signal, not from the last repeat: one at 600 ms is a repeat, one at 1,000 ms exits", () => {
+    const handler = stopHandler();
+
+    handler.send("SIGINT", 0);
+    handler.send("SIGINT", 600);
+    handler.send("SIGINT", 1_000);
+
+    expect(handler.record).toEqual([
+      stopping("SIGINT"),
+      sameStop("SIGINT", 600),
+      "say SIGINT again while stopping: exiting at once.",
+      "exit 1",
+    ]);
+  });
+
+  test("remove takes both handlers off the source", () => {
+    const handler = stopHandler();
+    expect(handler.source.listenerCount("SIGTERM")).toBe(1);
+    expect(handler.source.listenerCount("SIGINT")).toBe(1);
+
+    handler.stopped.remove();
+
+    expect(handler.source.listenerCount("SIGTERM")).toBe(0);
+    expect(handler.source.listenerCount("SIGINT")).toBe(0);
   });
 });

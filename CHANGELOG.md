@@ -3,6 +3,34 @@
 Each RequestPort release publishes its packages together, at one version.
 This file records each release, the newest first.
 
+## 0.2.2
+
+**What.** The fourteen packages at `0.2.2`, together, as before. `requestport
+start` now takes a doubled Ctrl-C as one stop, as `requestport worker` has
+since 0.2.0.
+
+**Why.** Run through `npx`, or from a `package.json` script under pnpm or npm,
+`requestport start` gets a terminal's Ctrl-C twice, milliseconds apart: once
+from the terminal and once passed on by the launcher. `start` took the second
+copy as a demand to stop at once. It exited with code 1 without closing its
+listener, its worker or its database. On PostgreSQL with work in flight, that
+happened in 11 of 12 runs.
+
+**Impact.**
+
+- **Fixed: `requestport start`.** A second SIGTERM or SIGINT less than one
+  second after the first is now the same stop. `start` logs it in one line
+  ("the same stop, which goes on"), then closes its listener, its worker and
+  every storage, and exits 0. A second signal one second or more after the
+  first still stops it at once, with code 1, as before. `start --help` and
+  the README's "What a first start does" say so.
+- **Nothing else changes.** The REST API, MCP, the web application and every
+  other package behave exactly as in 0.2.1. No migration.
+- **One version, as before.** `requestport` 0.2.2 depends on each of the
+  other thirteen packages at exactly `0.2.2`, and `latest` moves to `0.2.2`.
+- **Supported versions.** Security fixes go to the latest `0.x` release only,
+  as `SECURITY.md` says, so 0.2.1 receives none from now on.
+
 ## 0.2.1
 
 **What.** The fourteen packages at `0.2.1`, together, as before. Every

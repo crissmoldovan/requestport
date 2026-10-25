@@ -56,10 +56,12 @@ import { locateSelfHostWeb, prepareWebUi, SelfHostWebError } from "./web.js";
  *    pg, if the worker is not ready `WORKER_NOT_READY_AFTER_MS` after the
  *    host listens, it says once why, from the worker storages' role reports,
  *    and goes on waiting (ruling 163, item 2);
- * 6. on SIGTERM or SIGINT it stops (`ServingInstance.close`) and answers 0;
- *    a second signal exits at once with 1. (`requestport worker` takes a
- *    repeat less than a second after the first as the same stop, ruling 246;
- *    whether this step should is X31.)
+ * 6. on SIGTERM or SIGINT it says at once that it stops, stops
+ *    (`ServingInstance.close`) and answers 0. Another SIGTERM or SIGINT less
+ *    than `SAME_STOP_WINDOW_MS` (1,000 ms) after the first is the same stop,
+ *    said in one line, and the stop goes on; one at 1,000 ms or later exits
+ *    at once with 1 (`waitForSignal`: `requestport worker`'s rule, ruling
+ *    246, which ruling 251 gives this step).
  * A start that cannot serve answers 1, having closed what it opened.
  */
 
@@ -93,7 +95,10 @@ export interface ServingOptions {
   hooks?: ServingHooks;
   /** Where the signals come from: this process, unless a test sends its own. */
   signals?: Pick<NodeJS.Process, "on" | "off">;
-  /** How a second signal ends the process: `process.exit`. */
+  /**
+   * How a signal `SAME_STOP_WINDOW_MS` or more after the first ends the
+   * process: `process.exit`.
+   */
   exit?: (code: number) => never;
   /**
    * The self-host build's `apps/web` (`web.ts`: the standalone tree's in
@@ -189,26 +194,63 @@ function loginOf(url: string | undefined): string {
 }
 
 /**
- * The first SIGTERM or SIGINT, as `signal`; a second one, while the first is
- * being handled, exits at once with 1. `remove` takes both handlers off.
+ * How long after the first stop signal another SIGTERM or SIGINT is the same
+ * stop (ruling 251): `requestport worker`'s window, `SAME_STOP_WINDOW_MS` in
+ * `packages/jobs/src/cli.ts` (ruling 246). No entry in `@requestport/jobs`'
+ * exports carries that rule: `cli.ts` has no entry of its own, the index
+ * passes on `runJobWorkerCli` alone and registers the worker root as it
+ * loads (only the `requestport-jobs` bin loads `cli.ts`, by path), so that
+ * only `requestport worker` may load it (`../worker.ts`). The rule is written
+ * out again here. A terminal's Ctrl-C, or a stop sent to the process group,
+ * can reach this process twice when `npx` runs it, or pnpm or npm runs it
+ * from a script: once to the group, and once passed on. The two arrive milliseconds apart, so both fall
+ * inside the window, and a person who means a second signal still gets the
+ * exit by sending it a second later.
  */
-function waitForSignal(
+export const SAME_STOP_WINDOW_MS = 1_000;
+
+/**
+ * The serving step's SIGTERM and SIGINT handler, `requestport worker`'s rule
+ * (`createStopSignalHandler` in `packages/jobs/src/cli.ts`). The first
+ * signal says at once that the start stops, and settles `signal` with it.
+ * Another one less than `SAME_STOP_WINDOW_MS` after the first is the same
+ * stop: it says so in one line, with the signal and the whole milliseconds
+ * since the first, and the stop goes on. One `SAME_STOP_WINDOW_MS` or more
+ * after the first says so and calls `exit(1)`, which does not wait for the
+ * listener, the worker or the storages to close. The window is counted from
+ * the first signal, not from the last repeat.
+ *
+ * `now` is a monotonic clock in milliseconds, `performance.now` unless a
+ * test hands its own. `remove` takes both handlers off.
+ */
+export function waitForSignal(
   signals: Pick<NodeJS.Process, "on" | "off">,
   say: (line: string) => void,
   exit: (code: number) => never,
+  now: () => number = () => performance.now(),
 ) {
-  let taken: NodeJS.Signals | undefined;
+  let firstAt: number | undefined;
   let resolve: (signal: NodeJS.Signals) => void = () => undefined;
   const signal = new Promise<NodeJS.Signals>((settle) => {
     resolve = settle;
   });
   const onSignal = (received: NodeJS.Signals) => {
-    if (taken !== undefined) {
-      say(`${received} again while stopping: exiting at once.`);
-      exit(1);
+    const at = now();
+    if (firstAt === undefined) {
+      firstAt = at;
+      say(`${received}: stopping.`);
+      resolve(received);
+      return;
     }
-    taken = received;
-    resolve(received);
+    const sinceFirstMs = at - firstAt;
+    if (sinceFirstMs < SAME_STOP_WINDOW_MS) {
+      say(
+        `${received} ${Math.floor(sinceFirstMs)} ms after the first signal: the same stop, which goes on.`,
+      );
+      return;
+    }
+    say(`${received} again while stopping: exiting at once.`);
+    exit(1);
   };
   signals.on("SIGTERM", onSignal);
   signals.on("SIGINT", onSignal);
@@ -391,8 +433,8 @@ export async function serveFromDataDirectory({
       });
     }
 
-    const signal = await stopped.signal;
-    say(`${signal}: stopping.`);
+    // The handler has said that it stops, as the signal arrived.
+    await stopped.signal;
     await instance.close();
     instance = null;
     await hooks.afterClose?.();

@@ -99,6 +99,18 @@ describe("requestport start's arguments", () => {
     expect(error.message).toBe(message);
   });
 
+  test("the usage says what a stop closes, that a second SIGTERM or SIGINT less than 1 s after the first is the same stop, and that a later one exits at once with 1 (ruling 251)", () => {
+    expect(START_USAGE).toContain(
+      `On SIGTERM or SIGINT it closes the listener, the worker and every storage,
+then exits. A second SIGTERM or SIGINT less than 1 s after the first is the
+same stop: a terminal's Ctrl-C can arrive twice when npx runs this, or pnpm
+or npm runs it from a script, once from the terminal and once passed on.
+One 1 s or more after the first exits at once with 1, without waiting for
+them to close.
+`,
+    );
+  });
+
   test("the usage names the three forms of the owner URL", () => {
     expect(START_USAGE).toContain("--owner-url-file <path>");
     expect(START_USAGE).toContain("--owner-url-stdin");
