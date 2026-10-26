@@ -148,7 +148,7 @@ describe("POST: an operator reaches only the commands whose entry admits it", ()
     admitsCredentialKind(transport, "operator"),
   );
 
-  test("the registry admits operators to F.3's command, F.2.3's eleven, F.2.1's three, F.2.2's three, F.2.4's six, F.2.5's four, F.2.6's two and F.2.7's four", () => {
+  test("the registry admits operators to F.3's command, F.2.3's eleven, F.2.1's three, F.2.2's three, F.2.4's six, F.2.5's four, F.2.6's two, F.2.7's four and ruling 263's resend", () => {
     expect(admitted.map((transport) => transport.name)).toEqual([
       "revoke_operator_credential",
       "add_project_alias",
@@ -183,6 +183,7 @@ describe("POST: an operator reaches only the commands whose entry admits it", ()
       "invite_organization_member",
       "set_organization_member",
       "revoke_organization_invitation",
+      "resend_organization_invitation",
       "appearance.update_organization_defaults.v1",
     ]);
     expect(refused.length).toBeGreaterThan(30);

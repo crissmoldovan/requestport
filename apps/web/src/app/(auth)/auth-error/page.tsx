@@ -1,9 +1,11 @@
-import { EmptyState, Eyebrow, PageShell, Panel } from "@cueplusplus/ui/chrome";
+import { EmptyState } from "@cueplusplus/ui/chrome";
+import { Card } from "@cueplusplus/ui/layout";
 import { Button } from "@cueplusplus/ui/primitives";
 import { TriangleAlert } from "lucide-react";
 import NextLink from "next/link";
 
 import { applyE2EScenarioBoundary } from "../../../lib/server-scenario-boundary.js";
+import { WaysIn } from "../ways-in.js";
 
 type AuthErrorPageProps = {
   searchParams: Promise<{ error?: string | string[] }>;
@@ -24,14 +26,11 @@ export default async function AuthErrorPage({
       ? "This RequestPort is invite-only"
       : "We couldn’t sign you in. Please try again.";
 
+  // The ways in share one frame (ruling 259): the mark, the heading, a card.
   return (
-    <main>
-      <PageShell
-        eyebrow={<Eyebrow>Access status</Eyebrow>}
-        title="Sign-in unavailable"
-        width="narrow"
-      >
-        <Panel>
+    <WaysIn title="Sign-in unavailable">
+      <Card.Root className="w-full">
+        <Card.Content>
           {/* The provider's own reason never reaches the page: only the two
            * fixed messages above are ever rendered. */}
           <EmptyState
@@ -44,8 +43,8 @@ export default async function AuthErrorPage({
             icon={TriangleAlert}
             title={message}
           />
-        </Panel>
-      </PageShell>
-    </main>
+        </Card.Content>
+      </Card.Root>
+    </WaysIn>
   );
 }

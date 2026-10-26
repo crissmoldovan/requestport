@@ -8,16 +8,29 @@ import {
   FieldError,
   FieldLabel,
   Input,
+  Radio,
+  RadioGroup,
   Select,
 } from "@cueplusplus/ui/forms";
-import { CopyButton, TwoStepButton } from "@cueplusplus/ui/instruments";
-import { Disclosure, Stack } from "@cueplusplus/ui/layout";
-import { AlertDialog, Dialog } from "@cueplusplus/ui/overlays";
+import {
+  CodeBlock,
+  CopyButton,
+  TwoStepButton,
+} from "@cueplusplus/ui/instruments";
+import {
+  Link as CueLink,
+  Disclosure,
+  Stack,
+  Stepper,
+} from "@cueplusplus/ui/layout";
+import { AlertDialog, Dialog, Sheet } from "@cueplusplus/ui/overlays";
 import { Button, Chip } from "@cueplusplus/ui/primitives";
 import {
   agentScopes,
   privateTelemetryFields,
 } from "@requestport/domain/browser";
+import { Plus } from "lucide-react";
+import NextLink from "next/link";
 import { type ReactNode, useActionState, useRef, useState } from "react";
 
 import type { AgentActionState } from "../app/(app)/agents/agent-action-state.js";
@@ -247,15 +260,35 @@ export function CreateAgentForm({
   action,
   allowOrganizationWide,
   idempotencyKey,
+  onCreated,
   projects,
 }: {
   action: AgentFormAction;
   allowOrganizationWide: boolean;
   idempotencyKey: string;
+  /**
+   * Told the slug a successful create stored — trimmed and lower-cased, as
+   * the action's schema stores it. Given, the form submits through a client
+   * wrapper that awaits the same action and then reports; without it the form
+   * hands React the server action itself, as it always has.
+   */
+  onCreated?: (slug: string) => void;
   projects: Array<{ id: string; name: string }>;
 }) {
   const [state, formAction, pending] = useActionState(
-    action,
+    onCreated
+      ? async (previous: AgentActionState, formData: FormData) => {
+          const result = await action(previous, formData);
+          if (result.status === "success") {
+            onCreated(
+              String(formData.get("slug") ?? "")
+                .trim()
+                .toLowerCase(),
+            );
+          }
+          return result;
+        }
+      : action,
     initialAgentActionState,
   );
   const projectItems = projects.map((project) => ({
@@ -711,5 +744,263 @@ export function RevealWorkspaceForm({
         </Stack>
       </form>
     </Disclosure>
+  );
+}
+
+const connectSteps = [
+  { id: "name", label: "name" },
+  { id: "signin", label: "sign-in" },
+  { id: "connect", label: "connect" },
+] as const;
+
+type ConnectStep = (typeof connectSteps)[number]["id"];
+
+type ConnectableAgent = {
+  id: string;
+  slug: string;
+  displayName: string;
+  projectId: string | null;
+};
+
+type ConnectSheetProps = {
+  /** The organization's agents, as the page last rendered them. */
+  agents: readonly ConnectableAgent[];
+  allowOrganizationWide: boolean;
+  createAction: AgentFormAction;
+  createIdempotencyKey: string;
+  endpoints: { mcp: string; rest: string; metadata: string };
+  issueAction: AgentFormAction;
+  issueIdempotencyKey: string;
+  lanes: Array<{ id: string; projectId: string; name: string; slug: string }>;
+  projects: Array<{ id: string; name: string }>;
+};
+
+/**
+ * One pass through the sheet. It is keyed on the open count by its parent, so
+ * every opening starts from an empty create form: a finished pass's form,
+ * whose action state still reads "created", is never shown again.
+ */
+function ConnectAgentSteps({
+  agents,
+  allowOrganizationWide,
+  createAction,
+  createIdempotencyKey,
+  endpoints,
+  issueAction,
+  issueIdempotencyKey,
+  lanes,
+  onDone,
+  projects,
+}: ConnectSheetProps & { onDone: () => void }) {
+  const [step, setStep] = useState<ConnectStep>("name");
+  const [createdSlug, setCreatedSlug] = useState<string | null>(null);
+  const [method, setMethod] = useState<"oauth" | "key">("oauth");
+  // The create action answers with a message, not the principal: the page it
+  // revalidates hands the new agent back in `agents`, found by the slug the
+  // action stored (trimmed and lower-cased, as its schema does).
+  const created = createdSlug
+    ? agents.find((agent) => agent.slug === createdSlug)
+    : undefined;
+  const index = connectSteps.findIndex((entry) => entry.id === step);
+  const claudeCode = `claude mcp add --transport http requestport ${endpoints.mcp}`;
+  return (
+    <>
+      <Stack direction="column" gap={5}>
+        <Stepper
+          current={step}
+          label="Steps to connect an agent"
+          onStepChange={(next) => setStep(next as ConnectStep)}
+          steps={connectSteps}
+        />
+        {step === "name" ? (
+          createdSlug ? (
+            <p>
+              {created?.displayName ?? createdSlug} is registered. Continue to
+              decide how it signs in.
+            </p>
+          ) : (
+            <CreateAgentForm
+              action={createAction}
+              allowOrganizationWide={allowOrganizationWide}
+              idempotencyKey={createIdempotencyKey}
+              onCreated={(slug) => {
+                setCreatedSlug(slug);
+                setStep("signin");
+              }}
+              projects={projects}
+            />
+          )
+        ) : null}
+        {step === "signin" ? (
+          <Stack direction="column" gap={4}>
+            <RadioGroup
+              aria-label="How it signs in"
+              onValueChange={(value) =>
+                setMethod(value === "key" ? "key" : "oauth")
+              }
+              value={method}
+            >
+              <Radio
+                label="OAuth (recommended): for Claude Code, Codex and other MCP clients. You approve it once in the browser."
+                value="oauth"
+              />
+              <Radio
+                label="API key: for scripts and CI. The key is shown once; keep it in your secret manager."
+                value="key"
+              />
+            </RadioGroup>
+            {method === "oauth" ? (
+              <p>
+                Nothing to copy. The first time the client connects, RequestPort
+                opens a consent page in your browser: choose{" "}
+                {created?.displayName ?? "this agent"} there.
+              </p>
+            ) : created ? (
+              <IssueAgentKeyForm
+                action={issueAction}
+                agentPrincipalId={created.id}
+                defaultProjectId={created.projectId}
+                idempotencyKey={issueIdempotencyKey}
+                lanes={lanes}
+                projects={projects}
+              />
+            ) : (
+              <p>
+                The new agent is not listed yet. Issue its key from its own page
+                once it appears in the table.
+              </p>
+            )}
+          </Stack>
+        ) : null}
+        {step === "connect" ? (
+          <Stack direction="column" gap={4}>
+            {[
+              { label: "MCP endpoint", value: endpoints.mcp },
+              { label: "REST base URL", value: endpoints.rest },
+            ].map((row) => (
+              <Stack direction="column" gap={1} key={row.label}>
+                <span className="text-fg-subtle">{row.label}</span>
+                <Stack align="center" direction="row" gap={2}>
+                  <code className="min-w-0 flex-1 truncate font-mono">
+                    {row.value}
+                  </code>
+                  <CopyButton
+                    aria-label={`Copy the ${row.label}`}
+                    size="sm"
+                    value={row.value}
+                    variant="ghost"
+                  />
+                </Stack>
+              </Stack>
+            ))}
+            <CodeBlock
+              code={claudeCode}
+              label="Add it to Claude Code"
+              language="sh"
+            />
+            {created ? (
+              <CueLink
+                render={<NextLink href={`/agents/${created.id}`} />}
+                variant="underline"
+              >
+                Manage {created.displayName}
+              </CueLink>
+            ) : null}
+          </Stack>
+        ) : null}
+      </Stack>
+      <Sheet.Footer>
+        {index === 0 ? (
+          <Sheet.Close
+            render={
+              <Button size="sm" variant="secondary">
+                Cancel
+              </Button>
+            }
+          />
+        ) : (
+          <Button
+            onClick={() => setStep(connectSteps[index - 1]?.id ?? "name")}
+            size="sm"
+            variant="secondary"
+          >
+            Back
+          </Button>
+        )}
+        {step === "signin" ? (
+          <Button
+            onClick={() => setStep("connect")}
+            size="sm"
+            variant="primary"
+          >
+            Continue
+          </Button>
+        ) : null}
+        {step === "connect" ? (
+          <Button onClick={onDone} size="sm" variant="primary">
+            Done
+          </Button>
+        ) : null}
+        {step === "name" && createdSlug ? (
+          <Button onClick={() => setStep("signin")} size="sm" variant="primary">
+            Continue
+          </Button>
+        ) : null}
+      </Sheet.Footer>
+    </>
+  );
+}
+
+/**
+ * "Connect an agent" (ruling 258, the reference build's `screens/Agents.tsx`):
+ * a right sheet with three steps — name and default project, how it signs in,
+ * and where to point it.
+ *
+ * Nothing here is a new path to the server. The first step is the existing
+ * `CreateAgentForm` with its action; the API-key choice is the existing
+ * `IssueAgentKeyForm`, whose one-time secret appears in that form's own
+ * dialog and nowhere else; the last step prints two addresses and Claude
+ * Code's `claude mcp add` command for the MCP endpoint, none of which holds
+ * or names a credential.
+ */
+export function ConnectAgentSheet(props: ConnectSheetProps) {
+  const [open, setOpen] = useState(false);
+  const [pass, setPass] = useState(0);
+  // Not modal, as the settings dialogs and the requests filter sheet are not:
+  // a modal sheet hides every other <body> child from assistive technology,
+  // and cue-ui gives the Default project and Project Selects' listboxes
+  // containers of their own there, so their options would be unreachable.
+  // Pointer dismissal is off so a press inside an open listbox, which sits
+  // outside the sheet, does not close it.
+  return (
+    <Sheet.Root
+      disablePointerDismissal
+      modal={false}
+      onOpenChange={(next) => {
+        if (next) setPass((count) => count + 1);
+        setOpen(next);
+      }}
+      open={open}
+    >
+      <Sheet.Trigger
+        render={
+          <Button icon={Plus} size="sm" variant="primary">
+            Connect an agent
+          </Button>
+        }
+      />
+      <Sheet.Content side="right">
+        <Sheet.Title>Connect an agent</Sheet.Title>
+        <Sheet.Description>
+          Three steps. Nothing secret is pasted anywhere when the agent signs in
+          with OAuth.
+        </Sheet.Description>
+        <ConnectAgentSteps
+          {...props}
+          key={pass}
+          onDone={() => setOpen(false)}
+        />
+      </Sheet.Content>
+    </Sheet.Root>
   );
 }

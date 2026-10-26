@@ -103,8 +103,11 @@ describe("the webhooks page", () => {
     const html = await markup();
 
     // `Chip` carries no data-slot of its own, so its chassis class is what says
-    // a chip is what drew the label.
-    expect(html).toContain("h-chip");
+    // a chip is what drew the label: its height, read through the style set's
+    // name since `@cueplusplus/ui` 0.17.0 (`h-chip` before).
+    expect(html).toContain(
+      "h-[var(--cue-style-chip-height,var(--cue-chip-h))]",
+    );
     expect(html).toContain("active");
     expect(html).not.toContain(recipeClass("badge"));
   });

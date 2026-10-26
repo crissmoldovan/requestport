@@ -140,6 +140,8 @@ async function seedBoundGrant(tx: Tx, audience: "mcp" | "api") {
     agentPrincipalId,
     clientId,
     family: bound.oauthTokenBindingFingerprint,
+    grantId: bound.authorizationId,
+    organizationId,
     repository,
     userId,
   };
@@ -164,6 +166,10 @@ function bearerFor(
       [requestportAgentGrantFamiliesClaim]: [seeded.family],
     }),
     resolveOAuth: (input) => seeded.repository.resolveOAuthGrant(input),
+    touchCredential: (credentialId, organizationId) =>
+      seeded.repository.touchCredential(credentialId, organizationId),
+    touchOAuthGrant: (grantId, organizationId) =>
+      seeded.repository.touchOAuthGrant(grantId, organizationId),
   });
   return (endpoint: "mcp" | "api") =>
     authenticate(
@@ -224,6 +230,42 @@ describe.sequential("a bearer token for the other resource", () => {
           code: "unauthenticated",
           message: "OAuth access token is invalid",
         });
+      });
+    },
+    seedingTimeoutMs,
+  );
+});
+
+describe.sequential("an OAuth agent's last use (ruling 261)", () => {
+  test.each(["mcp", "api"] as const)(
+    "a %s token that authenticates stamps its grant once, and a refused one stamps nothing",
+    async (audience) => {
+      await inRollbackTransaction(async (tx) => {
+        const seeded = await seedBoundGrant(tx, audience);
+        const other = audience === "mcp" ? "api" : "mcp";
+        // As text: the stamp's exact value, compared as it is stored.
+        const lastUsedAt = async () =>
+          (
+            await tx.execute<{ stamp: string | null }>(sql`
+              select "last_used_at"::text as "stamp" from "agent_oauth_grants"
+              where "id" = ${seeded.grantId}
+            `)
+          ).rows[0]?.stamp ?? null;
+
+        // A token for the other resource is refused by the grant lookup
+        // before anything is stamped.
+        await expect(
+          bearerFor(seeded, audiences[other])(other),
+        ).rejects.toMatchObject({ code: "unauthenticated" });
+        expect(await lastUsedAt()).toBeNull();
+
+        await bearerFor(seeded, audiences[audience])(audience);
+        const first = await lastUsedAt();
+        expect(first).toEqual(expect.any(String));
+
+        // Inside the stamp interval, a second request leaves it as it is.
+        await bearerFor(seeded, audiences[audience])(audience);
+        expect(await lastUsedAt()).toEqual(first);
       });
     },
     seedingTimeoutMs,

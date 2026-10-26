@@ -28,8 +28,10 @@ export type AppearanceSnapshotInput = {
 };
 
 /**
- * Resolves the three appearance axes independently: personal override wins,
- * then the current organization default, then the fixed RequestPort fallback.
+ * Resolves the six appearance axes independently: personal override wins,
+ * then the current organization default, then the fixed fallback. A `match`
+ * on the font, look or paint axis is a value here like any other; it becomes a
+ * concrete face, style set or paint only in `resolveAppearanceLook`.
  * Stored values are re-parsed here because the database is the source of truth
  * for other deployments too — a row written by a newer or hand-edited writer
  * must degrade one axis, never the whole projection.
@@ -39,7 +41,14 @@ export function resolveAppearanceSnapshot(
 ): AppearanceSnapshot {
   const overrides = input.user
     ? parseAppearanceOverrides(input.user)
-    : { theme: null, density: null, mode: null };
+    : {
+        theme: null,
+        density: null,
+        mode: null,
+        font: null,
+        look: null,
+        paint: null,
+      };
   const userVersion = input.user
     ? parseAppearanceVersion(input.user.version)
     : 0;
@@ -57,7 +66,7 @@ export function resolveAppearanceSnapshot(
     const override = overrides[axis];
     if (override !== null) {
       source[axis] = "user";
-      // Assigning per axis keeps the three axes independent; a union-typed
+      // Assigning per axis keeps the axes independent; a union-typed
       // record assignment would otherwise widen every axis to every value.
       Object.assign(effective, { [axis]: override });
       continue;
@@ -100,20 +109,13 @@ export interface AppearancePort {
   /** Serializes writers for one user, then reads the row FOR UPDATE. */
   lockUserPreferences(userId: string): Promise<UserAppearanceRecord | null>;
   /** Inserts the first personal row; returns `null` when one already exists. */
-  createUserPreferences(input: {
-    userId: string;
-    theme: string | null;
-    density: string | null;
-    mode: string | null;
-  }): Promise<UserAppearanceRecord | null>;
+  createUserPreferences(
+    input: { userId: string } & AppearanceOverrides,
+  ): Promise<UserAppearanceRecord | null>;
   /** Compare-and-swap; returns `null` when the expected version no longer holds. */
-  updateUserPreferences(input: {
-    userId: string;
-    expectedVersion: number;
-    theme: string | null;
-    density: string | null;
-    mode: string | null;
-  }): Promise<UserAppearanceRecord | null>;
+  updateUserPreferences(
+    input: { userId: string; expectedVersion: number } & AppearanceOverrides,
+  ): Promise<UserAppearanceRecord | null>;
   /** Locks the organization FOR SHARE, then the exact membership FOR SHARE. */
   lockOrganizationAuthorization(input: {
     organizationId: string;
@@ -122,14 +124,13 @@ export interface AppearancePort {
   lockOrganizationDefaults(
     organizationId: string,
   ): Promise<OrganizationAppearanceRecord | null>;
-  updateOrganizationDefaults(input: {
-    organizationId: string;
-    expectedVersion: number;
-    theme: string;
-    density: string;
-    mode: string;
-    lastUpdatedByUserId: string;
-  }): Promise<OrganizationAppearanceRecord | null>;
+  updateOrganizationDefaults(
+    input: {
+      organizationId: string;
+      expectedVersion: number;
+      lastUpdatedByUserId: string;
+    } & AppearanceDefaults,
+  ): Promise<OrganizationAppearanceRecord | null>;
   appendAuditRecord(input: AuditRecordInput): Promise<void>;
 }
 

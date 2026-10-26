@@ -336,6 +336,8 @@ export function createAuth({
     resolveOAuth: (input) => agentAuthRepository.resolveOAuthGrant(input),
     touchCredential: (credentialId, organizationId) =>
       agentAuthRepository.touchCredential(credentialId, organizationId),
+    touchOAuthGrant: (grantId, organizationId) =>
+      agentAuthRepository.touchOAuthGrant(grantId, organizationId),
   });
 
   /*

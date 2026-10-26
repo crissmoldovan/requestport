@@ -28,7 +28,12 @@
     "close_question",
     "attach_artifact"
   ],
-  "request:triage": ["whoami", "agent_hello", "transition_request"],
+  "request:triage": [
+    "whoami",
+    "agent_hello",
+    "assign_request",
+    "transition_request"
+  ],
   "request:complete": ["whoami", "agent_hello", "complete_request"],
   "request:verify": ["whoami", "agent_hello", "verify_request"],
   "question:answer": ["whoami", "agent_hello", "answer_question"],

@@ -6,6 +6,7 @@ import {
 } from "../../../../components/administration-views.js";
 import { getApplicationContext } from "../../../../lib/server-application-context.js";
 import { webStorage } from "../../../../lib/server-request-port.js";
+import { createProjectAction } from "./actions.js";
 
 export default async function ProjectsSettingsPage() {
   const context = await getApplicationContext();
@@ -21,6 +22,7 @@ export default async function ProjectsSettingsPage() {
   );
   return (
     <ProjectsView
+      createAction={createProjectAction}
       organization={context.currentOrganization}
       projects={projects}
     />

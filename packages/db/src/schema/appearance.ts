@@ -19,7 +19,8 @@ const utcTimestamp = (name: string) =>
 /**
  * The supported appearance vocabulary. These arrays are the single database
  * source of truth for the check constraints; the domain package re-declares the
- * same literals for its public types and asserts equality against these.
+ * same literals for its public types, and `appearance.test.ts` asserts the two
+ * are equal.
  */
 export const appearanceThemeValues = [
   "requestport",
@@ -31,23 +32,86 @@ export const appearanceThemeValues = [
   "dusk",
   "luma",
   "snuffle",
+  "command",
+  "graphite",
+  "kiln",
+  "ledger",
+  "monolith",
+  "porcelain",
+  "prism",
+  "quotamate",
+  "tender",
+  "zine",
 ] as const;
 export const appearanceDensityValues = [
   "ultra-compact",
+  "compact",
   "normal",
   "large",
 ] as const;
 export const appearanceModeValues = ["system", "dark", "light"] as const;
+/**
+ * Migration `0026`'s three axes (ruling 255). Each accepts `match`, which
+ * follows the theme's own Look; the rest are cue-ui's names.
+ */
+export const appearanceFontValues = [
+  "match",
+  "geist",
+  "geist-mono",
+  "inter",
+  "inter-source",
+  "plex",
+  "dm",
+  "calsans",
+  "fraunces-mono",
+  "system",
+] as const;
+export const appearanceLookValues = [
+  "match",
+  "console",
+  "editorial",
+  "marketing",
+  "graphite",
+  "tender",
+  "zine",
+  "kiln",
+  "porcelain",
+  "ledger",
+  "command",
+  "monolith",
+  "prism",
+] as const;
+export const appearancePaintValues = [
+  "match",
+  "none",
+  "halo",
+  "hatch",
+  "lift",
+  "frost",
+  "bevel",
+  "grain",
+  "plume",
+  "matte",
+  "glaze",
+] as const;
 
+/**
+ * What migration `0026`'s trigger body seeds a newly owned organization with,
+ * and what its backfill moves an untouched `0014` seed to.
+ */
 export const appearanceFallback = {
-  theme: "requestport",
-  density: "ultra-compact",
+  theme: "cue",
+  density: "normal",
   mode: "system",
+  font: "match",
+  look: "match",
+  paint: "match",
 } as const;
 
 /**
- * Migration `0014`'s backfill and its compatibility trigger both write the
- * initialization event under one fixed service identity. The trigger cannot
+ * Migration `0014`'s backfill and its compatibility trigger (whose body `0026`
+ * replaced) write the initialization event under one fixed service identity,
+ * and `0026`'s backfill writes its update event under the same one. The trigger cannot
  * know which human caused the membership write without reading untrusted
  * transaction-local state, so initiating-user attribution stays in
  * `last_updated_by_user_id` and in the existing organization audit trail.
@@ -81,6 +145,9 @@ export const userAppearancePreferences = pgTable(
     version: integer("version").default(1).notNull(),
     createdAt: utcTimestamp("created_at").defaultNow().notNull(),
     updatedAt: utcTimestamp("updated_at").defaultNow().notNull(),
+    font: text("font"),
+    look: text("look"),
+    paint: text("paint"),
   },
   (table) => [
     // Null is "inherit". An all-null row is the retained reset tombstone, so
@@ -101,6 +168,18 @@ export const userAppearancePreferences = pgTable(
       "user_appearance_preferences_version_check",
       sql`${table.version} > 0`,
     ),
+    check(
+      "user_appearance_preferences_font_check",
+      sql`${table.font} is null or ${table.font} in (${vocabulary(appearanceFontValues)})`,
+    ),
+    check(
+      "user_appearance_preferences_look_check",
+      sql`${table.look} is null or ${table.look} in (${vocabulary(appearanceLookValues)})`,
+    ),
+    check(
+      "user_appearance_preferences_paint_check",
+      sql`${table.paint} is null or ${table.paint} in (${vocabulary(appearancePaintValues)})`,
+    ),
     uniqueIndex("user_appearance_preferences_aggregate_id_unique").on(
       table.aggregateId,
     ),
@@ -120,11 +199,16 @@ export const organizationAppearanceDefaults = pgTable(
     // Nullable is the FK's doing, not a weakened contract: the migration-owned
     // updater constraint below nulls exactly this column when the recorded
     // membership is deleted, so "unknown updater" is representable and the
-    // membership stays deletable. Every write path sets it.
+    // membership stays deletable. Every command write sets it; 0026's backfill
+    // sets it to NULL, because no member made that change.
     lastUpdatedByUserId: text("last_updated_by_user_id"),
     version: integer("version").default(1).notNull(),
     createdAt: utcTimestamp("created_at").defaultNow().notNull(),
     updatedAt: utcTimestamp("updated_at").defaultNow().notNull(),
+    // `0026` adds these with a default, so every existing row reads `match`.
+    font: text("font").default("match").notNull(),
+    look: text("look").default("match").notNull(),
+    paint: text("paint").default("match").notNull(),
   },
   (table) => [
     check(
@@ -142,6 +226,18 @@ export const organizationAppearanceDefaults = pgTable(
     check(
       "organization_appearance_defaults_version_check",
       sql`${table.version} > 0`,
+    ),
+    check(
+      "organization_appearance_defaults_font_check",
+      sql`${table.font} in (${vocabulary(appearanceFontValues)})`,
+    ),
+    check(
+      "organization_appearance_defaults_look_check",
+      sql`${table.look} in (${vocabulary(appearanceLookValues)})`,
+    ),
+    check(
+      "organization_appearance_defaults_paint_check",
+      sql`${table.paint} in (${vocabulary(appearancePaintValues)})`,
     ),
     uniqueIndex("organization_appearance_defaults_aggregate_id_unique").on(
       table.aggregateId,

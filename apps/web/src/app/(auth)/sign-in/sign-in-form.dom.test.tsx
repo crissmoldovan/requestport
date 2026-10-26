@@ -1,5 +1,5 @@
 import { ThemeProvider } from "@cueplusplus/ui/system";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -39,7 +39,7 @@ vi.mock("@requestport/auth/client", () => ({
   },
 }));
 
-import { SignInForm } from "./sign-in-form.js";
+import { LostCredentialHelp, SignInForm } from "./sign-in-form.js";
 
 function renderForm(resumeTo?: string) {
   return render(
@@ -287,5 +287,122 @@ describe("the local credential", () => {
         "That email and credential do not match.",
       ),
     );
+  });
+
+  test("puts the refusal on the credential's own field (ruling 259)", async () => {
+    const user = userEvent.setup();
+    client.email.mockResolvedValue({
+      data: null,
+      error: { status: 401, message: "Invalid email or password" },
+    });
+    renderCredentialForm();
+
+    await user.type(screen.getByLabelText("Email"), "owner@example.com");
+    await user.type(screen.getByLabelText("Credential"), "wrong");
+    await user.click(
+      screen.getByRole("button", { name: "Sign in with credential" }),
+    );
+
+    const refusal = await screen.findByRole("alert");
+    expect(refusal).toHaveAttribute("data-slot", "field-error");
+    const field = refusal.closest('[data-slot="field"]');
+    expect(field).not.toBeNull();
+    expect(
+      within(field as HTMLElement).getByLabelText("Credential"),
+    ).toHaveAttribute("aria-invalid", "true");
+  });
+
+  test("takes the credential in a password field that can be revealed, at the large size", async () => {
+    const user = userEvent.setup();
+    renderCredentialForm();
+
+    const credential = screen.getByLabelText("Credential");
+    expect(credential).toHaveAttribute("type", "password");
+    await user.click(screen.getByRole("button", { name: "Show credential" }));
+    expect(credential).toHaveAttribute("type", "text");
+    // The large rung of cue-ui's control ladder: on the Email input itself,
+    // and on the group that draws the PasswordInput's rim around its input
+    // and its reveal control.
+    expect(screen.getByLabelText("Email")).toHaveClass("h-control-lg");
+    expect(credential.closest('[data-slot="input-group"]')).toHaveClass(
+      "h-control-lg",
+    );
+    expect(
+      screen.getByRole("button", { name: "Sign in with credential" }),
+    ).toHaveClass("h-control-lg");
+  });
+
+  test("is the card's one primary button when it is the only way in", () => {
+    renderCredentialForm();
+
+    // `bg-accent-fill` is the class cue-ui's primary Button variant paints.
+    expect(
+      screen.getByRole("button", { name: "Sign in with credential" }),
+    ).toHaveClass("bg-accent-fill");
+  });
+});
+
+describe("the card's one primary button", () => {
+  test("is the first way in offered, and every way in is at the large size", () => {
+    render(
+      <ThemeProvider persistPreferences={false} theme="requestport">
+        <SignInForm
+          methods={{ github: true, magicLink: true, localCredential: true }}
+        />
+      </ThemeProvider>,
+    );
+
+    const ways = [
+      "Continue with GitHub",
+      "Email me a sign-in link",
+      "Sign in with credential",
+    ].map((name) => screen.getByRole("button", { name }));
+    // `bg-accent-fill` is the class cue-ui's primary Button variant paints.
+    expect(
+      ways.map((button) => button.classList.contains("bg-accent-fill")),
+    ).toEqual([true, false, false]);
+    for (const button of ways) expect(button).toHaveClass("h-control-lg");
+    expect(screen.getByLabelText("Work email")).toHaveClass("h-control-lg");
+  });
+
+  test("moves to the emailed link when GitHub is not offered", () => {
+    render(
+      <ThemeProvider persistPreferences={false} theme="requestport">
+        <SignInForm
+          methods={{ github: false, magicLink: true, localCredential: true }}
+        />
+      </ThemeProvider>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Email me a sign-in link" }),
+    ).toHaveClass("bg-accent-fill");
+    expect(
+      screen.getByRole("button", { name: "Sign in with credential" }),
+    ).not.toHaveClass("bg-accent-fill");
+  });
+});
+
+describe("a lost credential", () => {
+  test("names the exact command the CLI provides, behind Lost your credential?", async () => {
+    const user = userEvent.setup();
+    render(
+      <ThemeProvider persistPreferences={false} theme="requestport">
+        <LostCredentialHelp />
+      </ThemeProvider>,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Lost your credential?" }),
+    );
+    expect(
+      await screen.findByText("requestport owner rotate-credential"),
+    ).toBeVisible();
+    // What it is for, and what it costs, as the command's own usage says
+    // (OWNER_USAGE): the owner's operator credentials go with the old one.
+    expect(screen.getByText(/with requestport start/u)).toBeVisible();
+    expect(
+      screen.getByText(/every operator key the owner issued is revoked/u),
+    ).toBeVisible();
   });
 });

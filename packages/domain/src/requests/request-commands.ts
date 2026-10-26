@@ -76,11 +76,28 @@ const updatedEventSchema = actorEventSchema.extend({
   ),
 });
 
+/** Who a request is assigned to, as the request row records it. */
+const assigneeSchema = z.object({
+  type: z.enum(["user", "agent"]),
+  id: z.string().min(1),
+});
+
+/**
+ * An assignment changed (ruling 262): the assignee after the change and the
+ * one before it, each null for nobody. Its own type rather than a field of
+ * `request.updated.v1`, whose `changedFields` lists content fields only.
+ */
+const assignedEventSchema = actorEventSchema.extend({
+  assignee: assigneeSchema.nullable(),
+  previousAssignee: assigneeSchema.nullable(),
+});
+
 export function registerRequestEventSchemas(registry: EventSchemaRegistry) {
   return registry
     .register("request.created.v1", createdEventSchema)
     .register("request.submitted.v1", submittedEventSchema)
     .register("request.updated.v1", updatedEventSchema)
+    .register("request.assigned.v1", assignedEventSchema)
     .register("request.state_changed.v1", transitionEventSchema)
     .register("request.completion_reported.v1", completionEventSchema)
     .register("request.verified.v1", verificationEventSchema);
@@ -424,6 +441,30 @@ const updateRequestInput = z
   );
 
 /**
+ * `assign_request`'s input: the request, and the member to assign it to, or
+ * null to leave it unassigned. Only a person can be named here; the column
+ * also admits an agent, which nothing in this command writes.
+ */
+const assignRequestInput = z.object({
+  organizationId: z.uuid(),
+  requestId: z.uuid(),
+  assigneeUserId: z.string().trim().min(1).check(utf16Max(255)).nullable(),
+});
+
+/**
+ * The states `update_request` refuses to edit, which `assign_request` refuses
+ * to assign in too.
+ */
+const terminalRequestStates: readonly RequestRecord["state"][] = [
+  "completed",
+  "verified",
+  "declined",
+  "duplicate",
+  "superseded",
+  "cancelled",
+];
+
+/**
  * The input schema each command in this module parses with, by command name.
  * These are the same objects the definitions below call `parse` on. The
  * fifteen lifecycle actions are one command, `transition_request`, whose
@@ -433,6 +474,7 @@ export const requestCommandInputSchemas = {
   create_request_draft: createDraftInput,
   transition_request: transitionInput,
   update_request: updateRequestInput,
+  assign_request: assignRequestInput,
 } as const;
 
 function requestResult(request: RequestRecord): JsonObject {
@@ -974,16 +1016,7 @@ export function createRequestCommandDefinitions(dependencies: {
           "Request changed concurrently",
         );
       }
-      if (
-        [
-          "completed",
-          "verified",
-          "declined",
-          "duplicate",
-          "superseded",
-          "cancelled",
-        ].includes(request.state)
-      ) {
+      if (terminalRequestStates.includes(request.state)) {
         throw new DomainError(
           "invalid_transition",
           "Terminal request cannot be edited",
@@ -1035,5 +1068,136 @@ export function createRequestCommandDefinitions(dependencies: {
     },
   };
 
-  return [createDraft, updateRequest, transition];
+  /*
+    Assigning a request (ruling 262; machine surfaces, ruling 264). Who may is
+    who may begin triage on it (`authorizeAction`'s `begin_triage` case),
+    holding `request:triage`: an owner or an admin of the organisation or a
+    maintainer of the request's target project (`isMaintainer`, and
+    `explicitTriageGrant`, which for a person is the same three roles and for
+    an agent is those roles held by the person who delegated it), or an agent
+    bound to the request's target project. An agent is held to the request's
+    projects and, bound to its target, to its lanes, as `transition_request`
+    holds it. A reporter, a contributor or an active worker may edit a
+    request's content (`update_request`) but not hand it to someone. A
+    service is refused. REST and MCP reach the command through its registry
+    entry (`transport-metadata.ts`), which admits agent credentials only.
+
+    The assignee is a person, and must be an active member of the request's
+    organisation. Assigning one gives them sight of a restricted request,
+    because the visibility rules admit its assignee; only the actors above can
+    do that.
+  */
+  const assignRequest: CommandDefinition<unknown, JsonObject> = {
+    name: "assign_request",
+    parse: (input) => assignRequestInput.parse(input),
+    async authorize(context, unknownInput) {
+      const input = assignRequestInput.parse(unknownInput);
+      if (context.actor.type === "service") {
+        throw new DomainError("forbidden", "A user or agent actor is required");
+      }
+      requireScope(context, "request:triage");
+      requireOrganization(context, input.organizationId);
+    },
+    async execute(uow, context, unknownInput, meta) {
+      const input = assignRequestInput.parse(unknownInput);
+      const repository = uow.port<RequestRepository>("requests");
+      const request = await repository.findForUpdate(
+        input.organizationId,
+        input.requestId,
+      );
+      if (!request) throw new DomainError("not_found", "Request was not found");
+      requireAgentProject(
+        context,
+        request.source.kind === "project" ? request.source.projectId : null,
+        request.targetProjectId,
+      );
+      const targetAgent =
+        context.actor.type === "agent" &&
+        context.projectId === request.targetProjectId;
+      if (targetAgent) requireAgentLane(context, request.laneId);
+      const access = await repository.actorAccess(request, context);
+      if (
+        !isMaintainer(access) &&
+        !access.explicitTriageGrant &&
+        !targetAgent
+      ) {
+        throw new DomainError(
+          "forbidden",
+          "Target triage authority is required",
+        );
+      }
+      if (meta.expectedVersion !== request.version) {
+        throw new DomainError("version_conflict", "Request version is stale", {
+          currentVersion: request.version,
+        });
+      }
+      if (terminalRequestStates.includes(request.state)) {
+        throw new DomainError(
+          "invalid_transition",
+          "Terminal request cannot be assigned",
+        );
+      }
+      const assignee =
+        input.assigneeUserId === null
+          ? null
+          : { type: "user" as const, id: input.assigneeUserId };
+      const previous = request.assignee;
+      if (
+        (assignee === null && previous === null) ||
+        (assignee !== null &&
+          previous !== null &&
+          previous.type === assignee.type &&
+          previous.id === assignee.id)
+      ) {
+        throw new DomainError(
+          "conflict",
+          "The request already has that assignee",
+        );
+      }
+      if (
+        assignee &&
+        !(await repository.isActiveMember(request.organizationId, assignee.id))
+      ) {
+        throw new DomainError(
+          "validation_failed",
+          "The assignee must be an active member of this organization",
+          { field: "assigneeUserId" },
+        );
+      }
+      const updated = await repository.assign({
+        requestId: request.id,
+        organizationId: request.organizationId,
+        expectedVersion: request.version,
+        assignee,
+        actor: context.actor,
+        correlationId: context.correlationId,
+      });
+      const event = dependencies.events.create(context, {
+        type: "request.assigned.v1",
+        schemaVersion: 1,
+        aggregateType: "request",
+        aggregateId: request.id,
+        aggregateVersion: updated.version,
+        projectId: request.targetProjectId,
+        requestId: request.id,
+        causationId: context.correlationId,
+        data: {
+          ...requestEventFacts(updated),
+          assignee,
+          previousAssignee:
+            previous && (previous.type === "user" || previous.type === "agent")
+              ? { type: previous.type, id: previous.id }
+              : null,
+        },
+        links: updated.displayKey ? { request: updated.displayKey } : {},
+      });
+      return {
+        result: requestResult(updated),
+        aggregateId: request.id,
+        events: [event],
+      };
+    },
+  };
+
+  return [createDraft, updateRequest, transition, assignRequest];
 }

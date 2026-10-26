@@ -990,6 +990,16 @@ export function createRequestPortMcpServer(
     }),
   });
   registerCommand(server, dependencies, {
+    name: "assign_request",
+    description:
+      "Assign a non-terminal request to an active member of the organization, or unassign it with null.",
+    schema: z.object({
+      ...commandMeta,
+      requestId: z.uuid(),
+      assigneeUserId: z.string().trim().min(1).check(utf16Max(255)).nullable(),
+    }),
+  });
+  registerCommand(server, dependencies, {
     name: "post_message",
     description: "Post a canonical request comment.",
     schema: z.object({

@@ -24,8 +24,9 @@ import type { Tx } from "../../transaction.js";
     because an owner invitation needs an owner to revoke it. No address and no
     expiry.
   - `get_administration_organization_appearance`: the version the
-    organisation appearance write expects, and the current value of the three
-    fields it replaces whole.
+    organisation appearance write expects, and the current value of the six
+    axes it writes (font, look and paint are optional in the write, and kept
+    when left out).
 
   Setting a member takes its identifiers from F.2.0's members read, and
   inviting needs no read.
@@ -100,13 +101,14 @@ export async function listAdministrationInvitations(
 }
 
 /**
- * The organisation's appearance defaults: `version`, `theme`, `density` and
- * `mode`.
+ * The organisation's appearance defaults: `version` and the six axes, `theme`,
+ * `density`, `mode`, `font`, `look` and `paint` (ruling 255).
  *
  * Throws `forbidden`, before any query, for a credential bound to a project.
- * Throws `forbidden` unless the member is an active owner — not an admin — of
- * the active organisation, the write's rule, checked on the rows the write
- * reads, taken `FOR SHARE` by the same `lockOrganizationAuthorization`.
+ * Throws `forbidden` unless the member is an active owner or admin — not a
+ * member — of the active organisation (ruling 255), the write's rule, checked
+ * on the rows the write reads, taken `FOR SHARE` by the same
+ * `lockOrganizationAuthorization`.
  * Throws `not_found` when the organisation has no defaults row.
  */
 export async function getAdministrationOrganizationAppearance(
@@ -123,11 +125,12 @@ export async function getAdministrationOrganizationAppearance(
   if (
     authorization.organization?.status !== "active" ||
     authorization.membership?.status !== "active" ||
-    authorization.membership.role !== "owner"
+    (authorization.membership.role !== "owner" &&
+      authorization.membership.role !== "admin")
   ) {
     throw new DomainError(
       "forbidden",
-      "Organization appearance ownership is required",
+      "An owner or admin is required to change the organization's appearance",
     );
   }
   const [row] = await tx
@@ -136,6 +139,9 @@ export async function getAdministrationOrganizationAppearance(
       theme: organizationAppearanceDefaults.theme,
       density: organizationAppearanceDefaults.density,
       mode: organizationAppearanceDefaults.mode,
+      font: organizationAppearanceDefaults.font,
+      look: organizationAppearanceDefaults.look,
+      paint: organizationAppearanceDefaults.paint,
     })
     .from(organizationAppearanceDefaults)
     .where(

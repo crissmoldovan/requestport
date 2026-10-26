@@ -43,10 +43,11 @@ describe("the RequestPort theme", () => {
 
   test("keeps fg-subtle above AA, which the design system never checked", () => {
     // The gate that generated this theme cannot see this defect. CUE++'s
-    // CONTRAST_REQUIREMENTS is twenty pairs — eleven required, nine advisory —
-    // and not one of them names `fg-subtle`. That is how the colour shipped at
-    // 4.11 in light and 4.475 in dark, passing every check upstream, until
-    // cue-ui#117 measured it by hand. So this measures it here, every run.
+    // CONTRAST_REQUIREMENTS is twenty-three pairs at theme-base 1.4.0 —
+    // thirteen required, ten advisory — and not one of them names `fg-subtle`.
+    // That is how the colour shipped at 4.11 in light and 4.475 in dark,
+    // passing every check upstream, until cue-ui#117 measured it by hand. So
+    // this measures it here, every run.
     for (const mode of ["dark", "light"] as const) {
       const block = manifest.colors[mode] as Record<string, string>;
       const ratio = contrastRatio(

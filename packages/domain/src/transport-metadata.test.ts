@@ -628,6 +628,7 @@ const fixtures: Record<string, Record<string, unknown>> = {
   block_work_session: sessionFixture,
   release_request: sessionFixture,
   end_work_session: sessionFixture,
+  assign_request: { requestId: ids.request, assigneeUserId: "user_member" },
 };
 
 class PortReached extends Error {}
@@ -1363,6 +1364,7 @@ describe("credentialKinds", () => {
       "invite_organization_member",
       "set_organization_member",
       "revoke_organization_invitation",
+      "resend_organization_invitation",
       "appearance.update_organization_defaults.v1",
       "list_administration_invitations",
       "get_administration_organization_appearance",

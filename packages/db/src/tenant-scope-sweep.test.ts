@@ -5398,19 +5398,21 @@ function handleOffences(file: string, text: string): string[] {
     inside its conditions array, correlated to `domainEvents.requestId`.
   - `<module>`: the `unread` and `openQuestionCount` fragments of
     listProjection, selected by selectListRows over `requests`.
-  - listRequests: the label, unanswered, inbox and mention filters pushed onto
-    its conditions, correlated to `requests.id` and read by selectListRows.
+  - readRequestList: the label, unanswered, inbox and mention filters pushed
+    onto its conditions, correlated to `requests.id` and read by
+    selectListRows or, for a view's count, countListRows (ruling 262 moved
+    them out of listRequests, which countRequests now shares).
 */
 const expectedAssumptions: string[] = [
   "queries/agent-query-repository.ts › listEventsAuthorized › domainEvents",
   "queries/request-query-repository.ts › <module> › requests",
   "queries/request-query-repository.ts › <module> › requests",
-  "queries/request-query-repository.ts › createRequestQueryRepository.listRequests › requests",
-  "queries/request-query-repository.ts › createRequestQueryRepository.listRequests › requests",
-  "queries/request-query-repository.ts › createRequestQueryRepository.listRequests › requests",
-  "queries/request-query-repository.ts › createRequestQueryRepository.listRequests › requests",
-  "queries/request-query-repository.ts › createRequestQueryRepository.listRequests › requests",
-  "queries/request-query-repository.ts › createRequestQueryRepository.listRequests › requests",
+  "queries/request-query-repository.ts › readRequestList › requests",
+  "queries/request-query-repository.ts › readRequestList › requests",
+  "queries/request-query-repository.ts › readRequestList › requests",
+  "queries/request-query-repository.ts › readRequestList › requests",
+  "queries/request-query-repository.ts › readRequestList › requests",
+  "queries/request-query-repository.ts › readRequestList › requests",
 ];
 
 /*
@@ -5421,5 +5423,5 @@ const expectedAssumptions: string[] = [
 */
 const expectedRedundantPredicates: string[] = [
   "queries/agent-query-repository.ts:222 er.organization_id = «context.organizationId»",
-  "queries/request-query-repository.ts:625 restricted_mention.organization_id = «input.organizationId»",
+  "queries/request-query-repository.ts:956 restricted_mention.organization_id = «input.organizationId»",
 ];

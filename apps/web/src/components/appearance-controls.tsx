@@ -1,29 +1,26 @@
 "use client";
 
-import { Row } from "@cueplusplus/ui/chrome";
+import { Inspector, Row } from "@cueplusplus/ui/chrome";
 import {
   Field,
   FieldDescription,
   FieldError,
-  FieldLabel,
   Select,
 } from "@cueplusplus/ui/forms";
 import { Stack } from "@cueplusplus/ui/layout";
 import { Button, Chip } from "@cueplusplus/ui/primitives";
 import { useTheme } from "@cueplusplus/ui/system";
 import {
+  type AppearanceAxis,
   type AppearanceDefaults,
-  type AppearanceDensity,
-  type AppearanceMode,
   type AppearanceOverrides,
   type AppearanceSnapshot,
   type AppearanceTheme,
-  appearanceDensities,
-  appearanceModes,
-  appearanceThemes,
-  isAppearanceDensity,
-  isAppearanceMode,
-  isAppearanceTheme,
+  appearanceAxes,
+  appearanceAxisGuards,
+  appearanceAxisValues,
+  appearanceMatchValue,
+  appearanceThemeLook,
 } from "@requestport/domain/browser";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
@@ -37,9 +34,14 @@ import {
   appearanceInheritValue,
   initialAppearanceActionState,
 } from "../app/(app)/settings/appearance/action-state.js";
+import {
+  type AppearancePresentation,
+  appearancePresentation,
+} from "../lib/appearance-presentation.js";
 
 /**
- * The appearance menu and editor.
+ * The appearance menu and editor: six axes (ruling 255) — theme, mode,
+ * density, typeface, Look and surface — each a row of an `Inspector`.
  *
  * Both forms keep the last confirmed values until the server accepts the write:
  * editing a control only moves an in-memory draft, which is previewed through
@@ -48,67 +50,163 @@ import {
  * writes to the database except by submitting the form.
  */
 
-const themeLabels: Record<AppearanceTheme, string> = {
-  cue: "CUE++",
-  dusk: "Dusk",
-  hivehub: "HiveHub",
-  luma: "Luma",
-  requestport: "RequestPort",
-  signal: "Signal",
-  snuffle: "Snuffle",
-  terminal: "Terminal",
-  venu: "Venu",
-};
+/** The order the rows are listed in. */
+const displayedAxes = [
+  "theme",
+  "mode",
+  "density",
+  "font",
+  "look",
+  "paint",
+] as const satisfies readonly AppearanceAxis[];
 
-const densityLabels: Record<AppearanceDensity, string> = {
-  large: "Large",
-  normal: "Normal",
-  "ultra-compact": "Ultra compact",
-};
-
-const modeLabels: Record<AppearanceMode, string> = {
-  dark: "Dark",
-  light: "Light",
-  system: "Match system",
-};
-
-const axisLabels = {
-  density: "Density",
-  mode: "Mode",
+const axisLabels: Record<AppearanceAxis, string> = {
   theme: "Theme",
-} as const;
+  mode: "Mode",
+  density: "Density",
+  font: "Typeface",
+  look: "Look",
+  paint: "Surface",
+};
 
-const inheritOptionLabel = "Organization default";
+/** What each organization row says it changes. */
+const axisHelp: Record<AppearanceAxis, string> = {
+  theme: "Colours. Every theme CUE++ ships, and RequestPort's own.",
+  mode: "Light, dark, or whatever the device uses.",
+  density: "How much fits on screen. Normal suits most people.",
+  font: "The interface face. IDs, keys and code stay monospaced.",
+  look: "Type voice and structure: labels, chips, headings.",
+  paint: "The finish on panels and controls.",
+};
+
+const valueLabels: {
+  [K in AppearanceAxis]: Record<AppearanceDefaults[K], string>;
+} = {
+  theme: {
+    requestport: "RequestPort",
+    cue: "CUE++",
+    terminal: "Terminal",
+    signal: "Signal",
+    venu: "Venu",
+    hivehub: "HiveHub",
+    dusk: "Dusk",
+    luma: "Luma",
+    snuffle: "Snuffle",
+    command: "Command",
+    graphite: "Graphite",
+    kiln: "Kiln",
+    ledger: "Ledger",
+    monolith: "Monolith",
+    porcelain: "Porcelain",
+    prism: "Prism",
+    quotamate: "QuotaMate",
+    tender: "Tender",
+    zine: "Zine",
+  },
+  density: {
+    "ultra-compact": "Ultra compact",
+    compact: "Compact",
+    normal: "Normal",
+    large: "Large",
+  },
+  mode: { system: "Match system", dark: "Dark", light: "Light" },
+  font: {
+    match: "Match the theme",
+    geist: "Geist",
+    "geist-mono": "Geist Mono",
+    inter: "Inter",
+    "inter-source": "Inter with Source Code Pro",
+    plex: "IBM Plex",
+    dm: "DM Sans",
+    calsans: "Cal Sans",
+    "fraunces-mono": "Fraunces with JetBrains Mono",
+    system: "System",
+  },
+  look: {
+    match: "Match the theme",
+    console: "Console",
+    editorial: "Editorial",
+    marketing: "Marketing",
+    graphite: "Graphite",
+    tender: "Tender",
+    zine: "Zine",
+    kiln: "Kiln",
+    porcelain: "Porcelain",
+    ledger: "Ledger",
+    command: "Command",
+    monolith: "Monolith",
+    prism: "Prism",
+  },
+  paint: {
+    match: "Match the theme",
+    none: "None",
+    halo: "Halo",
+    hatch: "Hatch",
+    lift: "Lift",
+    frost: "Frost",
+    bevel: "Bevel",
+    grain: "Grain",
+    plume: "Plume",
+    matte: "Matte",
+    glaze: "Glaze",
+  },
+};
+
+/**
+ * One value's label on one axis. The vocabularies overlap — `graphite` is a
+ * theme and a Look, `system` a mode and a typeface — so a label is always
+ * looked up by its axis. A `match` names what it resolves to under `theme`.
+ */
+function valueLabel(
+  axis: AppearanceAxis,
+  value: string,
+  theme: AppearanceTheme,
+): string {
+  if (
+    value === appearanceMatchValue &&
+    (axis === "font" || axis === "look" || axis === "paint")
+  ) {
+    const resolved: string = appearanceThemeLook(theme)[axis];
+    const labels = valueLabels[axis] as Record<string, string>;
+    return `Match the theme (${labels[resolved] ?? resolved})`;
+  }
+  const labels = valueLabels[axis] as Record<string, string>;
+  return labels[value] ?? value;
+}
+
+const noOverrides: AppearanceOverrides = {
+  theme: null,
+  density: null,
+  mode: null,
+  font: null,
+  look: null,
+  paint: null,
+};
+
 const overriddenDescription = "Set for your account";
 const fallbackSourceDescription = "Inherited from the RequestPort default";
 
 type AxisOption = { label: string; value: string };
 
-function axisOptions(
-  values: readonly string[],
-  labels: Record<string, string>,
-  inheritable: boolean,
-): AxisOption[] {
-  const options = values.map((value) => ({
-    label: labels[value] ?? value,
+/** Every value of one axis, a `match` named by what it resolves to under `theme`. */
+function axisOptions(axis: AppearanceAxis, theme: AppearanceTheme) {
+  return (appearanceAxisValues[axis] as readonly string[]).map((value) => ({
+    label: valueLabel(axis, value, theme),
     value,
   }));
-  return inheritable
-    ? [{ label: inheritOptionLabel, value: appearanceInheritValue }, ...options]
-    : options;
 }
 
-const personalOptions = {
-  density: axisOptions(appearanceDensities, densityLabels, true),
-  mode: axisOptions(appearanceModes, modeLabels, true),
-  theme: axisOptions(appearanceThemes, themeLabels, true),
-} as const;
+/** A draft axis value: a supported literal, or `inherit` on a personal axis. */
+type AppearanceDraft = Record<AppearanceFieldName, string>;
 
-const organizationOptions = {
-  density: axisOptions(appearanceDensities, densityLabels, false),
-  mode: axisOptions(appearanceModes, modeLabels, false),
-  theme: axisOptions(appearanceThemes, themeLabels, false),
-} as const;
+function draftOf(values: Record<AppearanceAxis, string | null>) {
+  return Object.fromEntries(
+    appearanceAxes.map((axis) => [
+      axis,
+      values[axis] ?? appearanceInheritValue,
+    ]),
+  ) as AppearanceDraft;
+}
 
 /**
  * Whether the draft differs from what is stored.
@@ -119,18 +217,48 @@ const organizationOptions = {
  * that saves it should appear exactly when there is something to save.
  */
 function isDirty(draft: AppearanceDraft, confirmed: AppearanceDraft): boolean {
-  return (
-    draft.theme !== confirmed.theme ||
-    draft.density !== confirmed.density ||
-    draft.mode !== confirmed.mode
-  );
+  return appearanceAxes.some((axis) => draft[axis] !== confirmed[axis]);
+}
+
+/** The draft's value on one axis when it is a value, or `fallback` for `inherit`. */
+function axisValue<K extends AppearanceAxis>(
+  draft: AppearanceDraft,
+  axis: K,
+  fallback: AppearanceDefaults[K],
+): AppearanceDefaults[K] {
+  const value = draft[axis];
+  const guard = appearanceAxisGuards[axis] as (
+    candidate: unknown,
+  ) => candidate is AppearanceDefaults[K];
+  return guard(value) ? value : fallback;
+}
+
+/** All six axes of the draft, each `inherit` replaced by `fallback`'s value. */
+function withFallback(
+  draft: AppearanceDraft,
+  fallback: AppearanceDefaults,
+): AppearanceDefaults {
+  return {
+    theme: axisValue(draft, "theme", fallback.theme),
+    density: axisValue(draft, "density", fallback.density),
+    mode: axisValue(draft, "mode", fallback.mode),
+    font: axisValue(draft, "font", fallback.font),
+    look: axisValue(draft, "look", fallback.look),
+    paint: axisValue(draft, "paint", fallback.paint),
+  };
+}
+
+/** The idempotency key: the rendered nonce and the six drafted values. */
+function draftKey(nonce: string, draft: AppearanceDraft) {
+  return [nonce, ...appearanceAxes.map((axis) => draft[axis])].join(":");
 }
 
 /** Said once, so both editors say it the same way. */
 const previewNotice = "Previewing. Apply to save.";
 
 /**
- * What an owner needs to offer their own choice to the organization.
+ * What an owner or an admin needs to offer their own choice to the
+ * organization.
  *
  * Absent for anyone who may not: the caller supplies this only when
  * `canEditOrganizationAppearance` says so, which is the same authority the
@@ -143,44 +271,29 @@ export type OrganizationDefaultPromotion = Readonly<{
 }>;
 
 /**
- * The triple this draft would make the organization's default.
+ * The promotion an owner or an admin is offered, as its own form.
+ *
+ * A sibling rather than a second button on the personal form, because it writes
+ * a different command with a different authority, a different render context
+ * and a different expected version. Sharing a form with *Apply* is precisely
+ * how an owner or an admin would change everyone's appearance while meaning to
+ * change their own, and the confirmation is the second guard on the same
+ * thought.
  *
  * An axis left on *Organization default* is not a statement about what the
  * organization should inherit — there is no value to promote — so it carries
  * what the organization already has. Only the axes the person actually chose
  * travel.
  */
-function promotedTriple(
-  draft: AppearanceDraft,
-  current: AppearanceDefaults,
-): AppearanceDefaults {
-  return {
-    density: isAppearanceDensity(draft.density)
-      ? draft.density
-      : current.density,
-    mode: isAppearanceMode(draft.mode) ? draft.mode : current.mode,
-    theme: isAppearanceTheme(draft.theme) ? draft.theme : current.theme,
-  };
-}
-
-/**
- * The owner's promotion, as its own form.
- *
- * A sibling rather than a second button on the personal form, because it writes
- * a different command with a different authority, a different render context
- * and a different expected version. Sharing a form with *Apply* is precisely
- * how an owner would change everyone's appearance while meaning to change their
- * own, and the confirmation is the second guard on the same thought.
- */
 function PromoteToOrganizationDefault({
   organizationName,
   promotion,
-  triple,
+  axes,
   version,
 }: {
   organizationName: string | null;
   promotion: OrganizationDefaultPromotion;
-  triple: AppearanceDefaults;
+  axes: AppearanceDefaults;
   version: number;
 }) {
   const [state, formAction, pending] = useActionState(
@@ -195,24 +308,24 @@ function PromoteToOrganizationDefault({
       <input
         name="idempotencyKey"
         type="hidden"
-        value={`${promotion.idempotencyNonce}:${triple.theme}:${triple.density}:${triple.mode}`}
+        value={draftKey(promotion.idempotencyNonce, axes)}
       />
       <input
         name="renderContext"
         type="hidden"
         value={promotion.contextToken}
       />
-      <input name="density" type="hidden" value={triple.density} />
-      <input name="mode" type="hidden" value={triple.mode} />
-      <input name="theme" type="hidden" value={triple.theme} />
+      {appearanceAxes.map((axis) => (
+        <input key={axis} name={axis} type="hidden" value={axes[axis]} />
+      ))}
       <Stack direction="column" gap={2}>
         <AppearanceBanner message={bannerMessage(state)} />
         {confirming ? (
           <Stack direction="row" gap={2} wrap>
             <span>
               {organizationName === null
-                ? "Everyone who has not overridden these axes will see this."
-                : `Everyone in ${organizationName} who has not overridden these axes will see this.`}
+                ? "Everyone who has not overridden these settings will see this."
+                : `Everyone in ${organizationName} who has not overridden these settings will see this.`}
             </span>
             <Button
               disabled={pending}
@@ -246,9 +359,6 @@ function PromoteToOrganizationDefault({
     </form>
   );
 }
-
-/** A draft axis value: a supported literal, or `inherit` on a personal axis. */
-type AppearanceDraft = Record<AppearanceFieldName, string>;
 
 /**
  * The runtime boundary for a control's own value. TypeScript is not validation:
@@ -287,11 +397,44 @@ function fieldIssues(state: AppearanceActionState, field: AppearanceFieldName) {
     : undefined;
 }
 
+type PresentationSetters = Pick<
+  ReturnType<typeof useTheme>,
+  "setDensity" | "setFont" | "setMode" | "setPaint" | "setStyleSet" | "setTheme"
+>;
+
+function applyPresentation(
+  setters: PresentationSetters,
+  target: AppearancePresentation,
+) {
+  setters.setTheme(target.theme);
+  setters.setDensity(target.density);
+  setters.setMode(target.mode);
+  setters.setFont(target.font);
+  setters.setStyleSet(target.styleSet);
+  setters.setPaint(target.paint);
+}
+
+function samePresentation(
+  left: AppearancePresentation,
+  right: AppearancePresentation,
+) {
+  return (
+    left.theme === right.theme &&
+    left.density === right.density &&
+    left.mode === right.mode &&
+    left.font === right.font &&
+    left.styleSet === right.styleSet &&
+    left.paint === right.paint
+  );
+}
+
 /**
  * Applies the draft to the ambient provider while the draft differs from the
  * confirmed values, and puts the confirmed values back the moment it stops —
  * whether that is Cancel, a reset, an Escape, an outside press, or the panel
- * unmounting with the popover that held it.
+ * unmounting with the popover that held it. The typeface, style set and paint
+ * are applied as they resolve (`appearancePresentation`), so a `match` previews
+ * the theme's own Look.
  *
  * Only a dirty editor drives the provider, which is what lets the personal and
  * organization editors sit on the same page without fighting over it.
@@ -303,38 +446,73 @@ function AppearanceDraftPreview({
   confirmed: AppearanceDefaults;
   preview: AppearanceDefaults;
 }) {
-  const { setDensity, setMode, setTheme } = useTheme();
-  const dirty =
-    preview.theme !== confirmed.theme ||
-    preview.density !== confirmed.density ||
-    preview.mode !== confirmed.mode;
+  const { setDensity, setFont, setMode, setPaint, setStyleSet, setTheme } =
+    useTheme();
+  const next = appearancePresentation(preview);
+  const saved = appearancePresentation(confirmed);
+  const dirty = !samePresentation(next, saved);
   const previewing = useRef(false);
-  const restoreRef = useRef({ confirmed, setDensity, setMode, setTheme });
-  restoreRef.current = { confirmed, setDensity, setMode, setTheme };
+  const setters = {
+    setDensity,
+    setFont,
+    setMode,
+    setPaint,
+    setStyleSet,
+    setTheme,
+  };
+  const restoreRef = useRef({ saved, setters });
+  restoreRef.current = { saved, setters };
 
   useEffect(() => {
+    const setters = {
+      setDensity,
+      setFont,
+      setMode,
+      setPaint,
+      setStyleSet,
+      setTheme,
+    };
     if (dirty) {
       previewing.current = true;
-      setTheme(preview.theme);
-      setDensity(preview.density);
-      setMode(preview.mode);
+      applyPresentation(setters, {
+        theme: next.theme,
+        density: next.density,
+        mode: next.mode,
+        font: next.font,
+        styleSet: next.styleSet,
+        paint: next.paint,
+      });
       return;
     }
     if (!previewing.current) return;
     previewing.current = false;
-    setTheme(confirmed.theme);
-    setDensity(confirmed.density);
-    setMode(confirmed.mode);
+    applyPresentation(setters, {
+      theme: saved.theme,
+      density: saved.density,
+      mode: saved.mode,
+      font: saved.font,
+      styleSet: saved.styleSet,
+      paint: saved.paint,
+    });
   }, [
-    confirmed.density,
-    confirmed.mode,
-    confirmed.theme,
     dirty,
-    preview.density,
-    preview.mode,
-    preview.theme,
+    next.theme,
+    next.density,
+    next.mode,
+    next.font,
+    next.styleSet,
+    next.paint,
+    saved.theme,
+    saved.density,
+    saved.mode,
+    saved.font,
+    saved.styleSet,
+    saved.paint,
     setDensity,
+    setFont,
     setMode,
+    setPaint,
+    setStyleSet,
     setTheme,
   ]);
 
@@ -343,9 +521,7 @@ function AppearanceDraftPreview({
       if (!previewing.current) return;
       previewing.current = false;
       const restore = restoreRef.current;
-      restore.setTheme(restore.confirmed.theme);
-      restore.setDensity(restore.confirmed.density);
-      restore.setMode(restore.confirmed.mode);
+      applyPresentation(restore.setters, restore.saved);
     },
     [],
   );
@@ -353,7 +529,13 @@ function AppearanceDraftPreview({
   return null;
 }
 
-function AppearanceAxisField({
+/**
+ * One axis's control: a `Select` that takes its name from the `Inspector.Row`
+ * around it (the row lays its label on its control as `aria-label`), with the
+ * row's description and, after a refused write, its field error.
+ */
+function AppearanceAxisSelect({
+  "aria-label": label,
   description,
   disabled,
   field,
@@ -362,6 +544,7 @@ function AppearanceAxisField({
   options,
   value,
 }: {
+  "aria-label"?: string;
   description: ReactNode;
   disabled: boolean;
   field: AppearanceFieldName;
@@ -372,8 +555,8 @@ function AppearanceAxisField({
 }) {
   return (
     <Field name={field}>
-      <FieldLabel>{axisLabels[field]}</FieldLabel>
       <Select
+        aria-label={label ?? axisLabels[field]}
         disabled={disabled}
         items={options}
         name={field}
@@ -410,7 +593,7 @@ function useReturnDestination() {
 
 /**
  * The full-document navigation every accepted preference write ends in, so the
- * next paint comes from the server-resolved triple rather than from provider
+ * next paint comes from the server-resolved axes rather than from provider
  * state adopted during a client transition.
  */
 function useSuccessNavigation(state: AppearanceActionState) {
@@ -429,6 +612,11 @@ export type PersonalAppearanceFormProps = {
   snapshot: AppearanceSnapshot;
 };
 
+/**
+ * Just for you: a person's own choice on each axis, or the organization's
+ * default. The first option on every row names that default's value, and
+ * *Use organization defaults* puts every row back on it.
+ */
 export function PersonalAppearanceForm({
   action,
   contextToken,
@@ -438,11 +626,7 @@ export function PersonalAppearanceForm({
   organizationName,
   snapshot,
 }: PersonalAppearanceFormProps) {
-  const confirmed: AppearanceDraft = {
-    density: snapshot.user.density ?? appearanceInheritValue,
-    mode: snapshot.user.mode ?? appearanceInheritValue,
-    theme: snapshot.user.theme ?? appearanceInheritValue,
-  };
+  const confirmed = draftOf(snapshot.user);
   const [draft, setDraft] = useState<AppearanceDraft>(confirmed);
   const [state, formAction, pending] = useActionState(
     action ?? unavailableAppearanceAction,
@@ -459,115 +643,133 @@ export function PersonalAppearanceForm({
   // Guarded rather than cast: `inherit` is not an axis value, and neither is a
   // value that fell off a vocabulary, so an axis the guard rejects previews the
   // inherited default instead of reaching the provider unchecked.
-  const preview: AppearanceDefaults = {
-    density: isAppearanceDensity(draft.density)
-      ? draft.density
-      : inherited.density,
-    mode: isAppearanceMode(draft.mode) ? draft.mode : inherited.mode,
-    theme: isAppearanceTheme(draft.theme) ? draft.theme : inherited.theme,
-  };
-  const confirmedTriple: AppearanceDefaults = {
-    density: snapshot.effective.density,
-    mode: snapshot.effective.mode,
-    theme: snapshot.effective.theme,
-  };
-  const idempotencyKey = `${idempotencyNonce}:${draft.theme}:${draft.density}:${draft.mode}`;
+  const preview = withFallback(draft, inherited);
   const dirty = isDirty(draft, confirmed);
+  const ownChoices = appearanceAxes.filter(
+    (axis) => draft[axis] !== appearanceInheritValue,
+  ).length;
   // Offered only when it would change something. A promotion that writes the
   // organization's own values back to it is a confirmation dialog for nothing.
-  const promotion = promotedTriple(draft, inherited);
+  const promotion = withFallback(draft, inherited);
   const promotable =
     organizationDefault !== undefined &&
     inherited.version > 0 &&
-    (promotion.theme !== inherited.theme ||
-      promotion.density !== inherited.density ||
-      promotion.mode !== inherited.mode);
+    appearanceAxes.some((axis) => promotion[axis] !== inherited[axis]);
+
+  function options(axis: AppearanceAxis): AxisOption[] {
+    // A `match` on any of these rows, the inherited one included, is named by
+    // what it resolves to under the theme this person will see: the page
+    // renders the organization's `match` under their theme, not the
+    // organization's.
+    return [
+      {
+        label: `Organization default: ${valueLabel(axis, inherited[axis], preview.theme)}`,
+        value: appearanceInheritValue,
+      },
+      ...axisOptions(axis, preview.theme),
+    ];
+  }
 
   function change(field: AppearanceFieldName) {
     return (next: string | null) =>
       setDraft((current) => ({
         ...current,
-        [field]: accepted(next, personalOptions[field], current[field]),
+        [field]: accepted(next, options(field), current[field]),
       }));
   }
 
   return (
     <>
       <form action={formAction}>
-        <AppearanceDraftPreview confirmed={confirmedTriple} preview={preview} />
+        <AppearanceDraftPreview
+          confirmed={snapshot.effective}
+          preview={preview}
+        />
         <input
           name="expectedVersion"
           type="hidden"
           value={snapshot.user.version}
         />
-        <input name="idempotencyKey" type="hidden" value={idempotencyKey} />
+        <input
+          name="idempotencyKey"
+          type="hidden"
+          value={draftKey(idempotencyNonce, draft)}
+        />
         <input name="renderContext" type="hidden" value={contextToken} />
         <input name="returnTo" type="hidden" value={returnTo} />
         <Stack direction="column" gap={3}>
-          {(["theme", "density", "mode"] as const).map((field) => (
-            <AppearanceAxisField
-              description={
-                draft[field] === appearanceInheritValue
-                  ? inheritDescription
-                  : overriddenDescription
+          <Inspector.Root>
+            <Inspector.Section label="Just for you">
+              {displayedAxes.map((field) => (
+                <Inspector.Row key={field} label={axisLabels[field]}>
+                  <AppearanceAxisSelect
+                    description={
+                      draft[field] === appearanceInheritValue
+                        ? inheritDescription
+                        : overriddenDescription
+                    }
+                    disabled={pending}
+                    field={field}
+                    issues={fieldIssues(state, field)}
+                    onValueChange={change(field)}
+                    options={options(field)}
+                    value={draft[field]}
+                  />
+                </Inspector.Row>
+              ))}
+            </Inspector.Section>
+            <Inspector.Footer
+              action={
+                <Stack direction="row" gap={2} wrap>
+                  {dirty ? (
+                    <Button
+                      disabled={pending}
+                      size="sm"
+                      type="submit"
+                      variant="primary"
+                    >
+                      {pending ? "Applying…" : "Apply"}
+                    </Button>
+                  ) : null}
+                  <Button
+                    disabled={pending || ownChoices === 0}
+                    onClick={() => setDraft(draftOf(noOverrides))}
+                    size="sm"
+                    type="button"
+                    variant="secondary"
+                  >
+                    Use organization defaults
+                  </Button>
+                  <Button
+                    disabled={pending}
+                    onClick={() => {
+                      setDraft(confirmed);
+                      onDismiss?.();
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    Cancel
+                  </Button>
+                </Stack>
               }
-              disabled={pending}
-              field={field}
-              issues={fieldIssues(state, field)}
-              key={field}
-              onValueChange={change(field)}
-              options={personalOptions[field]}
-              value={draft[field]}
+              note={
+                ownChoices === 0
+                  ? "You follow the organization default on every setting."
+                  : `You have ${ownChoices} of your own ${ownChoices === 1 ? "choice" : "choices"}.`
+              }
             />
-          ))}
+          </Inspector.Root>
           <AppearanceBanner message={bannerMessage(state)} />
           {dirty ? <p role="status">{previewNotice}</p> : null}
-          <Stack direction="row" gap={2} wrap>
-            {dirty ? (
-              <Button
-                disabled={pending}
-                size="sm"
-                type="submit"
-                variant="primary"
-              >
-                {pending ? "Applying…" : "Apply"}
-              </Button>
-            ) : null}
-            <Button
-              disabled={pending}
-              onClick={() =>
-                setDraft({
-                  density: appearanceInheritValue,
-                  mode: appearanceInheritValue,
-                  theme: appearanceInheritValue,
-                })
-              }
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              Reset to organization defaults
-            </Button>
-            <Button
-              disabled={pending}
-              onClick={() => {
-                setDraft(confirmed);
-                onDismiss?.();
-              }}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              Cancel
-            </Button>
-          </Stack>
         </Stack>
       </form>
       {promotable && organizationDefault !== undefined ? (
         <PromoteToOrganizationDefault
+          axes={promotion}
           organizationName={organizationName}
           promotion={organizationDefault}
-          triple={promotion}
           version={inherited.version}
         />
       ) : null}
@@ -577,7 +779,6 @@ export function PersonalAppearanceForm({
 
 export type OrganizationAppearanceFormProps = {
   action?: AppearanceFormAction;
-  canEdit: boolean;
   contextToken: string;
   defaults: AppearanceDefaults;
   idempotencyNonce: string;
@@ -587,15 +788,14 @@ export type OrganizationAppearanceFormProps = {
   version: number;
 };
 
-const noOverrides: AppearanceOverrides = {
-  density: null,
-  mode: null,
-  theme: null,
-};
-
+/**
+ * The organization's default on each axis, for everyone in it who has not
+ * chosen for themselves. Rendered only for a member who may change it: the
+ * settings page decides with `canEditOrganizationAppearance`, the same
+ * authority the command enforces.
+ */
 export function OrganizationAppearanceForm({
   action,
-  canEdit,
   contextToken,
   defaults,
   idempotencyNonce,
@@ -603,7 +803,7 @@ export function OrganizationAppearanceForm({
   overrides = noOverrides,
   version,
 }: OrganizationAppearanceFormProps) {
-  const [draft, setDraft] = useState<AppearanceDraft>({ ...defaults });
+  const [draft, setDraft] = useState<AppearanceDraft>(draftOf(defaults));
   const [state, formAction, pending] = useActionState(
     action ?? unavailableAppearanceAction,
     initialAppearanceActionState,
@@ -611,92 +811,82 @@ export function OrganizationAppearanceForm({
   const returnTo = useReturnDestination();
   useSuccessNavigation(state);
 
-  if (!canEdit) {
-    return (
-      <Stack direction="column" gap={2}>
-        {(["theme", "density", "mode"] as const).map((field) => (
-          <Row key={field}>
-            <span>{axisLabels[field]}</span>
-            <span>{valueLabel(defaults[field])}</span>
-          </Row>
-        ))}
-        <p>Only an owner can change these defaults.</p>
-      </Stack>
-    );
-  }
+  const drafted = withFallback(draft, defaults);
+  // The preview shows what *this* owner or admin will see: their own overrides
+  // still win over the tenant draft they are editing.
+  const preview = withFallback(draftOf(overrides), drafted);
+  const confirmedAxes = withFallback(draftOf(overrides), defaults);
 
-  // The preview shows what *this* owner will see: their own overrides still win
-  // over the tenant draft they are editing.
-  const preview: AppearanceDefaults = {
-    density:
-      overrides.density ??
-      (isAppearanceDensity(draft.density) ? draft.density : defaults.density),
-    mode:
-      overrides.mode ??
-      (isAppearanceMode(draft.mode) ? draft.mode : defaults.mode),
-    theme:
-      overrides.theme ??
-      (isAppearanceTheme(draft.theme) ? draft.theme : defaults.theme),
-  };
-  const confirmedTriple: AppearanceDefaults = {
-    density: overrides.density ?? defaults.density,
-    mode: overrides.mode ?? defaults.mode,
-    theme: overrides.theme ?? defaults.theme,
-  };
-  const idempotencyKey = `${idempotencyNonce}:${draft.theme}:${draft.density}:${draft.mode}`;
+  function options(axis: AppearanceAxis): AxisOption[] {
+    // A `match` here follows the theme the organization is being given.
+    return axisOptions(axis, drafted.theme);
+  }
 
   function change(field: AppearanceFieldName) {
     return (next: string | null) =>
       setDraft((current) => ({
         ...current,
-        [field]: accepted(next, organizationOptions[field], current[field]),
+        [field]: accepted(next, options(field), current[field]),
       }));
   }
 
   return (
     <form action={formAction}>
-      <AppearanceDraftPreview confirmed={confirmedTriple} preview={preview} />
+      <AppearanceDraftPreview confirmed={confirmedAxes} preview={preview} />
       <input name="expectedVersion" type="hidden" value={version} />
-      <input name="idempotencyKey" type="hidden" value={idempotencyKey} />
+      <input
+        name="idempotencyKey"
+        type="hidden"
+        value={draftKey(idempotencyNonce, draft)}
+      />
       <input name="renderContext" type="hidden" value={contextToken} />
       <input name="returnTo" type="hidden" value={returnTo} />
       <Stack direction="column" gap={3}>
-        {(["theme", "density", "mode"] as const).map((field) => (
-          <AppearanceAxisField
-            description={`Applies to everyone in ${organizationName} who has not overridden this axis.`}
-            disabled={pending}
-            field={field}
-            issues={fieldIssues(state, field)}
-            key={field}
-            onValueChange={change(field)}
-            options={organizationOptions[field]}
-            value={draft[field]}
-          />
-        ))}
-        <AppearanceBanner message={bannerMessage(state)} />
-        <Stack direction="row" gap={2} wrap>
-          <Button disabled={pending} size="sm" type="submit" variant="primary">
-            {pending ? "Applying…" : "Apply"}
-          </Button>
-          <Button
-            disabled={pending}
-            onClick={() => setDraft({ ...defaults })}
-            size="sm"
-            type="button"
-            variant="ghost"
+        <Inspector.Root>
+          <Inspector.Section
+            label={`Organization default · everyone in ${organizationName}`}
           >
-            Cancel
-          </Button>
-        </Stack>
+            {displayedAxes.map((field) => (
+              <Inspector.Row key={field} label={axisLabels[field]}>
+                <AppearanceAxisSelect
+                  description={axisHelp[field]}
+                  disabled={pending}
+                  field={field}
+                  issues={fieldIssues(state, field)}
+                  onValueChange={change(field)}
+                  options={options(field)}
+                  value={draft[field]}
+                />
+              </Inspector.Row>
+            ))}
+          </Inspector.Section>
+          <Inspector.Footer
+            action={
+              <Stack direction="row" gap={2} wrap>
+                <Button
+                  disabled={pending}
+                  size="sm"
+                  type="submit"
+                  variant="primary"
+                >
+                  {pending ? "Applying…" : "Apply"}
+                </Button>
+                <Button
+                  disabled={pending}
+                  onClick={() => setDraft(draftOf(defaults))}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  Cancel
+                </Button>
+              </Stack>
+            }
+            note="Applies to everyone who has not chosen for themselves."
+          />
+        </Inspector.Root>
+        <AppearanceBanner message={bannerMessage(state)} />
       </Stack>
     </form>
   );
-}
-
-/** The three vocabularies are disjoint, so one guarded lookup names any axis. */
-function valueLabel(value: string) {
-  if (isAppearanceTheme(value)) return themeLabels[value];
-  if (isAppearanceDensity(value)) return densityLabels[value];
-  if (isAppearanceMode(value)) return modeLabels[value];
-  return value;
 }

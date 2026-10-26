@@ -62,11 +62,12 @@ export type FoundationScenario = Readonly<{
  * organizations seeded with the same triple make that unobservable: a client
  * transition would adopt values identical to the ones already on `<html>`, and
  * a guard watching for a change would report none whether the contract held or
- * not. So the bootstrap tenant is given a default of its own, `0014`'s seeded
- * `requestport` is left on the tenant the journey creates through the UI, and
- * the switch has a visible consequence in whichever document performs it.
+ * not. So the bootstrap tenant is given a default of its own, the seeded
+ * `cue` (the owner-activation trigger's seed since `0026`) is left on the
+ * tenant the journey creates through the UI, and the switch has a visible
+ * consequence in whichever document performs it.
  */
-const seededOrganizationTheme = "requestport";
+const seededOrganizationTheme = "cue";
 const bootstrapOrganizationTheme = "terminal";
 
 function e2eToken() {

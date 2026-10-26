@@ -35,6 +35,9 @@ type UserRow = {
   theme: string | null;
   density: string | null;
   mode: string | null;
+  font: string | null;
+  look: string | null;
+  paint: string | null;
   version: number;
 };
 
@@ -44,6 +47,9 @@ type OrganizationRow = {
   theme: string;
   density: string;
   mode: string;
+  font: string;
+  look: string;
+  paint: string;
   lastUpdatedByUserId: string | null;
   version: number;
 };
@@ -75,6 +81,9 @@ const userColumns = {
   theme: userAppearancePreferences.theme,
   density: userAppearancePreferences.density,
   mode: userAppearancePreferences.mode,
+  font: userAppearancePreferences.font,
+  look: userAppearancePreferences.look,
+  paint: userAppearancePreferences.paint,
   version: userAppearancePreferences.version,
 };
 
@@ -84,6 +93,9 @@ const organizationColumns = {
   theme: organizationAppearanceDefaults.theme,
   density: organizationAppearanceDefaults.density,
   mode: organizationAppearanceDefaults.mode,
+  font: organizationAppearanceDefaults.font,
+  look: organizationAppearanceDefaults.look,
+  paint: organizationAppearanceDefaults.paint,
   lastUpdatedByUserId: organizationAppearanceDefaults.lastUpdatedByUserId,
   version: organizationAppearanceDefaults.version,
 };
@@ -123,6 +135,9 @@ export function createAppearanceRepository(
           theme: input.theme,
           density: input.density,
           mode: input.mode,
+          font: input.font,
+          look: input.look,
+          paint: input.paint,
         })
         .onConflictDoNothing({ target: userAppearancePreferences.userId })
         .returning(userColumns);
@@ -136,6 +151,9 @@ export function createAppearanceRepository(
           theme: input.theme,
           density: input.density,
           mode: input.mode,
+          font: input.font,
+          look: input.look,
+          paint: input.paint,
           version: sql`${userAppearancePreferences.version} + 1`,
           updatedAt: new Date(),
         })
@@ -197,6 +215,9 @@ export function createAppearanceRepository(
           theme: input.theme,
           density: input.density,
           mode: input.mode,
+          font: input.font,
+          look: input.look,
+          paint: input.paint,
           lastUpdatedByUserId: input.lastUpdatedByUserId,
           version: sql`${organizationAppearanceDefaults.version} + 1`,
           updatedAt: new Date(),

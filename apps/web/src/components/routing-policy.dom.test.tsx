@@ -26,11 +26,13 @@ vi.mock("../app/(app)/settings/routing/actions.js", () => ({
   updateRoutingRuleAction: actions.update,
 }));
 
+import { ConsoleToasts } from "./console-toasts.js";
 import {
+  AddRoutingRuleDialog,
   CreateRoutingRuleForm,
   DisableRoutingRuleForm,
+  EditRoutingRuleDialog,
   RoutingTester,
-  UpdateRoutingRuleForm,
 } from "./routing-policy.js";
 
 /**
@@ -95,9 +97,19 @@ function mount(node: ReactNode) {
       persistPreferences={false}
       theme="requestport"
     >
-      {node}
+      <ConsoleToasts>{node}</ConsoleToasts>
     </ThemeProvider>,
   );
+}
+
+/**
+ * A confirmation, found in the toast viewport rather than in the form's own
+ * result line, which is drawn in the dialog until it closes.
+ */
+async function toastSaying(text: string) {
+  return within(
+    screen.getByRole("region", { name: "Notifications" }),
+  ).findByText(text);
 }
 
 function submitted(action: { mock: { calls: unknown[][] } }) {
@@ -174,7 +186,7 @@ describe("adding a rule", () => {
         { name: "bug" },
       ),
     );
-    await user.click(screen.getByRole("button", { name: "Add rule" }));
+    await user.click(screen.getByRole("button", { name: "Create rule" }));
 
     await waitFor(() => expect(actions.create).toHaveBeenCalled());
     const data = submitted(actions.create);
@@ -201,7 +213,7 @@ describe("adding a rule", () => {
     );
 
     await choose(user, "Target", "Docs");
-    await user.click(screen.getByRole("button", { name: "Add rule" }));
+    await user.click(screen.getByRole("button", { name: "Create rule" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "The most specific matching rule already denies this route.",
@@ -209,13 +221,50 @@ describe("adding a rule", () => {
   });
 });
 
-describe("editing and disabling a rule", () => {
-  test("keeps the editor folded away until it is asked for", async () => {
+describe("adding a rule from the page's action", () => {
+  test("opens the form in a dialog from Add rule, and closes it on success with a toast", async () => {
     const user = userEvent.setup();
+    actions.create.mockResolvedValue({
+      message: "Routing rule created.",
+      status: "success",
+    } satisfies RoutingActionState);
     mount(
-      <UpdateRoutingRuleForm
+      <AddRoutingRuleDialog
         agents={agents}
         idempotencyKey={key}
+        lanes={lanes}
+        projects={projects}
+      />,
+    );
+
+    expect(screen.queryByRole("combobox", { name: "Target" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Add rule" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Add a routing rule",
+    });
+    await choose(user, "Target", "Docs");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Create rule" }),
+    );
+
+    await waitFor(() => expect(actions.create).toHaveBeenCalled());
+    expect(await toastSaying("Routing rule created.")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Add a routing rule" }),
+      ).toBeNull(),
+    );
+  });
+});
+
+describe("editing and disabling a rule", () => {
+  test("keeps the editor in a dialog until its row's Edit is pressed", async () => {
+    const user = userEvent.setup();
+    mount(
+      <EditRoutingRuleDialog
+        agents={agents}
+        idempotencyKey={key}
+        label="Platform to Docs"
         lanes={lanes}
         projects={projects}
         rule={rule}
@@ -223,39 +272,44 @@ describe("editing and disabling a rule", () => {
     );
 
     expect(screen.queryByRole("button", { name: "Save rule" })).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(
+      screen.getByRole("button", { name: "Edit rule Platform to Docs" }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Edit rule" });
     expect(
-      screen.getByRole("button", { name: "Save rule" }),
+      within(dialog).getByRole("button", { name: "Save rule" }),
     ).toBeInTheDocument();
   });
 
   test("opens the editor already holding the rule's own constraints", async () => {
     const user = userEvent.setup();
     mount(
-      <UpdateRoutingRuleForm
+      <EditRoutingRuleDialog
         agents={agents}
         idempotencyKey={key}
+        label="Platform to Docs"
         lanes={lanes}
         projects={projects}
         rule={rule}
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(
+      screen.getByRole("button", { name: "Edit rule Platform to Docs" }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Edit rule" });
     expect(
-      within(screen.getByRole("group", { name: "Request types" })).getByRole(
-        "checkbox",
-        { name: "bug" },
-      ),
+      within(
+        within(dialog).getByRole("group", { name: "Request types" }),
+      ).getByRole("checkbox", { name: "bug" }),
     ).toBeChecked();
     expect(
-      within(screen.getByRole("group", { name: "Human roles" })).getByRole(
-        "checkbox",
-        { name: "owner" },
-      ),
+      within(
+        within(dialog).getByRole("group", { name: "Human roles" }),
+      ).getByRole("checkbox", { name: "owner" }),
     ).toBeChecked();
 
-    await user.click(screen.getByRole("button", { name: "Save rule" }));
+    await user.click(within(dialog).getByRole("button", { name: "Save rule" }));
     await waitFor(() => expect(actions.update).toHaveBeenCalled());
     const data = submitted(actions.update);
     expect(data.get("ruleId")).toBe(rule.id);

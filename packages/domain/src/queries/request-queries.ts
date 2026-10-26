@@ -36,6 +36,16 @@ export interface RequestListItem {
   reporterId: string;
   assigneeType: "user" | "agent" | null;
   assigneeId: string | null;
+  /**
+   * What the console calls the reporter: their name, or their email when the
+   * name is blank, when the reporter is a person who is or was a member of
+   * the request's organisation; the agent's display name when the reporter is
+   * one of that organisation's agents (ruling 264); otherwise null, and the
+   * console falls back to the short id.
+   */
+  reporterDisplayName: string | null;
+  /** The same, for the assignee. */
+  assigneeDisplayName: string | null;
   updatedAt: Date;
   unread: boolean;
   openQuestionCount: number;
@@ -60,6 +70,8 @@ export interface RequestMessageView {
   id: string;
   actorType: string;
   actorId: string;
+  /** The author, named as `RequestListItem.reporterDisplayName` names one. */
+  actorDisplayName: string | null;
   bodyMd: string;
   visibility: string;
   replyToId: string | null;
@@ -70,6 +82,8 @@ export interface RequestAnswerView {
   id: string;
   actorType: string;
   actorId: string;
+  /** The author, named as `RequestListItem.reporterDisplayName` names one. */
+  actorDisplayName: string | null;
   sourceChannel: string;
   bodyMd: string;
   structuredValue: JsonValue | null;
@@ -113,6 +127,8 @@ export interface RequestDetail extends RequestListItem {
   submittedAt: Date | null;
   allowedActions: RequestAction[];
   permissions: {
+    /** Whether the reader may run `assign_request` on it, in its state. */
+    canAssign: boolean;
     canAskBlocking: boolean;
     canEdit: boolean;
     canParticipate: boolean;
@@ -194,6 +210,12 @@ export interface TimelineEventView {
   aggregateId: string;
   aggregateVersion: number;
   actor: Record<string, JsonValue>;
+  /**
+   * The actor, named as `RequestListItem.reporterDisplayName` names one. The
+   * request timeline and the organisation's activity read it; a read that
+   * leaves it out names nobody.
+   */
+  actorDisplayName?: string | null;
   data: Record<string, JsonValue>;
   links: Record<string, string>;
 }
@@ -206,6 +228,16 @@ export interface RequestQueryRepository {
     cursor?: string;
     limit?: number;
   }): Promise<CursorPage<RequestListItem>>;
+  /**
+   * How many requests each named view holds: each count under the same
+   * conditions `listRequests` reads that view's list under, every page
+   * included (ruling 262).
+   */
+  countRequests<View extends string>(input: {
+    userId: string;
+    organizationId: string;
+    views: Readonly<Record<View, RequestFilters>>;
+  }): Promise<Record<View, number>>;
   getRequest(input: {
     userId: string;
     organizationId: string;

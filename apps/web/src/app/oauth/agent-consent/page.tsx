@@ -5,14 +5,15 @@ import { createAgentManagementRepository } from "@requestport/db";
 import { agentScopes } from "@requestport/domain";
 import { KeyRound } from "lucide-react";
 import { notFound } from "next/navigation";
-
+import type { ReactNode } from "react";
 import {
   AgentConsentDecision,
   AgentConsentDenial,
 } from "../../../components/agent-consent-form.js";
-import { Page, PageSection } from "../../../components/page-layout.js";
+import { PageSection } from "../../../components/page-layout.js";
 import { getApplicationContext } from "../../../lib/server-application-context.js";
 import { webStorage } from "../../../lib/server-request-port.js";
+import { WaysIn } from "../../(auth)/ways-in.js";
 import {
   approveAgentConsentAction,
   denyAgentConsentAction,
@@ -102,24 +103,25 @@ export default async function AgentConsentPage({
    */
   if (hasLapsed(params)) {
     return (
-      <main>
-        <Page
-          description="Authorization requests are short-lived, so a link left open stops working."
-          eyebrow="Authorization"
-          title="This request has expired"
-          width="form"
-        >
-          <PageSection labelledBy="oauth-expired-heading">
-            <Panel>
-              <EmptyState
-                hint="Ask the agent to start the connection again. Nothing was authorized and nothing was changed."
-                icon={KeyRound}
-                title="Start the connection again"
-              />
-            </Panel>
-          </PageSection>
-        </Page>
-      </main>
+      <WaysIn
+        lines={
+          <Description>
+            Authorization requests are short-lived, so a link left open stops
+            working.
+          </Description>
+        }
+        title="This request has expired"
+      >
+        <Content>
+          <Panel>
+            <EmptyState
+              hint="Ask the agent to start the connection again. Nothing was authorized and nothing was changed."
+              icon={KeyRound}
+              title="Start the connection again"
+            />
+          </Panel>
+        </Content>
+      </WaysIn>
     );
   }
   const storage = webStorage();
@@ -161,46 +163,44 @@ export default async function AgentConsentPage({
   const noGrantableScope = requestedScopes.length === 0;
   if (impossibleScopeMix || noGrantableScope) {
     return (
-      <main>
-        <Page
-          description={
-            noGrantableScope
+      <WaysIn
+        lines={
+          <Description>
+            {noGrantableScope
               ? "This request names no capability RequestPort grants, so there is nothing here to approve."
-              : "A provisioning grant is organization-wide and exclusive, so it cannot be combined with project scopes."
-          }
-          eyebrow="Authorization"
-          title="This request cannot be approved"
-          width="form"
-        >
-          <PageSection labelledBy="oauth-impossible-heading">
-            <Panel>
-              <EmptyState
-                hint={
-                  noGrantableScope
-                    ? "Ask the agent to request the RequestPort scopes it needs. Scopes this server does not grant are ignored, and a request made only of them has nothing to approve."
-                    : "Ask the agent to request project:provision on its own, or to request only the project scopes it needs."
-                }
-                icon={KeyRound}
-                title={
-                  noGrantableScope
-                    ? "No RequestPort scope requested"
-                    : "project:provision may carry no other scope"
-                }
-              />
-              {/*
+              : "A provisioning grant is organization-wide and exclusive, so it cannot be combined with project scopes."}
+          </Description>
+        }
+        title="This request cannot be approved"
+      >
+        <Content>
+          <Panel>
+            <EmptyState
+              hint={
+                noGrantableScope
+                  ? "Ask the agent to request the RequestPort scopes it needs. Scopes this server does not grant are ignored, and a request made only of them has nothing to approve."
+                  : "Ask the agent to request project:provision on its own, or to request only the project scopes it needs."
+              }
+              icon={KeyRound}
+              title={
+                noGrantableScope
+                  ? "No RequestPort scope requested"
+                  : "project:provision may carry no other scope"
+              }
+            />
+            {/*
                 And an answer for the agent. There is nothing to approve here,
                 but the client is waiting on its callback: denial is what ends
                 that wait instead of letting it time out on silence.
               */}
-              <AgentConsentDenial
-                clientId={clientId}
-                deny={denyAgentConsentAction}
-                oauthQuery={oauthQuery}
-              />
-            </Panel>
-          </PageSection>
-        </Page>
-      </main>
+            <AgentConsentDenial
+              clientId={clientId}
+              deny={denyAgentConsentAction}
+              oauthQuery={oauthQuery}
+            />
+          </Panel>
+        </Content>
+      </WaysIn>
     );
   }
   if (!options) notFound();
@@ -219,37 +219,38 @@ export default async function AgentConsentPage({
     : !options.projects.length;
   if (nothingToBind) {
     return (
-      <main>
-        <Page
-          description="This connection needs somewhere to live, and there is nowhere to put it yet."
-          eyebrow="Authorization"
-          title="This connection has nowhere to go"
-          width="form"
-        >
-          <PageSection labelledBy="oauth-nothing-to-bind-heading">
-            <Panel>
-              <EmptyState
-                hint={
-                  provisioning
-                    ? "A provisioning grant is organization-wide, and it can only be approved by an owner or an administrator. Ask somebody who administers this organization to connect the agent."
-                    : "This agent asks for access to a project, and there is no project here you maintain. Create one, or ask to be added to an existing one, and start the connection again."
-                }
-                icon={KeyRound}
-                title={
-                  provisioning
-                    ? "No organization you administer"
-                    : "No project to bind this to"
-                }
-              />
-              <AgentConsentDenial
-                clientId={clientId}
-                deny={denyAgentConsentAction}
-                oauthQuery={oauthQuery}
-              />
-            </Panel>
-          </PageSection>
-        </Page>
-      </main>
+      <WaysIn
+        lines={
+          <Description>
+            This connection needs somewhere to live, and there is nowhere to put
+            it yet.
+          </Description>
+        }
+        title="This connection has nowhere to go"
+      >
+        <Content>
+          <Panel>
+            <EmptyState
+              hint={
+                provisioning
+                  ? "A provisioning grant is organization-wide, and it can only be approved by an owner or an administrator. Ask somebody who administers this organization to connect the agent."
+                  : "This agent asks for access to a project, and there is no project here you maintain. Create one, or ask to be added to an existing one, and start the connection again."
+              }
+              icon={KeyRound}
+              title={
+                provisioning
+                  ? "No organization you administer"
+                  : "No project to bind this to"
+              }
+            />
+            <AgentConsentDenial
+              clientId={clientId}
+              deny={denyAgentConsentAction}
+              oauthQuery={oauthQuery}
+            />
+          </Panel>
+        </Content>
+      </WaysIn>
     );
   }
   const proposedName = options.client.name?.trim() || "Connected agent";
@@ -333,13 +334,16 @@ export default async function AgentConsentPage({
   ];
 
   return (
-    <main>
-      <Page
-        description="An external agent wants delegated access to RequestPort. Confirm the exact identity, project, and capabilities before continuing."
-        eyebrow="Authorization"
-        title="Connect an agent"
-        width="form"
-      >
+    <WaysIn
+      lines={
+        <Description>
+          An external agent wants delegated access to RequestPort. Confirm the
+          exact identity, project, and capabilities before continuing.
+        </Description>
+      }
+      title="Connect an agent"
+    >
+      <Content>
         <PageSection labelledBy="oauth-client-heading">
           <Stack direction="column" gap={5}>
             <Panel>
@@ -432,7 +436,20 @@ export default async function AgentConsentPage({
             />
           </Stack>
         </PageSection>
-      </Page>
-    </main>
+      </Content>
+    </WaysIn>
   );
+}
+
+/**
+ * The line under a consent screen's heading: what this screen is, in the
+ * ways-in frame every one of its states shares (ruling 259).
+ */
+function Description({ children }: { children: ReactNode }) {
+  return <p className="text-center text-fg-muted">{children}</p>;
+}
+
+/** The screen's panels, as wide as the narrow measure the frame sets. */
+function Content({ children }: { children: ReactNode }) {
+  return <div className="w-full">{children}</div>;
 }

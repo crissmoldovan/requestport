@@ -58,6 +58,7 @@ vi.mock("./actions.js", () => {
   };
 });
 
+import { ConsoleToasts } from "../../../../components/console-toasts.js";
 import RoutingSettingsPage from "./page.js";
 
 /** A retired recipe class, assembled so the audit reads bookkeeping, not a class. */
@@ -86,7 +87,13 @@ const rule = {
 };
 
 async function markup() {
-  return renderToStaticMarkup((await RoutingSettingsPage()) as ReactElement);
+  // Inside the console's toast provider, which the shell mounts around every
+  // page (ruling 260): the page's dialogs raise their confirmations there.
+  return renderToStaticMarkup(
+    <ConsoleToasts>
+      {(await RoutingSettingsPage()) as ReactElement}
+    </ConsoleToasts>,
+  );
 }
 
 beforeEach(() => {
@@ -141,6 +148,23 @@ beforeEach(() => {
 });
 
 describe("the routing policy page", () => {
+  test("is a header with Add rule, then the rules, then the tester, with no form under the list (ruling 259)", async () => {
+    const html = await markup();
+
+    expect(html).toContain('data-slot="dialog-trigger"');
+    expect(html).toContain(">Add rule<");
+    // Adding opens in a dialog, so its submit is not on the page.
+    expect(html).not.toContain("Create rule");
+    expect(html).not.toContain('id="routing-create-heading"');
+    // The rules come first and the tester in a panel after them.
+    expect(html.indexOf('id="routing-rules-heading"')).toBeGreaterThan(-1);
+    expect(html.indexOf('id="route-test-heading"')).toBeGreaterThan(
+      html.indexOf('id="routing-rules-heading"'),
+    );
+    // A row's edit is a dialog trigger named after the rule's two ends.
+    expect(html).toContain('aria-label="Edit rule Platform to Docs"');
+  });
+
   test("puts the rules in a named, keyboard-reachable table region", async () => {
     const html = await markup();
 

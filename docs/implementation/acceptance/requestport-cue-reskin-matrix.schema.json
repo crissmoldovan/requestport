@@ -81,6 +81,7 @@
         "density": {
           "enum": [
             "ultra-compact",
+            "compact",
             "normal",
             "large"
           ]
@@ -162,6 +163,7 @@
         "surface": {
           "enum": [
             "boundary:error:(app)",
+            "boundary:error:(app)/settings",
             "boundary:error:(app)/settings/appearance",
             "boundary:error:(auth)",
             "boundary:error:root",
@@ -171,6 +173,7 @@
             "boundary:loading:(auth)",
             "boundary:loading:oauth",
             "boundary:not-found:(app)",
+            "boundary:not-found:(app)/settings",
             "boundary:not-found:(auth)",
             "boundary:not-found:root",
             "route:/",
@@ -214,7 +217,17 @@
             "hivehub",
             "dusk",
             "luma",
-            "snuffle"
+            "snuffle",
+            "command",
+            "graphite",
+            "kiln",
+            "ledger",
+            "monolith",
+            "porcelain",
+            "prism",
+            "quotamate",
+            "tender",
+            "zine"
           ]
         },
         "viewport": {

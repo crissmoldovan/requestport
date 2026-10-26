@@ -1,47 +1,68 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+
+/**
+ * The shell navigates with the App Router, which a static render has no
+ * instance of. Nothing here clicks; the DOM suite is where navigation is
+ * asserted.
+ */
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () =>
+    new URLSearchParams("requestId=00000000-0000-4000-8000-000000000101"),
+}));
 
 import {
-  boundedWorkbenchLayout,
-  defaultWorkbenchLayout,
-  initialWorkbenchLayout,
   RequestWorkbenchShell,
-  workbenchPanels,
+  workbenchListSize,
 } from "./request-workbench-shell.js";
 
 function workbenchMarkup(hasDetail: boolean) {
   return renderToStaticMarkup(
     <RequestWorkbenchShell
-      detail={<p>Selected request</p>}
+      backHref="/requests?view=inbox"
+      detail={<p>The selected request</p>}
       hasDetail={hasDetail}
-      list={<p>Request list</p>}
+      list={<p>The request list</p>}
     />,
   );
 }
 
 describe("request workbench layout", () => {
-  test("splits the workbench with the native resizable group", () => {
+  test("puts the list beside the detail in cue-ui's SplitPane", () => {
     const markup = workbenchMarkup(true);
 
-    expect(markup).toContain('data-slot="resizable-group"');
-    expect(markup).toContain('data-orientation="horizontal"');
-    expect(markup.match(/data-slot="resizable-panel"/gu)).toHaveLength(2);
-    expect(markup).toContain('data-slot="resizable-handle"');
+    expect(markup).toContain('data-slot="split-pane"');
+    // A server render has measured nothing, so it draws side by side; the
+    // browser stacks the panes once it has measured a narrow frame.
+    expect(markup).toContain('data-layout="split"');
+    expect(markup).toContain('data-slot="split-pane-list"');
+    expect(markup).toContain('data-slot="split-pane-detail"');
     expect(markup).toContain('role="separator"');
-    expect(markup).toContain(`id="${workbenchPanels.list.id}"`);
-    expect(markup).toContain(`id="${workbenchPanels.detail.id}"`);
+    expect(markup).toContain('aria-label="Resize the requests"');
     expect(markup).toContain('aria-label="Request list"');
     expect(markup).toContain('aria-label="Selected request"');
-    expect(markup).toContain("Request list");
-    expect(markup).toContain("Selected request");
+    expect(markup).toContain("The request list");
+    expect(markup).toContain("The selected request");
   });
 
-  test("leaves no hand-rolled resizer, style attribute, or retired recipe", () => {
+  test("clips the side-by-side server render to its frame", () => {
+    // The server render is side by side at every width. On a phone the list's
+    // fixed width would scroll the whole document sideways until the browser
+    // measures and stacks the panes; clipping keeps that render inside the
+    // frame without making the frame a scroll container.
     const markup = workbenchMarkup(true);
 
-    expect(markup).not.toContain("request-workbench");
-    expect(markup).not.toContain("--request-list-width");
-    expect(markup).not.toContain('aria-label="Resize request list"');
+    expect(markup).toMatch(
+      /<div[^>]*data-slot="split-pane"[^>]*class="[^"]*\boverflow-x-clip\b/u,
+    );
+  });
+
+  test("leaves no resizable group behind", () => {
+    const markup = workbenchMarkup(true);
+
+    expect(markup).not.toContain('data-slot="resizable-group"');
+    expect(markup).not.toContain('data-slot="resizable-handle"');
   });
 
   test("shows a native empty state while no request is selected", () => {
@@ -49,58 +70,24 @@ describe("request workbench layout", () => {
 
     expect(markup).toContain('data-slot="empty-state"');
     expect(markup).toContain("No request selected");
-    expect(markup).not.toContain("Selected request</p>");
-  });
-});
-
-describe("bounded workbench sizes", () => {
-  test("starts inside its own bounds", () => {
-    const list = defaultWorkbenchLayout[workbenchPanels.list.id] ?? 0;
-
-    expect(list).toBeGreaterThanOrEqual(workbenchPanels.list.minimum);
-    expect(list).toBeLessThanOrEqual(workbenchPanels.list.maximum);
-    expect(
-      list + (defaultWorkbenchLayout[workbenchPanels.detail.id] ?? 0),
-    ).toBe(100);
+    expect(markup).not.toContain("The selected request");
   });
 
-  test("clamps a saved size back inside the reviewed bounds", () => {
-    expect(
-      boundedWorkbenchLayout({
-        [workbenchPanels.detail.id]: 8,
-        [workbenchPanels.list.id]: 92,
-      }),
-    ).toEqual({
-      [workbenchPanels.detail.id]: 100 - workbenchPanels.list.maximum,
-      [workbenchPanels.list.id]: workbenchPanels.list.maximum,
-    });
-    expect(
-      boundedWorkbenchLayout({
-        [workbenchPanels.detail.id]: 96,
-        [workbenchPanels.list.id]: 4,
-      }),
-    ).toEqual({
-      [workbenchPanels.detail.id]: 100 - workbenchPanels.list.minimum,
-      [workbenchPanels.list.id]: workbenchPanels.list.minimum,
-    });
-  });
-
-  test("never lets a server render start from a saved seam", () => {
-    // The node lane has no `window`, which is exactly the condition a Next
-    // server render is in: module scope there is the process, shared by every
-    // reader, so the seam a browser saved must not reach it.
-    expect(initialWorkbenchLayout()).toEqual(defaultWorkbenchLayout);
-  });
-
-  test("refuses a malformed or unknown saved layout", () => {
-    expect(boundedWorkbenchLayout({})).toEqual(defaultWorkbenchLayout);
-    expect(
-      boundedWorkbenchLayout({
-        [workbenchPanels.list.id]: Number.NaN,
-      }),
-    ).toEqual(defaultWorkbenchLayout);
-    expect(boundedWorkbenchLayout({ "some-other-panel": 50 })).toEqual(
-      defaultWorkbenchLayout,
+  test("starts the list inside its own bounds", () => {
+    expect(workbenchListSize.default).toBeGreaterThanOrEqual(
+      workbenchListSize.minimum,
     );
+    expect(workbenchListSize.default).toBeLessThanOrEqual(
+      workbenchListSize.maximum,
+    );
+    expect(markupWidth(workbenchMarkup(true))).toBe(workbenchListSize.default);
   });
 });
+
+/** The list pane's width as the server render sets it, in pixels. */
+function markupWidth(markup: string): number {
+  const match = markup.match(
+    /data-slot="split-pane-list"[^>]*style="width:(\d+)px"/u,
+  );
+  return Number(match?.[1] ?? Number.NaN);
+}

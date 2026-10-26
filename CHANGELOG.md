@@ -3,6 +3,51 @@
 Each RequestPort release publishes its packages together, at one version.
 This file records each release, the newest first.
 
+## 0.2.4
+
+**What.** The fourteen packages at `0.2.4`, together, as before. The web
+console is redesigned on `@cueplusplus/ui` 0.29.0: its shell, requests,
+overview, agents, settings and sign-in pages. Appearance takes six settings.
+Requests can be assigned, from the console, over REST and over MCP. Two
+migrations.
+
+**Why.** The console was hard to read: the default appearance was the
+all-monospace `requestport` theme at ultra-compact density. The redesign
+follows a prototype the owner agreed.
+
+**Impact.**
+
+- **Appearance.** There are six settings: theme (any cue-ui theme), mode,
+  density (now including `compact`), typeface, Look and surface. Owners and
+  admins set the organization's default; everyone can choose differently
+  for themselves. A new organization starts on the `cue` theme at normal
+  density.
+- **Migration `0026`** adds the new appearance columns. It moves every
+  organization still exactly on the old untouched default to `cue` and
+  normal, with one event each, and leaves an organization anyone had edited
+  as it was.
+- **Migration `0027`** adds `agent_oauth_grants.last_used_at`. An API key's
+  or OAuth grant's last use is written at most once every five minutes, and
+  the agents page shows when each agent last signed in.
+- **New REST commands:**
+  - `POST /api/v1/commands/resend_organization_invitation` (operator
+    credentials, `members:manage`);
+  - `POST /api/v1/commands/assign_request` (agents, `request:triage`), also
+    an MCP tool.
+- **A new event, `request.assigned.v1`.** Webhook subscribers receive it,
+  and the person assigned gets an email. Deploy the worker before the web
+  application, so the worker handles the event before anyone assigns.
+- **The console's pages:**
+  - Requests shows names instead of ids, member pickers in its filters, and
+    a count on each view.
+  - Settings pages that fail or do not exist keep the settings navigation.
+  - Members shows when each person joined and can resend an invitation.
+  - The overview gains a setup card, which can be hidden, and a health line.
+- **One version, as before.** `requestport` 0.2.4 depends on each of the
+  other thirteen packages at exactly `0.2.4`, and `latest` moves to `0.2.4`.
+- **Supported versions.** Security fixes go to the latest `0.x` release
+  only, as `SECURITY.md` says, so 0.2.3 receives none from now on.
+
 ## 0.2.3
 
 **What.** The fourteen packages at `0.2.3`, together, as before. The web
@@ -31,8 +76,8 @@ advisories are gone.
   `REQUESTPORT_OPERATOR_CREDENTIALS=enabled`. With it unset, the default, the
   link opens the page's notice that operator credentials are off.
 - **Development tools.** vitest moves to 4.1.12. esbuild 0.18.20, which only
-  drizzle-kit's `@esbuild-kit` loader carried, leaves the tree. `pnpm audit`
-  reports no known vulnerabilities. No runtime package changes.
+  drizzle-kit's `@esbuild-kit` loader carried, leaves the tree. `pnpm audit
+  --prod` reports no known vulnerabilities. No runtime package changes.
 - **Nothing else changes.** The REST API, MCP and the web application behave
   exactly as in 0.2.2, apart from the new link. No migration.
 - **One version, as before.** `requestport` 0.2.3 depends on each of the

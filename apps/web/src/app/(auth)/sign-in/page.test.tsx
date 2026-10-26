@@ -7,12 +7,16 @@
  * the local credential that is the floor when neither is configured, and the
  * one case with no way in at all.
  */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import SignInPage from "./page.js";
 
 const methodKeys = [
+  "BETTER_AUTH_URL",
   "VERCEL_ENV",
   "GITHUB_CLIENT_ID",
   "GITHUB_CLIENT_SECRET",
@@ -165,5 +169,52 @@ describe("the sign-in page", () => {
     ]) {
       expect((await renderWith(env)).toLowerCase()).not.toContain("staging");
     }
+  });
+
+  test("draws the mark and the name, one heading, and the host it signs in to (ruling 259)", async () => {
+    const markup = await renderWith({
+      BETTER_AUTH_URL: "http://127.0.0.1:3300",
+    });
+
+    expect(markup.match(/<h1/gu)).toHaveLength(1);
+    expect(markup).toMatch(/<h1[^>]*>Sign in<\/h1>/u);
+    expect(markup).toContain("RequestPort");
+    expect(markup).toContain("<svg");
+    expect(markup).toContain("to 127.0.0.1:3300");
+    // The ways in sit in one card.
+    expect(markup).toContain('data-slot="card"');
+  });
+
+  test("names no host when the deployment's address is missing or is not a URL", async () => {
+    for (const env of [{}, { BETTER_AUTH_URL: "not a url" }]) {
+      expect(await renderWith(env)).not.toMatch(/>to [^<]+</u);
+    }
+  });
+
+  test("takes the credential in a password field, and offers the way back from a lost one only where the credential is a way in", async () => {
+    const credential = await renderWith({});
+    const hosted = await renderWith({ ...github, ...magicLink });
+
+    expect(credential).toContain('data-slot="password-input"');
+    expect(credential).toContain("Lost your credential?");
+    expect(credential).toMatch(/>Sign in with credential<\/button>/u);
+    expect(hosted).not.toContain("Lost your credential?");
+  });
+
+  test("names the lost-credential command exactly as the CLI defines it", () => {
+    const program = readFileSync(
+      resolve(
+        import.meta.dirname,
+        "../../../../../requestport/src/owner/rotate-credential.ts",
+      ),
+      "utf8",
+    ).match(/const PROGRAM = "([^"]+)";/u)?.[1];
+    const form = readFileSync(
+      resolve(import.meta.dirname, "sign-in-form.tsx"),
+      "utf8",
+    );
+
+    expect(program).toBe("requestport owner rotate-credential");
+    expect(form).toContain(`code="${program}"`);
   });
 });

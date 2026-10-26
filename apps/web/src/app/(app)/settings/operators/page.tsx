@@ -14,7 +14,7 @@ import { KeyRound, ShieldOff } from "lucide-react";
 
 import { NoOrganizationSetup } from "../../../../components/administration-views.js";
 import {
-  IssueOperatorCredentialForm,
+  IssueOperatorCredentialDialog,
   OperatorCredentialActions,
 } from "../../../../components/operator-credentials.js";
 import { Page } from "../../../../components/page-layout.js";
@@ -109,19 +109,12 @@ export default async function OperatorCredentialsPage() {
     projects.map((project) => [project.id, project.name]),
   );
 
+  // A header with the one primary action, and the credentials as a panel
+  // (ruling 259): issuing opens in a dialog from "Issue key".
   return (
     <Page
-      description={description}
-      eyebrow="Settings"
-      title="Operator credentials"
-      width="wide"
-    >
-      <SettingsSection
-        headingId="operator-credentials-issue-heading"
-        note="The key is shown once. A rotation keeps its scopes, project and expiry."
-        title="Issue a credential"
-      >
-        <IssueOperatorCredentialForm
+      action={
+        <IssueOperatorCredentialDialog
           action={issueOperatorCredentialAction}
           idempotencyKey={`web:operators:issue:${randomUUID()}`}
           projects={projects.map((project) => ({
@@ -130,7 +123,12 @@ export default async function OperatorCredentialsPage() {
           }))}
           scopes={operatorScopes}
         />
-      </SettingsSection>
+      }
+      description={description}
+      eyebrow="Settings"
+      title="Operator credentials"
+      width="wide"
+    >
       <SettingsSection
         bleed
         headingId="operator-credentials-list-heading"
@@ -214,13 +212,11 @@ export default async function OperatorCredentialsPage() {
             </Table.Root>
           </TableScrollRegion>
         ) : (
-          <Stack direction="column" gap={3}>
-            <EmptyState
-              hint="A credential appears here once it is issued."
-              icon={KeyRound}
-              title="No operator credentials"
-            />
-          </Stack>
+          <EmptyState
+            hint="Use Issue key to create one. It appears here once it is issued."
+            icon={KeyRound}
+            title="No operator credentials"
+          />
         )}
       </SettingsSection>
     </Page>

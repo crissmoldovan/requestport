@@ -1,11 +1,11 @@
-import { Eyebrow, PageShell, Panel } from "@cueplusplus/ui/chrome";
+import { Card } from "@cueplusplus/ui/layout";
 import {
   readSignInMethods,
   type SignInMethods,
 } from "@requestport/config/sign-in-methods";
-
+import { WaysIn } from "../ways-in.js";
 import { authorizationResumeTarget } from "./authorization-resume.js";
-import { SignInForm } from "./sign-in-form.js";
+import { LostCredentialHelp, SignInForm } from "./sign-in-form.js";
 
 export default async function SignInPage({
   searchParams,
@@ -30,24 +30,45 @@ export default async function SignInPage({
   const anyMethod =
     methods.github || methods.magicLink || methods.localCredential;
 
+  const host = hostOf(process.env.BETTER_AUTH_URL);
+
+  // The reference build's sign-in (ruling 259): where this signs in to and
+  // what it offers under the heading, then one card holding every way in this
+  // deployment offers, and the way back from a lost credential where one is.
   return (
-    <main>
-      <PageShell
-        eyebrow={<Eyebrow>RequestPort access</Eyebrow>}
-        subtitle={subtitleFor(methods)}
-        title="Sign in"
-        width="narrow"
-      >
-        {anyMethod ? (
-          // A panel is a rim and a surface, never padding: the density token
-          // is what puts the controls off the hairline at every rung.
-          <Panel className="p-(--cue-space-5)">
+    <WaysIn
+      lines={
+        <>
+          {host ? <p className="text-fg-muted">to {host}</p> : null}
+          <p className="text-center text-fg-muted">{subtitleFor(methods)}</p>
+        </>
+      }
+      title="Sign in"
+    >
+      {anyMethod ? (
+        <Card.Root className="w-full">
+          <Card.Content>
             <SignInForm methods={methods} resumeTo={resumeTo} />
-          </Panel>
-        ) : null}
-      </PageShell>
-    </main>
+          </Card.Content>
+        </Card.Root>
+      ) : null}
+      {methods.localCredential ? <LostCredentialHelp /> : null}
+    </WaysIn>
   );
+}
+
+/**
+ * The host this page signs in to, read from the address the deployment's
+ * authentication is configured for, the way the methods are read: unparsed,
+ * and a value that is missing or is not a URL is simply not shown.
+ */
+function hostOf(url: string | undefined) {
+  if (!url) return undefined;
+  try {
+    return new URL(url).host || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** One sentence naming exactly the ways in this deployment offers. */

@@ -2,11 +2,10 @@
 
 import { ThemeProvider } from "@cueplusplus/ui/system";
 import type { AppearanceDefaults } from "@requestport/domain/browser";
-import { GeistMono } from "geist/font/mono";
-import { GeistSans } from "geist/font/sans";
 import type { ReactNode } from "react";
 
 import { appThemes } from "../lib/app-themes.js";
+import { appearancePresentation } from "../lib/appearance-presentation.js";
 
 /**
  * The provider-as-body boundary, and the reason it is a client module.
@@ -18,9 +17,14 @@ import { appThemes } from "../lib/app-themes.js";
  * same client module that clones it — keeps the element real, while the page
  * subtree stays an ordinary streamed child of the body.
  *
- * The triple is a prop, not state: the server resolved it, the head scripts
- * already stamped it, and `persistPreferences={false}` keeps the browser record
- * a mirror rather than a second preference source.
+ * The six axes are a prop, not state: the server resolved them, the head
+ * scripts already stamped them, and `persistPreferences={false}` keeps the
+ * browser record a mirror rather than a second preference source. The
+ * typeface, style set and paint are handed over with every `match` resolved
+ * through the theme's Look (`appearancePresentation`); no `fontFamilies` is
+ * passed, because it would shadow the pairing the typeface names — the faces
+ * reach the pairing through the `--cue-face-*` classes the root layout puts
+ * on `<html>` (`appearance-faces.ts`).
  */
 export function AppearanceRoot({
   appearance,
@@ -31,37 +35,36 @@ export function AppearanceRoot({
   children: ReactNode;
   nonce: string | undefined;
 }>) {
+  const presentation = appearancePresentation(appearance);
   return (
     <ThemeProvider
       asChild
-      density={appearance.density}
-      fontFamilies={{
-        sans: GeistSans.style.fontFamily,
-        mono: GeistMono.style.fontFamily,
-      }}
-      mode={appearance.mode}
+      density={presentation.density}
+      font={presentation.font}
+      mode={presentation.mode}
       /*
-       * Threaded pre-emptively, and it currently reaches nothing.
+       * What the nonce reaches, at `@cueplusplus/ui@0.29.0`.
        *
-       * `ThemeProvider` renders its density override `<style>` only when
-       * `overrides.densities` is given — `densityLayer` is `null` otherwise,
-       * and this component passes no `overrides`. So the nonce is consumed by
-       * no element today. It is passed anyway because the moment an override is
-       * added the element appears, and a client-rendered `<style>` cannot pick
-       * up a server nonce by itself.
+       * **Base UI's** style element, and its prehydration `<script>`: given a
+       * nonce, `ThemeProvider` renders Base UI's own `CSPProvider` around this
+       * tree, as it has since 0.14.1. That is what the acceptance suite's
+       * blocked-style tolerance used to forgive, and why this application
+       * renders no `CSPProvider` of its own — cue-ui's contract is this prop
+       * **or** your own provider, never both, because an inner provider
+       * replaces an outer one rather than extending it.
        *
-       * It is also what nonces **Base UI's** style element, and its
-       * prehydration `<script>`, since `@cueplusplus/ui@0.14.1`: given a nonce
-       * `ThemeProvider` renders Base UI's own `CSPProvider` around this tree.
-       * That is what the acceptance suite's blocked-style tolerance used to
-       * forgive, and why this application renders no `CSPProvider` of its own —
-       * cue-ui's contract is this prop **or** your own provider, never both,
-       * because an inner provider replaces an outer one rather than extending
-       * it.
+       * None of the provider's own `<style>` elements, today. It renders its
+       * density layer only when `overrides.densities` is given and its colour
+       * layer only when `overrides.colors` is, and this component passes no
+       * `overrides`. The nonce is threaded anyway because the moment an
+       * override is added the element appears, and a client-rendered `<style>`
+       * cannot pick up a server nonce by itself.
        */
       nonce={nonce}
+      paint={presentation.paint}
       persistPreferences={false}
-      theme={appearance.theme}
+      styleSet={presentation.styleSet}
+      theme={presentation.theme}
       themes={appThemes}
     >
       <body>{children}</body>

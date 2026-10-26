@@ -135,7 +135,7 @@ function objectOf(value: unknown): Record<string, unknown> {
 }
 
 /**
- * Re-derives the effective triple from the two stored rows instead of trusting
+ * Re-derives the effective axes from the two stored rows instead of trusting
  * a projection. A row written by a newer writer, or edited by hand, degrades
  * exactly the axis it broke; a non-positive version reads as an absent row.
  */
@@ -184,7 +184,7 @@ export type AppearanceSnapshotDependencies = {
 /**
  * The presentation boundary. It is deliberately fail-open: an optional-session,
  * cookie, database, provider, or preference-read failure emits the fixed
- * RequestPort triple plus one safe diagnostic and returns. It never substitutes
+ * fallback axes plus one safe diagnostic and returns. It never substitutes
  * a session, never reports one it did not read, and never decides anything the
  * page's own authentication and product-data boundaries own.
  */
@@ -207,7 +207,7 @@ export async function loadAppearanceSnapshot(
   } catch (error) {
     // Fail-open is about *failures*. `redirect()` and `notFound()` are the
     // framework's control flow, implemented by throwing, and mapping one to the
-    // fixed triple would leave the reader on a page Next had already decided to
+    // fixed fallback would leave the reader on a page Next had already decided to
     // leave — and record a diagnostic about a navigation. The dependencies here
     // are injected, so no rule read off this module's text can tell whether one
     // of them redirects; handing the sentinel back costs nothing when none does.

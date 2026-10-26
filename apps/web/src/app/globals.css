@@ -9,8 +9,18 @@
 @import "@cueplusplus/theme-dusk/theme.css";
 @import "@cueplusplus/theme-luma/theme.css";
 @import "@cueplusplus/theme-snuffle/theme.css";
+@import "@cueplusplus/theme-command/theme.css";
+@import "@cueplusplus/theme-graphite/theme.css";
+@import "@cueplusplus/theme-kiln/theme.css";
+@import "@cueplusplus/theme-ledger/theme.css";
+@import "@cueplusplus/theme-monolith/theme.css";
+@import "@cueplusplus/theme-porcelain/theme.css";
+@import "@cueplusplus/theme-prism/theme.css";
+@import "@cueplusplus/theme-quotamate/theme.css";
+@import "@cueplusplus/theme-tender/theme.css";
+@import "@cueplusplus/theme-zine/theme.css";
 
-/* The nine themes `src/lib/app-themes.ts` registers, and each must come after
+/* The nineteen themes `src/lib/app-themes.ts` registers, and each must come after
  * `@cueplusplus/ui/styles.css`. A theme's `[data-theme]` block and the blank
  * base's bare `:root` tie at (0,1,0), so the one declared later wins: a theme
  * imported first is painted over by the base. */
@@ -18,12 +28,12 @@
 /* Everything RequestPort owns, and each rule below is a surface no CUE++
  * component owns.
  *
- * `<body>` is one of them. The provider stamps the appearance attributes on it
- * and publishes the two Geist families through them, but it paints nothing —
- * so ground, ink and the document's inherited type are the application's to
- * declare, and every one of them resolves through a `--cue-*` token so the
- * document follows the resolved theme, density and mode exactly as everything
- * inside it does.
+ * `<body>` is one of them. The provider stamps the appearance attributes on it,
+ * and the typeface's families resolve through the `data-font` it keeps on
+ * `<html>`, but it paints nothing — so ground, ink and the document's
+ * inherited type are the application's to declare, and every one of them
+ * resolves through a `--cue-*` token so the document follows the resolved
+ * theme, density, mode and typeface exactly as everything inside it does.
  *
  * The focus ring is the other. It is drawn over every component and owned by
  * none of them, and the rule that declares its colour says why it has to be
@@ -51,11 +61,12 @@
 @layer base {
   /* The focus ring's colour, declared before the ring exists.
    *
-   * Every control chassis the package ships suppresses its outline at rest and
-   * repaints it on `:focus-visible` from the accent token — and carries a
-   * colour transition, whose property list in Tailwind v4 covers
-   * `outline-color`. So the ring's colour changes the instant focus lands, and
-   * animates from the value the element's outline already had. Nothing
+   * The package's controls suppress their outline at rest and repaint it on
+   * `:focus-visible` in the focus token, and the chassis of a button, a tab, a
+   * row or a segmented control also carries a colour transition whose
+   * property list covers `outline-color` — a button's `cue-press`, the rest
+   * `transition-colors`. So the ring's colour changes the instant focus lands,
+   * and animates from the value the element's outline already had. Nothing
    * declared one, which makes it `currentColor`: the control's own ink. The
    * ring is therefore drawn at full width and solid in the control's text
    * colour for the whole transition, and on the primary action that ink is
@@ -68,11 +79,14 @@
    * `outline-color` draws nothing by itself, so this reaches every element
    * without altering any of them until one takes focus — including the ones
    * that fall back to the browser's own ring, which is then painted in the
-   * theme's focus colour too. `src/app/styles.test.ts` reads which colour that
-   * is out of the installed package, so this follows the ring the package
-   * draws rather than a memory of it. */
+   * theme's focus colour too. A recessed field paints its ring as the focus
+   * token mixed with transparent, at the full share under the root layout's
+   * `data-field-edge="contrast"`, and with no colour transition, so this
+   * resting colour never shows in it. `src/app/styles.test.ts` reads which colour the
+   * animated rings are drawn in out of the installed package, so this follows
+   * the ring the package draws rather than a memory of it. */
   * {
-    outline-color: var(--cue-accent);
+    outline-color: var(--cue-focus);
   }
 
   body {

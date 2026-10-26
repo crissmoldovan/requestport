@@ -12,6 +12,15 @@ import {
   sanitizeAppearanceSnapshot,
 } from "./appearance.js";
 
+/** The three axes ruling 255 added, unset on a person's row. */
+const unset = { font: null, look: null, paint: null } as const;
+/** The three axes ruling 255 added, following the theme's Look. */
+const matched = { font: "match", look: "match", paint: "match" } as const;
+/** Where the three added axes come from, when the other three do. */
+function sources(source: "user" | "organization" | "fallback") {
+  return { font: source, look: source, paint: source } as const;
+}
+
 /**
  * The exact shape `pg` raises for `undefined_table`, wrapped the way Drizzle
  * wraps it: a generic `Failed query` error whose `cause` carries the SQLSTATE.
@@ -69,16 +78,17 @@ function snapshotDependencies(overrides: DependencyOverrides = {}) {
 }
 
 const personalisedSnapshot = {
-  user: { theme: "terminal", density: null, mode: null, version: 4 },
+  user: { theme: "terminal", density: null, mode: null, ...unset, version: 4 },
   organization: {
     theme: "venu",
     density: "large",
     mode: "light",
+    ...matched,
     version: 7,
   },
   effective: {
     // Deliberately disagrees with the two rows above: the resolver must
-    // recompute the triple rather than trust a projection it was handed.
+    // recompute the axes rather than trust a projection it was handed.
     theme: "snuffle",
     density: "ultra-compact",
     mode: "dark",
@@ -246,7 +256,7 @@ describe("bounded rollout telemetry", () => {
 describe("appearance snapshot validation", () => {
   test("emits the fixed RequestPort fallback with per-axis fallback sources", () => {
     expect(fallbackAppearanceSnapshot()).toEqual({
-      user: { theme: null, density: null, mode: null, version: 0 },
+      user: { theme: null, density: null, mode: null, ...unset, version: 0 },
       organization: { ...appearanceFallback, version: 0 },
       effective: {
         ...appearanceFallback,
@@ -254,28 +264,38 @@ describe("appearance snapshot validation", () => {
           theme: "fallback",
           density: "fallback",
           mode: "fallback",
+          ...sources("fallback"),
         },
       },
     });
   });
 
-  test("recomputes the effective triple instead of trusting the projection", () => {
+  test("recomputes the effective axes instead of trusting the projection", () => {
     expect(sanitizeAppearanceSnapshot(personalisedSnapshot)).toEqual({
-      user: { theme: "terminal", density: null, mode: null, version: 4 },
+      user: {
+        theme: "terminal",
+        density: null,
+        mode: null,
+        ...unset,
+        version: 4,
+      },
       organization: {
         theme: "venu",
         density: "large",
         mode: "light",
+        ...matched,
         version: 7,
       },
       effective: {
         theme: "terminal",
         density: "large",
         mode: "light",
+        ...matched,
         source: {
           theme: "user",
           density: "organization",
           mode: "organization",
+          ...sources("organization"),
         },
       },
     });
@@ -284,30 +304,40 @@ describe("appearance snapshot validation", () => {
   test("degrades one malformed stored axis without discarding the others", () => {
     expect(
       sanitizeAppearanceSnapshot({
-        user: { theme: "midnight", density: "large", mode: null, version: 2 },
+        user: {
+          theme: "midnight",
+          density: "large",
+          mode: null,
+          ...unset,
+          version: 2,
+        },
         organization: {
           theme: "cue",
           density: "gigantic",
           mode: "light",
+          ...matched,
           version: 3,
         },
       }),
     ).toEqual({
-      user: { theme: null, density: "large", mode: null, version: 2 },
+      user: { theme: null, density: "large", mode: null, ...unset, version: 2 },
       organization: {
         theme: "cue",
         density: appearanceFallback.density,
         mode: "light",
+        ...matched,
         version: 3,
       },
       effective: {
         theme: "cue",
         density: "large",
         mode: "light",
+        ...matched,
         source: {
           theme: "organization",
           density: "user",
           mode: "organization",
+          ...sources("organization"),
         },
       },
     });
@@ -316,7 +346,13 @@ describe("appearance snapshot validation", () => {
   test("treats a non-positive or absent version as an absent row", () => {
     expect(
       sanitizeAppearanceSnapshot({
-        user: { theme: "dusk", density: null, mode: null, version: 0 },
+        user: {
+          theme: "dusk",
+          density: null,
+          mode: null,
+          ...unset,
+          version: 0,
+        },
         organization: { theme: "dusk", density: "normal", mode: "dark" },
       }),
     ).toEqual(fallbackAppearanceSnapshot());
@@ -331,30 +367,34 @@ describe("appearance snapshot validation", () => {
   test("keeps an all-null personal tombstone inheriting while retaining its version", () => {
     expect(
       sanitizeAppearanceSnapshot({
-        user: { theme: null, density: null, mode: null, version: 9 },
+        user: { theme: null, density: null, mode: null, ...unset, version: 9 },
         organization: {
           theme: "signal",
           density: "normal",
           mode: "dark",
+          ...matched,
           version: 2,
         },
       }),
     ).toEqual({
-      user: { theme: null, density: null, mode: null, version: 9 },
+      user: { theme: null, density: null, mode: null, ...unset, version: 9 },
       organization: {
         theme: "signal",
         density: "normal",
         mode: "dark",
+        ...matched,
         version: 2,
       },
       effective: {
         theme: "signal",
         density: "normal",
         mode: "dark",
+        ...matched,
         source: {
           theme: "organization",
           density: "organization",
           mode: "organization",
+          ...sources("organization"),
         },
       },
     });
@@ -372,16 +412,24 @@ describe("fail-open appearance resolution", () => {
         readCurrentOrganizationId: async () =>
           "55555555-5555-4555-8555-555555555555",
         readSnapshot: async () => ({
-          user: { theme: "luma", density: null, mode: null, version: 2 },
+          user: {
+            theme: "luma",
+            density: null,
+            mode: null,
+            ...unset,
+            version: 2,
+          },
           organization: { ...appearanceFallback, version: 0 },
           effective: {
             theme: "venu",
             density: "large",
             mode: "dark",
+            ...matched,
             source: {
               theme: "organization",
               density: "organization",
               mode: "organization",
+              ...sources("organization"),
             },
           },
         }),
@@ -393,7 +441,13 @@ describe("fail-open appearance resolution", () => {
       theme: "luma",
       density: appearanceFallback.density,
       mode: appearanceFallback.mode,
-      source: { theme: "user", density: "fallback", mode: "fallback" },
+      ...matched,
+      source: {
+        theme: "user",
+        density: "fallback",
+        mode: "fallback",
+        ...sources("fallback"),
+      },
     });
   });
 
@@ -443,7 +497,13 @@ describe("fail-open appearance resolution", () => {
       theme: "terminal",
       density: "large",
       mode: "light",
-      source: { theme: "user", density: "organization", mode: "organization" },
+      ...matched,
+      source: {
+        theme: "user",
+        density: "organization",
+        mode: "organization",
+        ...sources("organization"),
+      },
     });
   });
 
@@ -460,6 +520,7 @@ describe("fail-open appearance resolution", () => {
               theme: null,
               density: "normal",
               mode: null,
+              ...unset,
               version: 1,
             },
             organization: {
@@ -485,7 +546,13 @@ describe("fail-open appearance resolution", () => {
       theme: appearanceFallback.theme,
       density: "normal",
       mode: appearanceFallback.mode,
-      source: { theme: "fallback", density: "user", mode: "fallback" },
+      ...matched,
+      source: {
+        theme: "fallback",
+        density: "user",
+        mode: "fallback",
+        ...sources("fallback"),
+      },
     });
   });
 
@@ -517,7 +584,7 @@ describe("fail-open appearance resolution", () => {
   ];
 
   test.each(failingBoundaries)(
-    "falls open to the RequestPort triple when the %s boundary fails",
+    "falls open to the fixed fallback when the %s boundary fails",
     async (_label, override) => {
       const { logger, records } = recordingLogger();
 
@@ -600,7 +667,7 @@ describe("fail-open appearance resolution", () => {
 /**
  * The boundary is fail-open, and `redirect()`/`notFound()` are not failures —
  * they are the framework's control flow, implemented by throwing. A catch-all
- * that mapped one would replace the navigation with the fixed triple and a
+ * that mapped one would replace the navigation with the fixed fallback and a
  * diagnostic, and the reader would sit on a page the framework had already
  * decided to leave. The dependencies are injected here, so nothing about the
  * text of this module says whether one can throw a sentinel; only running it

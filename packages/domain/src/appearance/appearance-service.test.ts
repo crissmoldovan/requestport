@@ -13,6 +13,8 @@ const organizationTriple = {
   density: "normal" as AppearanceDensity,
   mode: "dark" as AppearanceMode,
 };
+/** The three axes ruling 255 added, following the theme's Look. */
+const matched = { font: "match", look: "match", paint: "match" } as const;
 const userTriple = {
   theme: "venu" as AppearanceTheme,
   density: "large" as AppearanceDensity,
@@ -49,9 +51,12 @@ describe("appearance resolution", () => {
               theme: themeState === "user" ? userTriple.theme : null,
               density: densityState === "user" ? userTriple.density : null,
               mode: modeState === "user" ? userTriple.mode : null,
+              font: null,
+              look: null,
+              paint: null,
             },
             organization: organizationPresent
-              ? { ...organizationTriple, version: 5 }
+              ? { ...organizationTriple, ...matched, version: 5 }
               : null,
           });
 
@@ -90,25 +95,33 @@ describe("appearance resolution", () => {
   test("reports version zero and full inheritance for an absent personal row", () => {
     const snapshot = resolveAppearanceSnapshot({
       user: null,
-      organization: { ...organizationTriple, version: 9 },
+      organization: { ...organizationTriple, ...matched, version: 9 },
     });
 
     expect(snapshot.user).toEqual({
       theme: null,
       density: null,
       mode: null,
+      font: null,
+      look: null,
+      paint: null,
       version: 0,
     });
     expect(snapshot.organization).toEqual({
       ...organizationTriple,
+      ...matched,
       version: 9,
     });
     expect(snapshot.effective).toEqual({
       ...organizationTriple,
+      ...matched,
       source: {
         theme: "organization",
         density: "organization",
         mode: "organization",
+        font: "organization",
+        look: "organization",
+        paint: "organization",
       },
     });
   });
@@ -125,7 +138,14 @@ describe("appearance resolution", () => {
     });
     expect(snapshot.effective).toEqual({
       ...appearanceFallback,
-      source: { theme: "fallback", density: "fallback", mode: "fallback" },
+      source: {
+        theme: "fallback",
+        density: "fallback",
+        mode: "fallback",
+        font: "fallback",
+        look: "fallback",
+        paint: "fallback",
+      },
     });
   });
 
@@ -149,30 +169,46 @@ describe("appearance resolution", () => {
       theme: null,
       density: "large",
       mode: null,
+      font: null,
+      look: null,
+      paint: null,
       version: 2,
     });
     expect(snapshot.organization).toEqual({
       theme: "signal",
       density: appearanceFallback.density,
       mode: "light",
+      ...matched,
       version: 4,
     });
     expect(snapshot.effective).toEqual({
       theme: "signal",
       density: "large",
       mode: "light",
+      ...matched,
       source: {
         theme: "organization",
         density: "user",
         mode: "organization",
+        font: "organization",
+        look: "organization",
+        paint: "organization",
       },
     });
   });
 
   test("rejects a negative or non-integer stored version by clamping to zero", () => {
     const snapshot = resolveAppearanceSnapshot({
-      user: { version: -3, theme: null, density: null, mode: null },
-      organization: { ...organizationTriple, version: 1.5 },
+      user: {
+        version: -3,
+        theme: null,
+        density: null,
+        mode: null,
+        font: null,
+        look: null,
+        paint: null,
+      },
+      organization: { ...organizationTriple, ...matched, version: 1.5 },
     });
 
     expect(snapshot.user.version).toBe(0);

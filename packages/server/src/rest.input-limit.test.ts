@@ -691,7 +691,7 @@ describe(`the largest body a REST command can carry is ${LARGEST_BODY} values, p
     expect(new Set(commands.map((command) => command.name))).toEqual(
       new Set(restCommandTransports.map((transport) => transport.name)),
     );
-    expect(commands).toHaveLength(71);
+    expect(commands).toHaveLength(73);
   });
 
   test("each command's largest body fits the route's bounds; the largest is post_work_update's, and the domain accepts it", async () => {

@@ -6,10 +6,21 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import {
   DEFAULT_STORAGE_KEY,
   type DensityLevel,
+  type FontName,
   type Mode,
+  PAINTS,
+  type Paint,
   prepaintScript,
+  STYLE_SETS,
+  type StyleSet,
   type ThemeName,
 } from "@cueplusplus/ui/system";
+import {
+  appearanceConcreteFonts,
+  appearanceConcreteLooks,
+  appearanceConcretePaints,
+  appearanceDensities,
+} from "@requestport/domain/browser";
 import { describe, expect, test } from "vitest";
 
 /**
@@ -27,12 +38,24 @@ import { describe, expect, test } from "vitest";
  * chain is anchored by an attestation again — these two values are what the
  * registry served and what a `--frozen-lockfile` install re-checks.
  */
-const pinnedUiVersion = "0.14.1";
-const pinnedTokensVersion = "0.14.1";
+const pinnedUiVersion = "0.29.0";
+const pinnedTokensVersion = "0.29.0";
 const publishedUiIntegrity =
-  "sha512-cOiRTD23GCc9RRuSY3rBsE23MaA7pMdmzoFZT5hmuzfPTQ9rRwLufXgJtOjrgxA0Au1VaPTuzJYB2Br0oRvVWA==";
+  "sha512-8ZZSQQILXR2PQU4Tz8G8atAgnirYqjqzrK3G9kB1HnRUbfBqX4B79Nr+xlOqX74e5GHWI/QNrycOyk/EHL2AdQ==";
 const publishedTokensIntegrity =
-  "sha512-//FfyrT1eDqTNd68mWS+aeJLQ2rAaMPjBSevQe/tdpcW+DDAFWGa3PjZCWAMXSdRb+E+kxeC6IXhdrY8+XiMsg==";
+  "sha512-iIINSkV7jT0h/BjiDODilk/2HDCi6gKkazv46qUBwd42T3T1rloPqyxa/541O2ucN5SR9m6cEpqfUrpKQ8LwEg==";
+
+/**
+ * The one version every `@cueplusplus/theme-*` package RequestPort registers is
+ * pinned at. Nothing but the consumer ties it to `pinnedUiVersion`: the theme
+ * packages version on their own and peer only on `@cueplusplus/theme-base`,
+ * and `@cueplusplus/ui` 0.17.0's Migrating section asks for every one to be
+ * upgraded with it, because an older `theme.css` paints a following island's
+ * dark block for every light-mode visitor until it mounts. 1.1.2 is each of
+ * the eight's latest release on the registry beside ui 0.29.0, and the one
+ * that writes 0.23.0's `--cue-field-edge` into every block.
+ */
+const pinnedThemeVersion = "1.1.2";
 
 /**
  * RequestPort's locked appearance axes. The annotations are the proof: these
@@ -49,12 +72,23 @@ const requestPortThemes: readonly ThemeName[] = [
   "dusk",
   "luma",
   "snuffle",
+  "command",
+  "graphite",
+  "kiln",
+  "ledger",
+  "monolith",
+  "porcelain",
+  "prism",
+  "quotamate",
+  "tender",
+  "zine",
 ];
-const requestPortDensities: readonly DensityLevel[] = [
-  "ultra-compact",
-  "normal",
-  "large",
-];
+/** The typefaces, Looks and surfaces RequestPort offers (ruling 255). */
+const requestPortFonts: readonly FontName[] = appearanceConcreteFonts;
+const requestPortLooks: readonly StyleSet[] = appearanceConcreteLooks;
+const requestPortPaints: readonly Paint[] = appearanceConcretePaints;
+/** The four rungs RequestPort offers: cue-ui's but `ultra-large` (ruling 255). */
+const requestPortDensities: readonly DensityLevel[] = appearanceDensities;
 const requestPortModes: readonly Mode[] = ["system", "dark", "light"];
 
 const requiredSubpathExports = [
@@ -67,7 +101,6 @@ const requiredSubpathExports = [
   "./overlays",
   "./chrome",
   "./layout",
-  "./layout/resizable",
 ];
 
 const require = createRequire(import.meta.url);
@@ -314,14 +347,14 @@ describe("installed CUE++ package manifest boundary", () => {
 });
 
 describe("RequestPort appearance axes resolve against the installed package", () => {
-  test("declares nine RequestPort themes, eight of them the package's", () => {
-    expect(requestPortThemes).toHaveLength(9);
-    expect(new Set(requestPortThemes).size).toBe(9);
+  test("declares nineteen RequestPort themes, eighteen of them the package's", () => {
+    expect(requestPortThemes).toHaveLength(19);
+    expect(new Set(requestPortThemes).size).toBe(19);
 
-    // The ninth is RequestPort's own, in `packages/theme`, and the design
-    // system's manifest is deliberately not asked about it: cueplusplus/cue-ui#121
+    // One is RequestPort's own, in `packages/theme`, and the design system's
+    // manifest is deliberately not asked about it: cueplusplus/cue-ui#121
     // asks for every product theme to leave that repository, and this suite
-    // must not fail when it does. The other eight are still its packages, and
+    // must not fail when it does. The other eighteen are its packages, and
     // a theme this application registers that the package never shipped would
     // paint nothing.
     for (const theme of requestPortThemes) {
@@ -330,12 +363,71 @@ describe("RequestPort appearance axes resolve against the installed package", ()
     }
   });
 
-  test("declares three RequestPort densities present in the manifest", () => {
-    expect(requestPortDensities).toHaveLength(3);
+  test("pins every registered theme package at one version, declared, installed and locked", () => {
+    const webManifest = JSON.parse(
+      readFileSync(resolve(webRoot, "package.json"), "utf8"),
+    ) as { dependencies: Record<string, string> };
+    const themePackages = requestPortThemes
+      .filter((theme) => theme !== "requestport")
+      .map((theme) => `@cueplusplus/theme-${theme}`);
+
+    expect(themePackages).toHaveLength(18);
+    for (const name of themePackages) {
+      const installed = JSON.parse(
+        readFileSync(require.resolve(`${name}/package.json`), "utf8"),
+      ) as { name: string; version: string };
+      const declared = webManifest.dependencies[name];
+
+      expect({
+        declared,
+        installed: `${installed.name}@${installed.version}`,
+        locked: readLockfileIntegrity(
+          lockfile,
+          `${name}@${declared}`,
+        )?.startsWith("sha512-"),
+      }).toEqual({
+        declared: installed.version,
+        installed: `${name}@${declared}`,
+        locked: true,
+      });
+    }
+    // The eight presets ruling 254 moved together stay at one version; the
+    // themes ruling 255 added are each pinned at the version it installed.
+    for (const preset of [
+      "cue",
+      "dusk",
+      "hivehub",
+      "luma",
+      "signal",
+      "snuffle",
+      "terminal",
+      "venu",
+    ]) {
+      expect(webManifest.dependencies[`@cueplusplus/theme-${preset}`]).toBe(
+        pinnedThemeVersion,
+      );
+    }
+  });
+
+  test("declares four RequestPort densities present in the manifest", () => {
+    expect(requestPortDensities).toEqual([
+      "ultra-compact",
+      "compact",
+      "normal",
+      "large",
+    ]);
 
     for (const density of requestPortDensities) {
       expect(manifest.densities).toContain(density);
     }
+  });
+
+  test("offers only style sets and paints the installed package names (ruling 255)", () => {
+    // The annotations above are the compile-time half; this is the run-time
+    // half, against the package's own lists, in their order.
+    expect(requestPortLooks).toEqual([...STYLE_SETS]);
+    expect(requestPortPaints).toEqual([...PAINTS]);
+    expect(requestPortFonts.length).toBeGreaterThan(0);
   });
 
   test("declares exactly the three published modes", () => {

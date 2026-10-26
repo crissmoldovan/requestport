@@ -30,6 +30,7 @@ vi.mock("./(app)/requests/actions.js", () => {
   return {
     answerQuestionAction: inert,
     askQuestionAction: inert,
+    assignRequestAction: inert,
     attachArtifactAction: inert,
     closeQuestionAction: inert,
     createRequestAction: inert,
@@ -41,6 +42,14 @@ vi.mock("./(app)/requests/actions.js", () => {
     updateRequestAction: inert,
   };
 });
+
+// The workbench navigates with the App Router, which this harness does not
+// mount. Nothing here navigates.
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/requests",
+  useRouter: () => ({ push: () => undefined }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 import { RequestListView } from "../components/request-workflow.js";
 import ApplicationLoading from "./(app)/loading.js";
@@ -67,20 +76,22 @@ import { AppearanceRoot } from "./appearance-root.js";
  * then under one minted while hydrating server markup (`_R_…_`) and outside
  * the accessibility tree.
  *
- * The context that changes is `@cueplusplus/ui@0.14.1`'s `ThemeProvider`,
+ * The context that changed was `@cueplusplus/ui@0.14.1`'s `ThemeProvider`,
  * which `AppearanceRoot` renders around the whole body. Under `system` — the
- * mode `0014` seeds every organization with — it publishes `resolvedMode` on
- * its context, starts it at `dark`, and corrects it from `matchMedia` in a
+ * mode `0014` seeds every organization with — it published `resolvedMode` on
+ * its context, started it at `dark`, and corrected it from `matchMedia` in a
  * layout effect. In a browser that prefers light, which is Playwright's
- * default, that correction lands in the commit that hydrates the shell.
+ * default, that correction landed in the commit that hydrates the shell.
  *
- * The cure is upstream: a provider whose context value does not change while
- * the document hydrates. Until it ships, the two cases that state what the
- * page must do are `test.fails`, and the case above them pins what it does
- * today, so neither can pass for the wrong reason. The upgrade that fixes the
- * provider turns all three red: delete the pinning case and drop `.fails`.
- * `docs/implementation/plans/2026-09-27-13/track-x1.md` has the evidence and
- * the change, verified against this suite.
+ * The cure was upstream, and shipped in 0.17.0 (cue-ui `002f95a`): what the
+ * provider corrects while the page hydrates, the colour scheme `system` reads
+ * included, is posted beside its context, and the context does not move. Until
+ * then the two light cases below were `test.fails`, beside a case that pinned
+ * the double render so neither could pass for the wrong reason. The upgrade to
+ * 0.29.0 turned all three red, as they were written to: the pinning case is
+ * deleted and `.fails` dropped. `docs/implementation/plans/2026-09-27-13/track-x1.md`
+ * has the evidence and the change; the three red runs are in `track-j.md`'s
+ * record of the upgrade.
  *
  * The harness is the one a browser gives Next: the whole document rendered by
  * Fizz as a stream, the shell parsed first, the rest applied as the parser
@@ -88,6 +99,12 @@ import { AppearanceRoot } from "./appearance-root.js";
  * document hydrated with `hydrateRoot(document, …)`. The page is
  * `RequestListView`, the body of `/requests`; the fallback is the real
  * `(app)/loading.tsx`.
+ *
+ * The two copies are told apart by identity. The server's copy of the title
+ * is the element the stream put in the document; a page rendered again on the
+ * client is a new element, whatever ids it carries. The suite used to read the
+ * `useId` stamped on the workbench's resizable group for this, and the
+ * workbench has no such group since it moved to cue-ui's `SplitPane`.
  */
 
 const title = "journey Project 44463764a5d9 needs a dark mode";
@@ -95,6 +112,7 @@ const title = "journey Project 44463764a5d9 needs a dark mode";
 const item: RequestListItem = {
   assigneeId: null,
   assigneeType: null,
+  assigneeDisplayName: null,
   displayKey: "JRN-1",
   id: "00000000-0000-4000-8000-000000000101",
   laneId: null,
@@ -103,6 +121,7 @@ const item: RequestListItem = {
   priority: "normal",
   reporterId: "00000000-0000-4000-8000-0000000000aa",
   reporterType: "agent",
+  reporterDisplayName: null,
   sensitivity: "normal",
   sourceKind: "human_direct",
   sourceProjectId: null,
@@ -123,6 +142,7 @@ function RequestsPage({ items }: { items: Promise<RequestListItem[]> }) {
     <RequestListView
       lanes={[]}
       mode="all"
+      now={new Date("2026-09-27T10:30:00.000Z")}
       page={{ items: use(items), nextCursor: null }}
       projects={[]}
       query={{}}
@@ -140,7 +160,10 @@ function Document({ items }: { items: Promise<RequestListItem[]> }): ReactNode {
       <AppearanceRoot
         appearance={{
           density: "ultra-compact",
+          font: "match",
+          look: "match",
           mode: "system",
+          paint: "match",
           theme: "requestport",
         }}
         nonce={undefined}
@@ -212,6 +235,12 @@ beforeEach(() => {
     return frames.length;
   });
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  // `SplitPane` measures its frame after hydrating and, in jsdom, measures it
+  // `0` wide: it would stack, and stacking remounts the list on purpose. That
+  // remount is the component's, after hydration, and would hide the one this
+  // suite is about. Without a `ResizeObserver` it keeps the split, as it does
+  // in a browser that has none.
+  vi.stubGlobal("ResizeObserver", undefined);
   vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
     const line = format(...args);
     if (!line.startsWith("Detected multiple renderers concurrently")) {
@@ -318,88 +347,70 @@ async function hydrate() {
   });
 }
 
-/** Every element carrying the request's title, in document order. */
-function titleCopies() {
-  return [...document.querySelectorAll("span")]
-    .filter((span) => span.textContent === title)
-    .map((span) => ({
-      group: span.closest("[data-group]")?.getAttribute("data-testid") ?? null,
-      hidden: span.closest("[hidden]") !== null,
-    }));
+/** The innermost elements carrying the request's title, in document order. */
+function titleElements() {
+  return [...document.body.querySelectorAll("*")].filter(
+    (element) =>
+      element.textContent === title &&
+      ![...element.children].some((child) => child.textContent === title),
+  );
 }
 
-/** A `useId` minted while hydrating server markup. */
-const serverId = expect.stringMatching(/^_R_[0-9a-z]+_$/u);
-/** A `useId` minted by a client render. */
-const clientId = expect.stringMatching(/^_r_[0-9a-z]+_$/u);
+/** Every copy of the title: whether it is the server's, and whether hidden. */
+function titleCopies(serverCopy: Element | undefined) {
+  return titleElements().map((element) => ({
+    hidden: element.closest("[hidden]") !== null,
+    server: element === serverCopy,
+  }));
+}
 
 describe("a page that streamed in after the shell", () => {
-  test("is rendered twice today when the browser prefers light and its swap is still queued", async () => {
-    preferColorScheme("light");
-    const { rest, shell } = await serveDocument();
-
-    // The page's markup and its swap arrived before the client code did.
-    parseShell(shell);
-    parseRest(rest);
-    expect(document.body.innerHTML).toContain("<!--$~-->");
-
-    await hydrate();
-
-    // The client's copy, then the server's, hidden: what agent-journey saw.
-    expect(titleCopies()).toEqual([
-      { group: clientId, hidden: false },
-      { group: serverId, hidden: true },
-    ]);
-    expect(reported, "React reports nothing").toEqual([]);
-
-    // The queued swap removes the server's copy. The client's remains.
-    await flushFrames();
-    expect(titleCopies()).toEqual([{ group: clientId, hidden: false }]);
-  });
-
-  test.fails("is hydrated once when the browser prefers light and its swap is still queued", async () => {
+  test("is hydrated once when the browser prefers light and its swap is still queued", async () => {
     preferColorScheme("light");
     const { rest, shell } = await serveDocument();
 
     parseShell(shell);
     parseRest(rest);
+    const [serverCopy] = titleElements();
     await hydrate();
 
     // Hydration waits for the swap, so the server's copy is the only one.
-    expect(titleCopies()).toEqual([{ group: serverId, hidden: true }]);
+    expect(titleCopies(serverCopy)).toEqual([{ hidden: true, server: true }]);
 
     await flushFrames();
-    expect(titleCopies()).toEqual([{ group: serverId, hidden: false }]);
+    expect(titleCopies(serverCopy)).toEqual([{ hidden: false, server: true }]);
     expect(reported).toEqual([]);
   });
 
-  test.fails("keeps the server's markup when the browser prefers light and the page is still on its way", async () => {
+  test("keeps the server's markup when the browser prefers light and the page is still on its way", async () => {
     preferColorScheme("light");
     const { rest, shell } = await serveDocument();
 
     parseShell(shell);
     await hydrate();
     parseRest(rest);
+    const [serverCopy] = titleElements();
     await flushFrames();
 
-    expect(titleCopies()).toEqual([{ group: serverId, hidden: false }]);
+    expect(titleCopies(serverCopy)).toEqual([{ hidden: false, server: true }]);
     expect(reported).toEqual([]);
   });
 
   test("is hydrated once when the browser prefers dark and its swap is still queued", async () => {
-    // The control: the same document in the same order, with the one input
-    // that decides whether the provider's context changes during hydration.
+    // The control: the same document in the same order, under the preference
+    // that never moved the provider's context, not even at 0.14.1.
     preferColorScheme("dark");
     const { rest, shell } = await serveDocument();
 
     parseShell(shell);
     parseRest(rest);
+    const [serverCopy] = titleElements();
     await hydrate();
 
-    expect(titleCopies()).toEqual([{ group: serverId, hidden: true }]);
+    expect(titleCopies(serverCopy)).toEqual([{ hidden: true, server: true }]);
 
     await flushFrames();
-    expect(titleCopies()).toEqual([{ group: serverId, hidden: false }]);
+    expect(titleCopies(serverCopy)).toEqual([{ hidden: false, server: true }]);
     expect(reported).toEqual([]);
   });
 });

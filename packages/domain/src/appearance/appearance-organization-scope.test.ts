@@ -10,7 +10,7 @@ import { appearanceOrganizationCommandName } from "./appearance-commands.js";
   The organisation appearance command requires `members:manage` (Plan 13,
   F.2.7): the scope F.2.0's scope commit named for members, invitations and
   organisation appearance. A person holds it through `humanScopes`; the role
-  rule (owner only) still applies on top of it.
+  rule (an owner or an admin, ruling 255) still applies on top of it.
 */
 
 const fingerprintSecret = "requestport-appearance-scope-fingerprint-secret";
@@ -18,7 +18,7 @@ const userId = "user_01JQ0000000000000000000011";
 const sessionId = "session_01JQ0000000000000000000011";
 const organizationId = "8f6b0f2a-0000-4000-8000-000000000011";
 
-function environment(role: "owner" | "admin" = "owner") {
+function environment(role: "owner" | "admin" | "member" = "owner") {
   return new InMemoryAppearanceEnvironment({
     activeSessions: [{ userId, credentialId: sessionId }],
     organizations: [{ id: organizationId }],
@@ -91,14 +91,25 @@ describe("organisation appearance and members:manage", () => {
     expect(target.events).toHaveLength(1);
   });
 
-  test("still refuses an admin who holds members:manage: the owner rule is unchanged", async () => {
+  test("lets an admin who holds members:manage write too (ruling 255)", async () => {
     const target = environment("admin");
 
     await expect(
       update(target, ["members:manage"], "admin"),
+    ).resolves.toMatchObject({ version: 2 });
+    expect(target.organizationRow(organizationId)?.version).toBe(2);
+    expect(target.events).toHaveLength(1);
+  });
+
+  test("still refuses a member who holds members:manage: the role rule applies on top", async () => {
+    const target = environment("member");
+
+    await expect(
+      update(target, ["members:manage"], "member"),
     ).rejects.toMatchObject({
       code: "forbidden",
-      message: "Organization appearance ownership is required",
+      message:
+        "An owner or admin is required to change the organization's appearance",
     });
     expect(target.organizationRow(organizationId)?.version).toBe(1);
     expect(target.events).toEqual([]);

@@ -19,6 +19,7 @@ import {
 import { Stack } from "@cueplusplus/ui/layout";
 import { Button, Chip } from "@cueplusplus/ui/primitives";
 import { privateTelemetryFields } from "@requestport/domain/browser";
+import { Plus } from "lucide-react";
 import { type ReactNode, useActionState, useRef } from "react";
 
 import type { ProjectSettingsActionState } from "../app/(app)/settings/projects/[projectId]/action-state.js";
@@ -27,6 +28,11 @@ import {
   actionBannerMessage,
   actionFieldIssues,
 } from "../lib/action-field-issues.js";
+import {
+  DialogCancel,
+  FormDialog,
+  useReportSuccess,
+} from "./administration-forms.js";
 
 /**
  * Project settings, on native CUE++ controls.
@@ -39,6 +45,11 @@ import {
  * Archiving is deliberately *not* treated as destructive: it is one half of a
  * toggle whose other half is on the same control, so a confirmation step there
  * would ask about something the next press undoes.
+ *
+ * The four forms that add to a list — a repository, an alias, a lane, a
+ * person's project role — open in a dialog from their panel's action
+ * (`ProjectAddDialog`, ruling 259). The details, lifecycle and work-policy
+ * forms edit what is already there, so they stay on the page.
  */
 
 type Action = (
@@ -91,14 +102,23 @@ function MutationMetaInputs({ meta }: { meta: MutationMeta }) {
   );
 }
 
+/** What a form that can be opened in a dialog is additionally handed. */
+type InDialog = {
+  /** The dialog's Cancel, when the form is opened in one. */
+  cancel?: ReactNode;
+  onSuccess?: (message: string) => void;
+};
+
 function CompactForm({
   action,
+  cancel,
   children,
   fields,
   meta,
+  onSuccess,
   projectId,
   submit,
-}: {
+}: InDialog & {
   action: Action;
   children: ReactNode | ((state: ProjectSettingsActionState) => ReactNode);
   fields: readonly string[];
@@ -110,6 +130,7 @@ function CompactForm({
     action,
     initialProjectSettingsActionState,
   );
+  useReportSuccess(state, onSuccess);
   return (
     <form action={formAction}>
       <Stack direction="column" gap={4}>
@@ -117,9 +138,17 @@ function CompactForm({
         <MutationMetaInputs meta={meta} />
         {typeof children === "function" ? children(state) : children}
         <Status fields={fields} state={state} />
-        <Button disabled={pending} size="sm" type="submit" variant="secondary">
-          {pending ? "Saving…" : submit}
-        </Button>
+        <Stack direction="row" gap={2} justify="end" wrap>
+          {cancel}
+          <Button
+            disabled={pending}
+            size="sm"
+            type="submit"
+            variant={cancel ? "primary" : "secondary"}
+          >
+            {pending ? "Saving…" : submit}
+          </Button>
+        </Stack>
       </Stack>
     </form>
   );
@@ -163,9 +192,11 @@ function CommandForm({
 
 export function AliasForm({
   action,
+  cancel,
   meta,
+  onSuccess,
   projectId,
-}: {
+}: InDialog & {
   action: Action;
   meta: MutationMeta;
   projectId: string;
@@ -173,10 +204,12 @@ export function AliasForm({
   return (
     <CompactForm
       action={action}
+      cancel={cancel}
+      onSuccess={onSuccess}
       fields={["alias"]}
       meta={meta}
       projectId={projectId}
-      submit="Add alias"
+      submit="Save alias"
     >
       {(state) => (
         <Field name="alias">
@@ -194,9 +227,11 @@ export function AliasForm({
 
 export function RepositoryForm({
   action,
+  cancel,
   meta,
+  onSuccess,
   projectId,
-}: {
+}: InDialog & {
   action: Action;
   meta: MutationMeta;
   projectId: string;
@@ -204,10 +239,12 @@ export function RepositoryForm({
   return (
     <CompactForm
       action={action}
+      cancel={cancel}
+      onSuccess={onSuccess}
       fields={["repositoryUrl"]}
       meta={meta}
       projectId={projectId}
-      submit="Add repository"
+      submit="Save repository"
     >
       {(state) => (
         <Field name="repositoryUrl">
@@ -231,9 +268,11 @@ export function RepositoryForm({
 
 export function LaneForm({
   action,
+  cancel,
   meta,
+  onSuccess,
   projectId,
-}: {
+}: InDialog & {
   action: Action;
   meta: MutationMeta;
   projectId: string;
@@ -241,10 +280,12 @@ export function LaneForm({
   return (
     <CompactForm
       action={action}
+      cancel={cancel}
+      onSuccess={onSuccess}
       fields={["name", "slug"]}
       meta={meta}
       projectId={projectId}
-      submit="Add lane"
+      submit="Save lane"
     >
       {(state) => (
         <>
@@ -278,10 +319,12 @@ const projectRoleOptions = [
 
 export function ProjectMemberForm({
   action,
+  cancel,
   members,
   meta,
+  onSuccess,
   projectId,
-}: {
+}: InDialog & {
   action: Action;
   members: Array<{ userId: string; name: string; email: string }>;
   meta: MutationMeta;
@@ -290,6 +333,8 @@ export function ProjectMemberForm({
   return (
     <CompactForm
       action={action}
+      cancel={cancel}
+      onSuccess={onSuccess}
       fields={["userId", "role"]}
       meta={meta}
       projectId={projectId}
@@ -709,5 +754,77 @@ export function ProjectStatusForm({
       <input name="status" type="hidden" value={nextStatus} />
       <MutationMetaInputs meta={meta} />
     </CommandForm>
+  );
+}
+
+const addDialogCopy = {
+  alias: {
+    description:
+      "A historical or local name agents can resolve to this project.",
+    title: "Add an alias",
+    trigger: "Add alias",
+  },
+  lane: {
+    description: "An optional work stream inside this project.",
+    title: "Add a lane",
+    trigger: "Add lane",
+  },
+  member: {
+    description:
+      "Give an organization member a role in this project, or change the one they have.",
+    title: "Set a project role",
+    trigger: "Set project role",
+  },
+  repository: {
+    description: "A canonical GitHub repository for this project.",
+    title: "Add a repository",
+    trigger: "Add repository",
+  },
+} as const;
+
+/**
+ * A panel's action on the project page: one of the four forms that add to a
+ * list, in a dialog. The trigger reads "Add …" (or "Set project role"), and the
+ * dialog's submit "Save …": the dialog is not modal, so its trigger stays in
+ * the accessibility tree while it is open, and the two must not share a name.
+ */
+export function ProjectAddDialog(
+  props: {
+    action: Action;
+    meta: MutationMeta;
+    projectId: string;
+  } & (
+    | { kind: "alias" | "lane" | "repository" }
+    | {
+        kind: "member";
+        members: Array<{ userId: string; name: string; email: string }>;
+      }
+  ),
+) {
+  const copy = addDialogCopy[props.kind];
+  return (
+    <FormDialog
+      description={copy.description}
+      icon={Plus}
+      title={copy.title}
+      trigger={copy.trigger}
+      triggerVariant="secondary"
+    >
+      {(done) => {
+        const shared = {
+          action: props.action,
+          cancel: <DialogCancel />,
+          meta: props.meta,
+          onSuccess: done,
+          projectId: props.projectId,
+        };
+        if (props.kind === "member") {
+          return <ProjectMemberForm {...shared} members={props.members} />;
+        }
+        if (props.kind === "alias") return <AliasForm {...shared} />;
+        if (props.kind === "lane") return <LaneForm {...shared} />;
+        return <RepositoryForm {...shared} />;
+      }}
+    </FormDialog>
   );
 }

@@ -24,6 +24,9 @@ export type AppearanceOrganizationSeed = {
   theme?: string;
   density?: string;
   mode?: string;
+  font?: string;
+  look?: string;
+  paint?: string;
   version?: number;
   aggregateId?: string;
   lastUpdatedByUserId?: string | null;
@@ -103,6 +106,9 @@ export class InMemoryAppearanceEnvironment {
           theme: (organization.theme ?? "requestport") as never,
           density: (organization.density ?? "ultra-compact") as never,
           mode: (organization.mode ?? "system") as never,
+          font: (organization.font ?? "match") as never,
+          look: (organization.look ?? "match") as never,
+          paint: (organization.paint ?? "match") as never,
           lastUpdatedByUserId: organization.lastUpdatedByUserId ?? null,
           version: organization.version ?? 1,
         })),
@@ -210,6 +216,9 @@ export class InMemoryAppearanceEnvironment {
         theme: input.theme as never,
         density: input.density as never,
         mode: input.mode as never,
+        font: input.font as never,
+        look: input.look as never,
+        paint: input.paint as never,
         version: 1,
       };
       this.state.users.push(row);
@@ -224,6 +233,9 @@ export class InMemoryAppearanceEnvironment {
       row.theme = input.theme as never;
       row.density = input.density as never;
       row.mode = input.mode as never;
+      row.font = input.font as never;
+      row.look = input.look as never;
+      row.paint = input.paint as never;
       row.version += 1;
       return { ...row };
     },
@@ -262,6 +274,9 @@ export class InMemoryAppearanceEnvironment {
       row.theme = input.theme as never;
       row.density = input.density as never;
       row.mode = input.mode as never;
+      row.font = input.font as never;
+      row.look = input.look as never;
+      row.paint = input.paint as never;
       row.lastUpdatedByUserId = input.lastUpdatedByUserId;
       row.version += 1;
       return { ...row };

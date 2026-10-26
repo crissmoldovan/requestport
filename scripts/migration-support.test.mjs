@@ -102,7 +102,7 @@ function migrationTree(files) {
   return directory;
 }
 
-test("0019, 0020, 0024 and 0025 are the checked-in migrations marked to be last in their transaction", () => {
+test("0019, 0020, 0024, 0025 and 0026 are the checked-in migrations marked to be last in their transaction", () => {
   // The marker is what both guards read; a header edit that dropped it would
   // switch both off without failing either's own tests.
   const marked = [
@@ -110,6 +110,7 @@ test("0019, 0020, 0024 and 0025 are the checked-in migrations marked to be last 
     "0020_worker_row_security",
     "0024_command_receipts_row_security",
     "0025_row_security_contract",
+    "0026_requestport_appearance_six_axes",
   ];
   assert.deepEqual([...migrationsThatMustBeLast()], marked);
   for (const tag of marked) {

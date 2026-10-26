@@ -3,6 +3,7 @@ import {
   DomainError,
   inviteOrganizationMemberCommandName,
   operatorActor,
+  resendOrganizationInvitationCommandName,
   revokeOrganizationInvitationCommandName,
   setOrganizationMemberCommandName,
 } from "@requestport/domain";
@@ -221,6 +222,16 @@ function recordPorts() {
       id: invitationId,
       version: 2,
     })),
+    authorizeInvitationResend: record(
+      "authorizeInvitationResend",
+      () => undefined,
+    ),
+    resendInvitation: record("resendInvitation", () => ({
+      id: invitationId,
+      role: "member",
+      expiresAt: new Date("2026-11-01T00:00:00.000Z"),
+      version: 2,
+    })),
   } as never;
   const defaults = {
     organizationId: ids.organization,
@@ -299,6 +310,20 @@ const cases: Array<{
     expectedVersion: 1,
   },
   {
+    command: resendOrganizationInvitationCommandName,
+    submit: () =>
+      memberActions.resendInvitationAction(
+        { status: "idle" } as never,
+        form({
+          invitationId,
+          expectedVersion: "1",
+          idempotencyKey: "f27-form-idempotency-0005",
+        }),
+      ),
+    input: { invitationId },
+    expectedVersion: 1,
+  },
+  {
     command: inviteOrganizationMemberCommandName,
     submit: () =>
       inviteMemberAction(
@@ -366,10 +391,11 @@ beforeEach(() => {
 });
 
 describe("the form and REST reach the same handler", () => {
-  test("the cases are F.2.7's four commands, each once", () => {
+  test("the cases are F.2.7's four commands and ruling 263's resend, each once", () => {
     expect(cases.map((entry) => entry.command)).toEqual([
       "set_organization_member",
       "revoke_organization_invitation",
+      "resend_organization_invitation",
       "invite_organization_member",
       "appearance.update_organization_defaults.v1",
     ]);
@@ -427,6 +453,57 @@ describe("the form and REST reach the same handler", () => {
           type: "service",
           id: context.actor.id,
         });
+    },
+  );
+});
+
+/*
+  Ruling 263: resending an invitation is on REST beside revoking one, under
+  the same rule. Whether an owner invitation is the actor's to touch is the
+  port's to say (`authorizeInvitationResend`, as `authorizeInvitationRevocation`
+  for revoke; their rule is proven on PostgreSQL in
+  `organization-management-repository.integration.test.ts`, an admin's
+  operator among the refused). Here the port refuses as it would an admin's
+  operator on an owner invitation: REST answers 403 and the write is never
+  asked.
+*/
+describe("REST resends an invitation under revoke's authority", () => {
+  test.each([
+    [
+      revokeOrganizationInvitationCommandName,
+      "authorizeInvitationRevocation",
+      "Only an owner may revoke an owner invitation",
+    ],
+    [
+      resendOrganizationInvitationCommandName,
+      "authorizeInvitationResend",
+      "Only an owner may resend an owner invitation",
+    ],
+  ] as const)(
+    "%s: the port's refusal is 403, asked about the operator's member, and nothing is written",
+    async (command, authorize, message) => {
+      const calls = recordPorts();
+      const management = apiV1.ports
+        .organizationManagement as unknown as Record<string, unknown>;
+      management[authorize] = async (...args: unknown[]) => {
+        calls.push({ method: authorize, args });
+        throw new DomainError("forbidden", message);
+      };
+      signInAsOperator();
+      const response = await api.command(command, {
+        input: { invitationId },
+        idempotencyKey: "f27-rest-idempotency-0006",
+        expectedVersion: 1,
+      });
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toMatchObject({
+        error: "forbidden",
+      });
+      expect(calls.map((call) => call.method)).toEqual([authorize]);
+      expect(calls[0]?.args).toEqual([
+        { organizationId: ids.organization, userId: memberUserId },
+        invitationId,
+      ]);
     },
   );
 });

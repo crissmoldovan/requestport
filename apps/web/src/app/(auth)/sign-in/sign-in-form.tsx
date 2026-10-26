@@ -3,10 +3,13 @@
 import {
   Field,
   FieldDescription,
+  FieldError,
   FieldLabel,
   Input,
+  PasswordInput,
 } from "@cueplusplus/ui/forms";
-import { Stack } from "@cueplusplus/ui/layout";
+import { CodeBlock } from "@cueplusplus/ui/instruments";
+import { Collapsible, Stack } from "@cueplusplus/ui/layout";
 import { Button, Separator } from "@cueplusplus/ui/primitives";
 import { authClient } from "@requestport/auth/client";
 import type { SignInMethods } from "@requestport/config/sign-in-methods";
@@ -77,9 +80,17 @@ async function signInWithCredential(
  * `requestport-operator bootstrap-owner --local-credential`, or a self-host's
  * first `requestport start`, printed. A refusal says only
  * that the pair did not match — Better Auth gives the same answer for an
- * unknown address and a wrong credential, and so does this.
+ * unknown address and a wrong credential, and so does this — and says it on
+ * the credential's own field.
  */
-function LocalCredentialForm({ landing }: { landing: string }) {
+function LocalCredentialForm({
+  landing,
+  primary,
+}: {
+  landing: string;
+  /** Whether this is the card's first way in, and so its primary button. */
+  primary: boolean;
+}) {
   const [refused, submit, pending] = useActionState(
     signInWithCredential.bind(null, landing),
     false,
@@ -95,16 +106,27 @@ function LocalCredentialForm({ landing }: { landing: string }) {
             name="email"
             placeholder="you@example.com"
             required
+            size="lg"
             type="email"
           />
         </Field>
-        <Field name="password">
+        <Field invalid={refused && !pending} name="password">
           <FieldLabel>Credential</FieldLabel>
-          <Input
+          <PasswordInput
             autoComplete="current-password"
+            hideLabel="Hide credential"
             name="password"
             required
-            type="password"
+            revealLabel="Show credential"
+            size="lg"
+          />
+          <FieldError
+            issues={
+              refused && !pending
+                ? [{ message: credentialMismatchMessage }]
+                : []
+            }
+            role="alert"
           />
           <FieldDescription>
             Printed once by requestport start, or issued by an operator or by
@@ -114,14 +136,12 @@ function LocalCredentialForm({ landing }: { landing: string }) {
         <Button
           disabled={pending}
           icon={KeyRound}
+          size="lg"
           type="submit"
-          variant="secondary"
+          variant={primary ? "primary" : "secondary"}
         >
           {pending ? "Signing in…" : "Sign in with credential"}
         </Button>
-        {refused && !pending ? (
-          <p role="alert">{credentialMismatchMessage}</p>
-        ) : null}
       </Stack>
     </form>
   );
@@ -166,6 +186,11 @@ export function SignInForm({
     });
   }
 
+  /*
+    The ways in keep their order — GitHub, the emailed link, the local
+    credential — and the first one offered carries the card's one primary
+    button; the others are secondary.
+  */
   const sections: { key: string; node: ReactNode }[] = [];
   if (methods.github) {
     sections.push({
@@ -174,6 +199,7 @@ export function SignInForm({
         <Button
           icon={GitBranch}
           onClick={signInWithGitHub}
+          size="lg"
           type="button"
           variant="primary"
         >
@@ -183,6 +209,7 @@ export function SignInForm({
     });
   }
   if (methods.magicLink) {
+    const primary = sections.length === 0;
     sections.push({
       key: "magic-link",
       node: (
@@ -196,6 +223,7 @@ export function SignInForm({
                   name="email"
                   placeholder="you@example.com"
                   required
+                  size="lg"
                   type="email"
                 />
                 <FieldDescription>
@@ -205,8 +233,9 @@ export function SignInForm({
               <Button
                 disabled={status === "sending"}
                 icon={Mail}
+                size="lg"
                 type="submit"
-                variant="secondary"
+                variant={primary ? "primary" : "secondary"}
               >
                 {status === "sending" ? "Sending…" : "Email me a sign-in link"}
               </Button>
@@ -222,7 +251,12 @@ export function SignInForm({
   if (methods.localCredential) {
     sections.push({
       key: "local-credential",
-      node: <LocalCredentialForm landing={landing} />,
+      node: (
+        <LocalCredentialForm
+          landing={landing}
+          primary={sections.length === 0}
+        />
+      ),
     });
   }
 
@@ -235,5 +269,33 @@ export function SignInForm({
         </Fragment>
       ))}
     </Stack>
+  );
+}
+
+/**
+ * The way back from a lost credential, offered beside the card wherever the
+ * local credential is a way in: the command a self-host's owner runs, exactly
+ * as `apps/requestport` names it (`owner/rotate-credential.ts`, `PROGRAM`),
+ * and what it costs, as that command's own usage says: the owner's sessions
+ * and every operator credential the owner issued are revoked. The text names
+ * `requestport start` because the credential is also offered on a local
+ * deployment the operator CLI bootstrapped, where this command does not
+ * apply. A client component because `Collapsible` is a client namespace.
+ */
+export function LostCredentialHelp() {
+  return (
+    <Collapsible.Root className="w-full">
+      <Collapsible.Trigger>Lost your credential?</Collapsible.Trigger>
+      <Collapsible.Panel bodyClassName="flex flex-col gap-(--cue-space-2) pt-(--cue-space-3) text-fg-muted">
+        <p>
+          If you run this RequestPort with requestport start, issue the owner a
+          new credential on its machine. It is printed once and replaces the old
+          one; the owner's sessions end, and every operator key the owner issued
+          is revoked, so scripts using one need a new key. Otherwise, ask
+          whoever runs it.
+        </p>
+        <CodeBlock code="requestport owner rotate-credential" language="sh" />
+      </Collapsible.Panel>
+    </Collapsible.Root>
   );
 }

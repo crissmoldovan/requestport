@@ -17,7 +17,7 @@ import {
   RequeueNotificationForm,
   RequeueOutboxForm,
   RequeueSlackOperationForm,
-  RetentionHoldForm,
+  RetentionHoldDialog,
 } from "../../../../components/operations-control.js";
 import { Page } from "../../../../components/page-layout.js";
 import { SettingsSection } from "../../../../components/settings-section.js";
@@ -184,6 +184,12 @@ export default async function OperationsPage() {
         </TableScrollRegion>
       </SettingsSection>
       <SettingsSection
+        action={
+          <RetentionHoldDialog
+            action={createRetentionHoldAction}
+            idempotencyKey={`web:retention:create:${randomUUID()}`}
+          />
+        }
         headingId="operations-retention-heading"
         note="Pause eligible organization-scoped cleanup without exposing preserved data."
         title="Retention holds"
@@ -208,15 +214,11 @@ export default async function OperationsPage() {
           ))
         ) : (
           <EmptyState
-            hint="A hold pauses eligible cleanup until it is released."
+            hint="A hold pauses eligible cleanup until it is released. Use Add hold to create one."
             icon={Archive}
             title="No retention holds"
           />
         )}
-        <RetentionHoldForm
-          action={createRetentionHoldAction}
-          idempotencyKey={`web:retention:create:${randomUUID()}`}
-        />
       </SettingsSection>
       <SettingsSection
         bleed

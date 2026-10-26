@@ -106,8 +106,8 @@ function scaleUtility(family: string, rung: string): string {
  *
  * The shell bar is one row and a tenant name is arbitrary text, so the
  * organization control needs a measure of its own: without one the trigger
- * grows to fit the name and pushes the search, the new-request action and the
- * account menu off a frame that clips rather than scrolls. CUE++ publishes no
+ * grows to fit the name and pushes the search and the account menu off a frame
+ * that clips rather than scrolls. CUE++ publishes no
  * measure token — the geometry ladder is control heights, icon sizes, spacing
  * rungs, radii and type steps — so there is no token spelling of "about `6`
  * characters of tenant name, and `10` from the first breakpoint up".
@@ -382,12 +382,21 @@ export const providerBoundaryModules = [
  * (the inline-style contract in `framework-boundaries.test.tsx`) would
  * otherwise read every entry here as a `style` prop of its own.
  *
- * Four, all RequestPort's mark (ruling 192, the owner's choice on 2026-10-10):
+ * Four are RequestPort's mark (ruling 192, the owner's choice on 2026-10-10):
  * the app bar's wrapper that sets the mark beside the name, and the mark's own
  * fill, stroke and flex. No cue-ui component takes custom artwork in the theme's
- * accent, so the mark draws itself in `var(--cue-accent)`. Every value is a
- * literal written here, none is built from data, so the document-wide
- * `style-src-attr 'unsafe-inline'` directive gains no input it did not have.
+ * accent, so the mark draws itself in `var(--cue-accent)`.
+ *
+ * The fifth is the account menu's height cap (ruling 255). cue-ui's
+ * `Popover.Popup` limits its width and not its height, and the menu's six
+ * appearance fields run past a 390x900 viewport, so the panel takes Base UI's
+ * `--available-height`, which the popover's positioner sets to the room left
+ * between the trigger and the viewport's edge. The class audit cannot express
+ * it: it admits only `--cue-*` properties, and no height family at any value.
+ *
+ * Every value is a literal written here, none is built from data, so the
+ * document-wide `style-src-attr 'unsafe-inline'` directive gains no input it
+ * did not have.
  * Any other `style` attribute under `apps/web/src` is still a violation until
  * a reviewed tuple is recorded here.
  */
@@ -399,6 +408,9 @@ export const reviewedInlineStyleProps: Record<string, readonly string[]> = {
     "{ fill: accent }",
     "{ flexShrink: 0 }",
     "{ stroke: accent }",
+  ],
+  "apps/web/src/components/user-control.tsx": [
+    '{ maxHeight: "var(--available-height)" }',
   ],
 };
 

@@ -78,18 +78,24 @@ describe.sequential("live tenant-safe foundation query adapter", () => {
           status: "suspended",
         },
       ]);
+      // Each membership joined at a known moment, so the projection can be
+      // seen to carry the row's own `joined_at` (ruling 260).
+      const actorJoinedAt = new Date("2026-03-04T10:00:00.000Z");
+      const otherJoinedAt = new Date("2026-06-07T23:30:00.000Z");
       await tx.insert(organizationMembers).values([
         {
           organizationId,
           userId: actorId,
           role: "owner",
           status: "active",
+          joinedAt: actorJoinedAt,
         },
         {
           organizationId,
           userId: otherUserId,
           role: "member",
           status: "active",
+          joinedAt: otherJoinedAt,
         },
         {
           organizationId: otherOrganizationId,
@@ -216,6 +222,7 @@ describe.sequential("live tenant-safe foundation query adapter", () => {
       ).toEqual([
         {
           email: actorEmail,
+          joinedAt: actorJoinedAt,
           name: "Actor",
           role: "owner",
           userId: actorId,
@@ -223,6 +230,7 @@ describe.sequential("live tenant-safe foundation query adapter", () => {
         },
         {
           email: otherEmail,
+          joinedAt: otherJoinedAt,
           name: "Other member",
           role: "member",
           userId: otherUserId,

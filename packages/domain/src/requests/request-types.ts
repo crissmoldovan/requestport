@@ -174,6 +174,21 @@ export interface RequestRepository {
     visibility?: "organization" | "restricted";
     sensitivity?: "normal" | "sensitive";
   }): Promise<RequestRecord>;
+  /** Whether `userId` is an active member of the organisation, held for share. */
+  isActiveMember(organizationId: string, userId: string): Promise<boolean>;
+  /**
+   * Sets the request's assignee (null for nobody) at the next version, and
+   * appends the change's `request.assigned` security audit row naming
+   * `actor`. A row no longer at `expectedVersion` is a version conflict.
+   */
+  assign(input: {
+    requestId: string;
+    organizationId: string;
+    expectedVersion: number;
+    assignee: { type: "user"; id: string } | null;
+    actor: ActorRef;
+    correlationId: string;
+  }): Promise<RequestRecord>;
   insertStateTransition(input: {
     id: string;
     request: RequestRecord;

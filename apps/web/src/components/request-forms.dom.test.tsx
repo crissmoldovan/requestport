@@ -28,6 +28,7 @@ const actions = vi.hoisted(() => ({
   answer: vi.fn(),
   artifact: vi.fn(),
   ask: vi.fn(),
+  assign: vi.fn(),
   close: vi.fn(),
   create: vi.fn(),
   link: vi.fn(),
@@ -41,6 +42,7 @@ const actions = vi.hoisted(() => ({
 vi.mock("../app/(app)/requests/actions.js", () => ({
   answerQuestionAction: actions.answer,
   askQuestionAction: actions.ask,
+  assignRequestAction: actions.assign,
   attachArtifactAction: actions.artifact,
   closeQuestionAction: actions.close,
   createRequestAction: actions.create,
@@ -55,6 +57,7 @@ vi.mock("../app/(app)/requests/actions.js", () => ({
 import {
   AnswerQuestionForm,
   ArtifactLinkForm,
+  AssignRequestForm,
   MessageComposer,
   RequestCreateForm,
   RequestTransitionForm,
@@ -160,6 +163,7 @@ beforeEach(() => {
     actions.answer,
     actions.artifact,
     actions.ask,
+    actions.assign,
     actions.close,
     actions.create,
     actions.link,
@@ -736,5 +740,133 @@ describe("participating in a request", () => {
       relationshipId: "00000000-0000-4000-8000-000000000901",
       requestId: transitionRequest.id,
     });
+  });
+});
+
+describe("assigning a request (ruling 262)", () => {
+  const members = [
+    {
+      email: "ada@example.com",
+      name: "Ada Lovelace",
+      userId: "00000000-0000-4000-8000-0000000000a1",
+    },
+    {
+      email: "grace@example.com",
+      name: " ",
+      userId: "00000000-0000-4000-8000-0000000000a2",
+    },
+  ];
+  const unassigned = {
+    assigneeDisplayName: null,
+    assigneeId: null,
+    assigneeType: null,
+    id: transitionRequest.id,
+    version: 4,
+  } as const;
+
+  test("offers Unassign and every active member by name, falling back to the email, and posts the chosen member", async () => {
+    const user = userEvent.setup();
+    mount(
+      <AssignRequestForm
+        idempotencyKey={key}
+        members={members}
+        request={unassigned}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Assignee" }));
+    const listbox = await screen.findByRole("listbox");
+    expect(
+      within(listbox)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["Unassign", "Ada Lovelace", "grace@example.com"]);
+    await user.click(
+      within(listbox).getByRole("option", { name: "Ada Lovelace" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Assign" }));
+
+    await waitFor(() => expect(actions.assign).toHaveBeenCalled());
+    expect(submitted(actions.assign)).toEqual({
+      assigneeUserId: members[0]?.userId,
+      expectedVersion: "4",
+      idempotencyKey: key,
+      requestId: transitionRequest.id,
+    });
+  });
+
+  test("starts on the current assignee, and Unassign posts an empty assignee", async () => {
+    const user = userEvent.setup();
+    mount(
+      <AssignRequestForm
+        idempotencyKey={key}
+        members={members}
+        request={{
+          ...unassigned,
+          assigneeDisplayName: "Ada Lovelace",
+          assigneeId: members[0]?.userId ?? null,
+          assigneeType: "user",
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("combobox", { name: "Assignee" }),
+    ).toHaveTextContent("Ada Lovelace");
+    await choose(user, "Assignee", "Unassign");
+    await user.click(screen.getByRole("button", { name: "Assign" }));
+
+    await waitFor(() => expect(actions.assign).toHaveBeenCalled());
+    expect(submitted(actions.assign)).toMatchObject({ assigneeUserId: "" });
+  });
+
+  test("shows a current assignee who is no longer an active member as the selection, greyed out", async () => {
+    const user = userEvent.setup();
+    mount(
+      <AssignRequestForm
+        idempotencyKey={key}
+        members={members}
+        request={{
+          ...unassigned,
+          assigneeDisplayName: "Former member",
+          assigneeId: "00000000-0000-4000-8000-0000000000f0",
+          assigneeType: "user",
+        }}
+      />,
+    );
+
+    const trigger = screen.getByRole("combobox", { name: "Assignee" });
+    expect(trigger).toHaveTextContent("Former member (not an active member)");
+    await user.click(trigger);
+    expect(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "Former member (not an active member)",
+      }),
+    ).toHaveAttribute("aria-disabled", "true");
+  });
+
+  test("puts a refused assignee on the field's own line", async () => {
+    const user = userEvent.setup();
+    actions.assign.mockResolvedValue({
+      status: "error",
+      code: "validation_failed",
+      field: "assigneeUserId",
+      message: "Check the supplied values and try again.",
+    });
+    mount(
+      <AssignRequestForm
+        idempotencyKey={key}
+        members={members}
+        request={unassigned}
+      />,
+    );
+
+    await choose(user, "Assignee", "Ada Lovelace");
+    await user.click(screen.getByRole("button", { name: "Assign" }));
+
+    expect(
+      await screen.findByText("Check the supplied values and try again."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

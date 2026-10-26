@@ -235,6 +235,8 @@ describe("exhaustive coverage of the App Router surface tree", () => {
       "(app)/not-found.tsx",
       "(app)/settings/appearance/error.tsx",
       "(app)/settings/appearance/loading.tsx",
+      "(app)/settings/error.tsx",
+      "(app)/settings/not-found.tsx",
       "(auth)/error.tsx",
       "(auth)/loading.tsx",
       "(auth)/not-found.tsx",

@@ -1,4 +1,10 @@
-import { createElement, forwardRef, lazy, memo } from "react";
+import {
+  createElement,
+  forwardRef,
+  lazy,
+  memo,
+  type ReactElement,
+} from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 
@@ -11,6 +17,17 @@ import {
   ProjectCreationView,
   ProjectsView,
 } from "./administration-views.js";
+import { ConsoleToasts } from "./console-toasts.js";
+
+/**
+ * A view rendered inside the console's one toast provider, which the shell
+ * mounts around every page (ruling 260): a settings view's dialogs and member
+ * controls raise their confirmations there, and need it above them. The
+ * provider's viewport is a portal, so the markup is the view's alone.
+ */
+function renderInConsole(view: ReactElement) {
+  return renderToStaticMarkup(<ConsoleToasts>{view}</ConsoleToasts>);
+}
 
 /** A retired recipe class, assembled so the audit reads bookkeeping, not a class. */
 function recipeClass(...parts: readonly string[]): string {
@@ -53,6 +70,7 @@ const project = {
 
 const member = {
   email: "owner@example.com",
+  joinedAt: new Date("2026-03-04T10:00:00.000Z"),
   name: "Owner",
   role: "owner" as const,
   userId: "user_1",
@@ -65,6 +83,54 @@ const invitation = {
   id: "invite_1",
   role: "member" as const,
   version: 1,
+};
+
+/** One rendering of the overview: a setup step open, a row and an event. */
+const overview = {
+  activity: [
+    {
+      actor: { type: "agent" },
+      id: "event_1",
+      occurredAt: new Date("2026-08-23T11:00:00.000Z"),
+      type: "request.submitted",
+    },
+  ],
+  attention: {
+    failedDeliveries: [],
+    questions: [],
+    triage: [
+      {
+        displayKey: "RQP-1",
+        id: "request_1",
+        targetProjectName: "RequestPort",
+        title: "Triage me",
+        updatedAt: new Date("2026-08-23T11:30:00.000Z"),
+      },
+    ],
+  },
+  figures: {
+    activeAgents: 1,
+    connectedAgents: 1,
+    failedDeliveries: 0,
+    oldestQuestionAt: null,
+    openRequests: 1,
+    questionsForYou: 0,
+    setup: { agent: true, project: true, routing: false, team: false },
+  },
+  health: {
+    checkedAt: new Date("2026-08-23T12:00:00.000Z"),
+    deadLetters: 0,
+    lastDispatchAt: new Date("2026-08-23T11:58:00.000Z"),
+    oldestUnprocessedAt: null,
+    unprocessedEvents: 0,
+  },
+  now: new Date("2026-08-23T12:00:00.000Z"),
+  organization,
+  setupCard: {
+    hidden: false,
+    hide: async () => {},
+    show: async () => {},
+  },
 };
 
 /**
@@ -119,7 +185,7 @@ const surfaceProps: Record<string, Record<string, unknown>> = {
   },
   NoOrganizationSetup: {},
   OrganizationView: { organization },
-  OverviewView: { members: [member], organization, projects: [project] },
+  OverviewView: overview,
   ProjectCreationView: {
     action: async () => ({ message: "", status: "success" }),
     organization,
@@ -129,7 +195,7 @@ const surfaceProps: Record<string, Record<string, unknown>> = {
 
 describe("administration views", () => {
   test("renders the first-organization setup as a real accessible form", () => {
-    const markup = renderToStaticMarkup(<NoOrganizationSetup />);
+    const markup = renderInConsole(<NoOrganizationSetup />);
 
     expect(markup).toContain("Create your first organization");
     expect(markup).toContain('name="name"');
@@ -176,7 +242,7 @@ describe("administration views", () => {
     // heading and one more for every section, so the distance from the heading
     // to the first panel was two full page paddings.
     for (const name of publishedViews) {
-      const markup = renderToStaticMarkup(
+      const markup = renderInConsole(
         createElement(published[name] as never, surfaceProps[name] as never),
       );
       expect({
@@ -189,24 +255,18 @@ describe("administration views", () => {
 
   test("renders only supplied tenant data in overview, organization, projects, and members", () => {
     const markup = [
-      renderToStaticMarkup(
-        <OverviewView
-          members={[member]}
-          organization={organization}
-          projects={[project]}
-        />,
-      ),
-      renderToStaticMarkup(<OrganizationView organization={organization} />),
-      renderToStaticMarkup(
+      renderInConsole(<OverviewView {...overview} />),
+      renderInConsole(<OrganizationView organization={organization} />),
+      renderInConsole(
         <ProjectsView organization={organization} projects={[project]} />,
       ),
-      renderToStaticMarkup(
+      renderInConsole(
         <ProjectCreationView
           action={async () => ({ message: "", status: "success" })}
           organization={organization}
         />,
       ),
-      renderToStaticMarkup(
+      renderInConsole(
         <MembersView
           currentUserId="user_1"
           invitations={[invitation]}
@@ -228,15 +288,9 @@ describe("administration views", () => {
 
   test("composes tables, panels, and chips from the installed package alone", () => {
     const markup = [
-      renderToStaticMarkup(
-        <OverviewView
-          members={[member]}
-          organization={organization}
-          projects={[project]}
-        />,
-      ),
-      renderToStaticMarkup(<OrganizationView organization={organization} />),
-      renderToStaticMarkup(
+      renderInConsole(<OverviewView {...overview} />),
+      renderInConsole(<OrganizationView organization={organization} />),
+      renderInConsole(
         <MembersView
           currentUserId="user_1"
           invitations={[invitation]}
@@ -257,10 +311,10 @@ describe("administration views", () => {
 
   test("names every table region so a keyboard user can reach its columns", () => {
     const markup = [
-      renderToStaticMarkup(
+      renderInConsole(
         <ProjectsView organization={organization} projects={[project]} />,
       ),
-      renderToStaticMarkup(
+      renderInConsole(
         <MembersView
           currentUserId="user_1"
           invitations={[invitation]}
@@ -272,30 +326,271 @@ describe("administration views", () => {
 
     expect(markup).toContain('aria-label="Registered projects"');
     expect(markup).toContain('aria-label="Active organization members"');
-    expect(markup).toContain('aria-label="Pending organization invitations"');
   });
 
-  test("offers project creation to an administrator and explains its absence to a member", () => {
-    const owner = renderToStaticMarkup(
-      <ProjectsView organization={organization} projects={[]} />,
-    );
-    const ordinary = renderToStaticMarkup(
+  test("offers project creation to an administrator from the header, in a dialog, and explains its absence to a member", () => {
+    const createAction = async () => ({
+      message: "",
+      status: "success" as const,
+    });
+    const owner = renderInConsole(
       <ProjectsView
+        createAction={createAction}
+        organization={organization}
+        projects={[]}
+      />,
+    );
+    const ordinary = renderInConsole(
+      <ProjectsView
+        createAction={createAction}
         organization={{ ...organization, role: "member" }}
         projects={[]}
       />,
     );
 
-    expect(owner).toContain("Create project");
+    expect(owner).toContain('data-slot="dialog-trigger"');
+    expect(owner).toContain("New project");
+    expect(owner).not.toContain('href="/settings/projects/new"');
+    expect(owner).not.toContain('name="keyPrefix"');
     expect(owner).toContain('data-slot="empty-state"');
-    expect(ordinary).not.toContain("Create project");
+    expect(ordinary).not.toContain("New project");
+    expect(ordinary).not.toContain('data-slot="dialog-trigger"');
     expect(ordinary).toContain(
       "An organization owner or admin can register the first project.",
     );
   });
 
+  test("lists pending invitations as rows, each with its own revoke", () => {
+    const markup = renderInConsole(
+      <MembersView
+        currentUserId="user_1"
+        invitationIdempotencyKeys={{ invite_1: "web:fixture:invite-key-0001" }}
+        invitations={[invitation]}
+        members={[member]}
+        organization={organization}
+        revokeInvitationAction={async () => ({ message: "", status: "idle" })}
+      />,
+    );
+
+    expect(markup).not.toContain(
+      'aria-label="Pending organization invitations"',
+    );
+    const pending = markup.slice(markup.indexOf('id="pending-invitations"'));
+    expect(pending).toContain('data-slot="row"');
+    expect(pending).toContain("pending@example.com");
+    expect(pending).toContain("Revoke invitation");
+  });
+
+  test.each([
+    ["an owner", "owner", ["pending@example.com", "owner-invite@example.com"]],
+    ["an admin", "admin", ["pending@example.com"]],
+  ] as const)(
+    "offers %s Resend invitation beside Revoke invitation on exactly the invitations they may revoke (ruling 260)",
+    (_label, role, manageable) => {
+      const ownerInvitation = {
+        email: "owner-invite@example.com",
+        expiresAt: new Date("2026-08-24T12:00:00.000Z"),
+        id: "invite_2",
+        role: "owner" as const,
+        version: 1,
+      };
+      const markup = renderInConsole(
+        <MembersView
+          currentUserId="user_9"
+          invitationIdempotencyKeys={{
+            invite_1: "web:fixture:invite-key-0001",
+            invite_2: "web:fixture:invite-key-0002",
+          }}
+          invitationResendIdempotencyKeys={{
+            invite_1: "web:fixture:resend-key-0001",
+            invite_2: "web:fixture:resend-key-0002",
+          }}
+          invitations={[invitation, ownerInvitation]}
+          members={[member]}
+          organization={{ ...organization, role }}
+          resendInvitationAction={async () => ({ message: "", status: "idle" })}
+          revokeInvitationAction={async () => ({ message: "", status: "idle" })}
+        />,
+      );
+      const pending = markup.slice(markup.indexOf('id="pending-invitations"'));
+      const rows = pending
+        .split('data-slot="row"')
+        .slice(1)
+        .map((row) => ({
+          email: /owner-invite@example\.com|pending@example\.com/u.exec(
+            row,
+          )?.[0],
+          resend: row.includes("Resend invitation"),
+          revoke: row.includes("Revoke invitation"),
+          // Each form posts its own key: the resend's is not the revocation's.
+          resendKey: row.includes("web:fixture:resend-key-000"),
+        }));
+
+      expect(rows).toEqual(
+        ["pending@example.com", "owner-invite@example.com"].map((email) => {
+          const offered = (manageable as readonly string[]).includes(email);
+          return {
+            email,
+            resend: offered,
+            revoke: offered,
+            resendKey: offered,
+          };
+        }),
+      );
+    },
+  );
+
+  test("puts inviting in the header and changes a role by choosing it, with a menu on every row the actor may revoke", () => {
+    const memberAction = async () => ({ message: "", status: "idle" as const });
+    const people = [
+      member,
+      {
+        email: "admin@example.com",
+        joinedAt: new Date("2026-06-07T23:30:00.000Z"),
+        name: "Grace Hopper",
+        role: "admin" as const,
+        userId: "user_2",
+        version: 2,
+      },
+    ];
+    const markup = renderInConsole(
+      <MembersView
+        currentUserId="user_1"
+        invitationAction={async () => ({ message: "", status: "success" })}
+        invitations={[]}
+        memberAction={memberAction}
+        memberIdempotencyKeys={{
+          user_1: "web:fixture:member-key-0001",
+          user_2: "web:fixture:member-key-0002",
+        }}
+        members={people}
+        organization={organization}
+      />,
+    );
+
+    // The header's one primary action opens the invitation; the form is not
+    // on the page until it does.
+    expect(markup).toContain('data-slot="dialog-trigger"');
+    expect(markup).toContain("Invite member");
+    expect(markup).not.toContain('name="email"');
+    // No separate save: the role control is the write.
+    expect(markup).not.toContain("Save role");
+    expect(markup).toContain('aria-label="Role for Owner"');
+    expect(markup).toContain('aria-label="Role for Grace Hopper"');
+    // A menu on the other person's row, none on the actor's own.
+    expect(markup).toContain('aria-label="More for Grace Hopper"');
+    expect(markup).not.toContain('aria-label="More for Owner"');
+    // Each person by an avatar's initial, name and address.
+    expect(markup).toContain(">G<");
+    expect(markup).toContain("admin@example.com");
+  });
+
+  test.each([
+    ["an owner", "owner"],
+    ["an admin", "admin"],
+    ["a member", "member"],
+  ] as const)(
+    "shows %s when each person joined, in a Joined column after Role (ruling 260)",
+    (_label, role) => {
+      const people = [
+        member,
+        {
+          email: "admin@example.com",
+          joinedAt: new Date("2026-06-07T23:30:00.000Z"),
+          name: "Grace Hopper",
+          role: "admin" as const,
+          userId: "user_2",
+          version: 2,
+        },
+      ];
+      const markup = renderInConsole(
+        <MembersView
+          currentUserId="user_1"
+          invitations={[]}
+          memberAction={async () => ({ message: "", status: "idle" as const })}
+          memberIdempotencyKeys={{
+            user_1: "web:fixture:member-key-0001",
+            user_2: "web:fixture:member-key-0002",
+          }}
+          members={people}
+          organization={{ ...organization, role }}
+        />,
+      );
+      const heads = [...markup.matchAll(/<th\b[^>]*>(.*?)<\/th>/gsu)].map(
+        ([, cell]) => (cell ?? "").replace(/<[^>]+>/gu, ""),
+      );
+
+      expect(heads.slice(0, 3)).toEqual(["Person", "Role", "Joined"]);
+      // The membership's own date, as the members page writes every date: the
+      // UTC day, with the instant in `dateTime`.
+      expect(markup).toMatch(
+        /<time [^>]*dateTime="2026-03-04T10:00:00\.000Z"[^>]*>2026-03-04<\/time>/u,
+      );
+      expect(markup).toMatch(
+        /<time [^>]*dateTime="2026-06-07T23:30:00\.000Z"[^>]*>2026-06-07<\/time>/u,
+      );
+    },
+  );
+
+  test("shows an admin an owner's role without a control or a menu", () => {
+    const markup = renderInConsole(
+      <MembersView
+        currentUserId="user_2"
+        invitations={[]}
+        memberAction={async () => ({ message: "", status: "idle" as const })}
+        memberIdempotencyKeys={{ user_1: "web:fixture:member-key-0001" }}
+        members={[member]}
+        organization={{ ...organization, role: "admin" }}
+      />,
+    );
+
+    expect(markup).not.toContain('aria-label="Role for Owner"');
+    expect(markup).not.toContain('aria-label="More for Owner"');
+    expect(markup).toContain(">Owner<");
+  });
+
+  test("shows a member the people and their roles, and nothing to change", () => {
+    // The page hands every role the member and invitation actions and their
+    // keys, so the view's own role check is all that withholds them. Grace
+    // Hopper's row is an admin's, which an owner or an admin would be offered
+    // a role control for; the owner's row reads as a chip to anyone else.
+    const markup = renderInConsole(
+      <MembersView
+        currentUserId="user_3"
+        invitationAction={async () => ({ message: "", status: "success" })}
+        invitations={[]}
+        memberAction={async () => ({ message: "", status: "idle" as const })}
+        memberIdempotencyKeys={{
+          user_1: "web:fixture:member-key-0001",
+          user_2: "web:fixture:member-key-0002",
+        }}
+        members={[
+          member,
+          {
+            email: "admin@example.com",
+            joinedAt: new Date("2026-06-07T23:30:00.000Z"),
+            name: "Grace Hopper",
+            role: "admin" as const,
+            userId: "user_2",
+            version: 2,
+          },
+        ]}
+        organization={{ ...organization, role: "member" }}
+      />,
+    );
+
+    expect(markup).toContain("owner@example.com");
+    expect(markup).toContain("admin@example.com");
+    expect(markup).not.toContain('data-slot="select-trigger"');
+    expect(markup).not.toContain('aria-label="Role for');
+    expect(markup).not.toContain("More for");
+    expect(markup).not.toContain("Actions");
+    expect(markup).not.toContain("Invite member");
+    expect(markup).not.toContain('data-slot="dialog-trigger"');
+  });
+
   test("refuses the project creation form to an ordinary member", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderInConsole(
       <ProjectCreationView
         action={async () => ({ message: "", status: "success" })}
         organization={{ ...organization, role: "member" }}
@@ -308,7 +603,7 @@ describe("administration views", () => {
   });
 
   test("reports an organization with no pending invitations as a native empty state", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderInConsole(
       <MembersView
         currentUserId="user_1"
         invitations={[]}
@@ -322,7 +617,7 @@ describe("administration views", () => {
   });
 
   test("does not expose pending invitation identities or controls to an ordinary member", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderInConsole(
       <MembersView
         currentUserId="user_1"
         invitations={[

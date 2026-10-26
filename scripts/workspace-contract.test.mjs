@@ -1426,8 +1426,8 @@ test("pins the immutable CUE++ dependency boundary in the web workspace", async 
   // The one we used to render was deleted in the same change that raised this
   // pin. If a future upgrade ever removes that behaviour, the provider has to
   // come back — `appearance-root.tsx` is where it lived.
-  assert.equal(webPackage.dependencies["@cueplusplus/ui"], "0.14.1");
-  assert.equal(webPackage.dependencies["@cueplusplus/tokens"], "0.14.1");
+  assert.equal(webPackage.dependencies["@cueplusplus/ui"], "0.29.0");
+  assert.equal(webPackage.dependencies["@cueplusplus/tokens"], "0.29.0");
   assert.equal(webPackage.dependencies["@requestport/theme"], "workspace:*");
   assert.equal(
     webPackage.dependencies["@cueplusplus/theme-requestport"],
@@ -1435,7 +1435,11 @@ test("pins the immutable CUE++ dependency boundary in the web workspace", async 
   );
   assert.equal(webPackage.dependencies["@base-ui/react"], "1.7.0");
   assert.equal(webPackage.dependencies["lucide-react"], "1.33.0");
-  assert.equal(webPackage.dependencies["react-resizable-panels"], "4.12.3");
+  // The requests workbench was the only reader of cue-ui's `layout/resizable`,
+  // and it moved to `SplitPane` (ruling 257). That subpath's optional peer
+  // goes with it, as the workspace file's rule for optional cue-ui peers asks:
+  // one comes back together with the subpath that needs it.
+  assert.equal(webPackage.dependencies["react-resizable-panels"], undefined);
   assert.equal(webPackage.devDependencies.jsdom, "30.0.1");
   assert.equal(webPackage.devDependencies["@testing-library/react"], "16.3.2");
   assert.equal(
@@ -2026,7 +2030,7 @@ test("installs every CUE++ package from public npm, pinned exactly", async () =>
     name.startsWith("@cueplusplus/"),
   );
 
-  assert.equal(cuePackages.length, 10);
+  assert.equal(cuePackages.length, 20);
 
   for (const [name, range] of cuePackages) {
     assert.match(range, /^\d+\.\d+\.\d+$/u, `${name} is declared as ${range}`);

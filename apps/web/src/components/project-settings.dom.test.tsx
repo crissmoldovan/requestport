@@ -5,9 +5,11 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { ProjectSettingsActionState } from "../app/(app)/settings/projects/[projectId]/action-state.js";
+import { ConsoleToasts } from "./console-toasts.js";
 import {
   AliasForm,
   LaneForm,
+  ProjectAddDialog,
   ProjectMemberForm,
   ProjectMembersTable,
   ProjectMetadataForm,
@@ -40,7 +42,7 @@ function mount(node: ReactNode) {
       persistPreferences={false}
       theme="requestport"
     >
-      {node}
+      <ConsoleToasts>{node}</ConsoleToasts>
     </ThemeProvider>,
   );
 }
@@ -61,6 +63,16 @@ function entries(action: { mock: { calls: unknown[][] } }) {
   );
 }
 
+/**
+ * A confirmation, found in the toast viewport rather than in the form's own
+ * result line, which is drawn in the dialog until it closes.
+ */
+async function toastSaying(text: string) {
+  return within(
+    screen.getByRole("region", { name: "Notifications" }),
+  ).findByText(text);
+}
+
 const action = vi.fn();
 
 beforeEach(() => {
@@ -74,7 +86,7 @@ describe("the compact settings forms", () => {
     mount(<AliasForm action={action} meta={meta} projectId={projectId} />);
 
     await user.type(screen.getByLabelText("Alias"), "legacy-platform");
-    await user.click(screen.getByRole("button", { name: "Add alias" }));
+    await user.click(screen.getByRole("button", { name: "Save alias" }));
 
     await waitFor(() => expect(action).toHaveBeenCalled());
     expect(entries(action)).toEqual({
@@ -123,7 +135,7 @@ describe("the compact settings forms", () => {
     mount(<AliasForm action={action} meta={meta} projectId={projectId} />);
 
     await user.type(screen.getByLabelText("Alias"), "taken");
-    await user.click(screen.getByRole("button", { name: "Add alias" }));
+    await user.click(screen.getByRole("button", { name: "Save alias" }));
 
     expect(
       await screen.findByText(
@@ -141,7 +153,7 @@ describe("the compact settings forms", () => {
     mount(<AliasForm action={action} meta={meta} projectId={projectId} />);
 
     await user.type(screen.getByLabelText("Alias"), "legacy");
-    await user.click(screen.getByRole("button", { name: "Add alias" }));
+    await user.click(screen.getByRole("button", { name: "Save alias" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "The project changed. Refresh and try again.",
@@ -325,5 +337,97 @@ describe("the project lifecycle control", () => {
     );
     await waitFor(() => expect(action).toHaveBeenCalled());
     expect(entries(action)).toMatchObject({ status: "active" });
+  });
+});
+
+describe("adding to a list from its panel (ruling 259)", () => {
+  test("opens the alias form in a dialog, closes it on success and confirms in a toast", async () => {
+    const user = userEvent.setup();
+    action.mockResolvedValue({
+      message: "Alias added.",
+      status: "success",
+    } satisfies ProjectSettingsActionState);
+    mount(
+      <ProjectAddDialog
+        action={action}
+        kind="alias"
+        meta={meta}
+        projectId={projectId}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Alias")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Add alias" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add an alias" });
+    await user.type(within(dialog).getByLabelText("Alias"), "legacy-platform");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save alias" }),
+    );
+
+    await waitFor(() => expect(action).toHaveBeenCalled());
+    expect(entries(action)).toMatchObject({
+      alias: "legacy-platform",
+      projectId,
+    });
+    // The sentence in the toast viewport, not the form's own result line,
+    // which goes with the dialog.
+    expect(await toastSaying("Alias added.")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Add an alias" })).toBeNull(),
+    );
+  });
+
+  test("names each dialog's submit apart from the panel action that opened it", async () => {
+    // The dialog is not modal, so its trigger stays in the accessibility
+    // tree while it is open: one name, one control.
+    const user = userEvent.setup();
+    for (const [kind, trigger, title, submit] of [
+      ["alias", "Add alias", "Add an alias", "Save alias"],
+      ["repository", "Add repository", "Add a repository", "Save repository"],
+      ["lane", "Add lane", "Add a lane", "Save lane"],
+    ] as const) {
+      const { unmount } = mount(
+        <ProjectAddDialog
+          action={action}
+          kind={kind}
+          meta={meta}
+          projectId={projectId}
+        />,
+      );
+
+      await user.click(screen.getByRole("button", { name: trigger }));
+      const dialog = await screen.findByRole("dialog", { name: title });
+      expect({
+        kind,
+        named: screen.getAllByRole("button", { name: trigger }).length,
+      }).toEqual({ kind, named: 1 });
+      expect(
+        within(dialog).getByRole("button", { name: submit }),
+      ).toHaveAttribute("type", "submit");
+      unmount();
+    }
+  });
+
+  test("opens the project role form with the members it may grant", async () => {
+    const user = userEvent.setup();
+    mount(
+      <ProjectAddDialog
+        action={action}
+        kind="member"
+        members={[
+          { email: "ada@example.com", name: "Ada", userId: "user_ada" },
+        ]}
+        meta={meta}
+        projectId={projectId}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Set project role" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Set a project role",
+    });
+    expect(
+      within(dialog).getByRole("button", { name: "Save project role" }),
+    ).toBeInTheDocument();
   });
 });

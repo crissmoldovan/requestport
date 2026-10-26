@@ -59,6 +59,7 @@ import { listAdministrationRoutingRules } from "./queries/administration/routing
 import { getAdministrationSlackConfiguration } from "./queries/administration/slack-reads.js";
 import { createAgentManagementRepository } from "./queries/agent-management-repository.js";
 import { createProjectSettingsCommandRepository } from "./queries/project-settings-repository.js";
+import { createRequestQueryRepository } from "./queries/request-query-repository.js";
 import { createAgentAuthRepository } from "./repositories/agent-auth-repository.js";
 import { createAppearanceRepository } from "./repositories/appearance-repository.js";
 import { createCommandAuthorizationRepository } from "./repositories/command-authorization.js";
@@ -87,6 +88,7 @@ import {
 } from "./repositories/operator-credential-repository.js";
 import { createOrganizationManagementRepository } from "./repositories/organization-management-repository.js";
 import { boundOutboxRepository } from "./repositories/outbox-repository.js";
+import { createRequestRepository } from "./repositories/request-repository.js";
 import { createRetentionHoldCommandRepository } from "./repositories/retention-hold-repository.js";
 import {
   createSlackAdministrationCommandRepository,
@@ -1561,10 +1563,20 @@ describe.sequential.each(["owner-shaped", "application"] as const)(
           f.operatorCredentialId,
           f.organizationId,
         );
+        // An OAuth grant's last use (ruling 261), the same way.
+        await expect(
+          createAgentAuthRepository(tx).touchOAuthGrant(
+            f.grantId,
+            f.organizationId,
+          ),
+        ).resolves.toBe(true);
         expect(await boundOrganization(tx)).toBe(f.organizationId);
         expect(
           await stamped(session, "agent_credentials", f.credentialId),
         ).toBe(true);
+        expect(await stamped(session, "agent_oauth_grants", f.grantId)).toBe(
+          true,
+        );
         expect(
           await stamped(
             session,
@@ -1586,11 +1598,17 @@ describe.sequential.each(["owner-shaped", "application"] as const)(
           f.operatorCredentialId,
           elsewhere,
         );
+        await expect(
+          createAgentAuthRepository(tx).touchOAuthGrant(f.grantId, elsewhere),
+        ).resolves.toBe(false);
         expect(await boundOrganization(tx)).toBe(elsewhere);
         await session.query("RESET ROLE");
         expect(
           await stamped(session, "agent_credentials", f.credentialId),
         ).toBe(false);
+        expect(await stamped(session, "agent_oauth_grants", f.grantId)).toBe(
+          false,
+        );
         expect(
           await stamped(
             session,
@@ -1884,6 +1902,63 @@ describe.sequential("the credential re-check binds the transaction it runs in (�
           )
         ).map((project) => project.id),
       ).toEqual([f.projectId]);
+    });
+  });
+
+  /*
+    Ruling 262: the request list names its reporter and assignee by joining
+    the organisation's members and the people behind them. As the
+    application role, bound to the request's organisation, that join reads
+    the bound organisation's members only: a person who is a member of
+    another organisation, and of this one not at all, stays unnamed.
+  */
+  test("the request list names people as the application role, from the bound organisation's members only", async () => {
+    await asRoleInTransaction("application", async (tx, f, session) => {
+      const elsewhere = randomUUID();
+      const named = randomUUID();
+      const unnamed = randomUUID();
+      await asSessionLogin(session, async () => {
+        await session.query(
+          `insert into public.organizations (id, name, slug, status) values ($1, $2, $2, 'active')`,
+          [elsewhere, `rls-elsewhere-${elsewhere.slice(0, 8)}`],
+        );
+        await session.query("SET LOCAL session_replication_role = replica");
+        await session.query(
+          `insert into public.organization_members (organization_id, user_id, role, status) values ($1, $2, 'member', 'active')`,
+          [elsewhere, f.secondUserId],
+        );
+        await session.query("SET LOCAL session_replication_role = origin");
+        await session.query(
+          `insert into public.requests
+             (id, organization_id, source_kind, target_project_id, type, title,
+              description_md, state, sequence_number, display_key,
+              reporter_type, reporter_id, assignee_type, assignee_id)
+           values
+             ($1, $3, 'human_direct', $4, 'bug', 'Named', '', 'triage', 1, 'P-1', 'user', $5, 'user', $5),
+             ($2, $3, 'human_direct', $4, 'bug', 'Unnamed', '', 'triage', 2, 'P-2', 'user', $6, 'user', $6)`,
+          [
+            named,
+            unnamed,
+            f.organizationId,
+            f.projectId,
+            f.userId,
+            f.secondUserId,
+          ],
+        );
+      });
+      await bindTenant(tx, f.organizationId);
+      const page = await createRequestQueryRepository(tx).listRequests({
+        userId: f.userId,
+        organizationId: f.organizationId,
+      });
+      expect(
+        Object.fromEntries(
+          page.items.map((item) => [
+            item.id,
+            [item.reporterDisplayName, item.assigneeDisplayName],
+          ]),
+        ),
+      ).toEqual({ [named]: ["Owner", "Owner"], [unnamed]: [null, null] });
     });
   });
 
@@ -2525,6 +2600,164 @@ describe.sequential("F.2's and F.3's commands on the tenant bus, as the applicat
       });
     },
   );
+
+  /*
+    Ruling 260: resending an invitation writes through the port revoking one
+    does, so it is not a port of its own above. What only row security can
+    show is that its two writes land as the application role: the invitation
+    re-issued, and the email its earlier issue had scheduled suppressed.
+  */
+  test("resend_organization_invitation re-issues the invitation and suppresses its scheduled email as the application role, bound to its organisation", async () => {
+    await asRoleInTransaction("application", async (tx, f, session) => {
+      let intentId = "";
+      const scheduledEmail: Seed = async (seeding, fixture) => {
+        intentId = randomUUID();
+        await seeding.query(
+          `insert into public.notification_intents (id, organization_id, invitation_id, channel, recipient_ref, template, dedupe_key, view_model, status, next_attempt_at)
+           values ($1, $2, $3, 'email', $4, 'organization_invitation_v1', $5, '{}', 'pending', clock_timestamp())`,
+          [
+            intentId,
+            fixture.organizationId,
+            fixture.invitationId,
+            fixture.invitedEmail,
+            `rls-resend-${fixture.slug}`,
+          ],
+        );
+        return { intentId };
+      };
+      const resend: (typeof commands)[number] = [
+        "resend_organization_invitation",
+        "organizationManagement",
+        (fixture) => ({
+          organizationId: fixture.organizationId,
+          invitationId: fixture.invitationId,
+        }),
+        1,
+        scheduledEmail,
+      ];
+
+      expect(await runCommand(tenantBus, resend, tx, f, session)).toEqual([
+        { organization_id: f.organizationId },
+      ]);
+      await asSessionLogin(session, async () => {
+        const invitation = await session.query<{
+          token_hash: string;
+          version: number;
+        }>("select token_hash, version from public.invitations where id = $1", [
+          f.invitationId,
+        ]);
+        expect(invitation.rows).toEqual([
+          { token_hash: expect.stringMatching(/^[0-9a-f]{64}$/u), version: 2 },
+        ]);
+        const intent = await session.query<{ status: string }>(
+          "select status from public.notification_intents where id = $1",
+          [intentId],
+        );
+        expect(intent.rows).toEqual([{ status: "suppressed" }]);
+      });
+    });
+  });
+
+  /*
+    Ruling 262: assigning a request writes through the requests port, which
+    predates the merges above, so it is not in their table. What only row
+    security can show is that its writes land as the application role, bound
+    to the request's organisation: the request row, its event and its
+    pending outbox row, and the security audit row the port appends.
+  */
+  test("assign_request assigns, with its event and audit row, as the application role, bound to its organisation", async () => {
+    await asRoleInTransaction("application", async (tx, f, session) => {
+      const requestId = randomUUID();
+      const sessionId = `rls-assign-${f.slug}`;
+      await asSessionLogin(session, async () => {
+        await session.query(
+          `insert into public.session (id, token, expires_at, user_id, updated_at)
+           values ($1, $1, clock_timestamp() + interval '1 hour', $2, now())`,
+          [sessionId, f.userId],
+        );
+        await session.query(
+          `insert into public.requests
+             (id, organization_id, source_kind, target_project_id, type, title,
+              description_md, state, sequence_number, display_key,
+              reporter_type, reporter_id, version)
+           values ($1, $2, 'human_direct', $3, 'bug', 'Assign', '', 'triage', 1, 'P-1', 'user', $4, 1)`,
+          [requestId, f.organizationId, f.projectId, f.userId],
+        );
+      });
+      const correlationId = randomUUID();
+      await new AtomicCommandBus({
+        registry: createCoreCommandRegistry(),
+        transactions: createCommandTransactionManager(
+          tx as unknown as Database,
+          (name, database) =>
+            name === "requests"
+              ? createRequestRepository(database)
+              : name === "commandAuthorization"
+                ? createCommandAuthorizationRepository(database)
+                : undefined,
+        ),
+        fingerprintSecret,
+        authorizeContext: (context, uow) =>
+          uow
+            .port<ReturnType<typeof createCommandAuthorizationRepository>>(
+              "commandAuthorization",
+            )
+            .assertCurrent(context),
+      }).execute({
+        name: "assign_request",
+        context: {
+          actor: { type: "user", id: f.userId },
+          organizationId: f.organizationId,
+          scopes: new Set(["request:triage"]),
+          credentialId: sessionId,
+          correlationId,
+        },
+        input: {
+          organizationId: f.organizationId,
+          requestId,
+          assigneeUserId: f.userId,
+        },
+        meta: { expectedVersion: 1, idempotencyKey: `rls-assign-${f.slug}` },
+      });
+      await asSessionLogin(session, async () => {
+        const request = await session.query(
+          "select assignee_type, assignee_id, version from public.requests where id = $1",
+          [requestId],
+        );
+        expect(request.rows).toEqual([
+          { assignee_type: "user", assignee_id: f.userId, version: 2 },
+        ]);
+        const event = await session.query(
+          `select e.type, e.organization_id, o.state as outbox_state
+             from public.domain_events e
+             join public.outbox o on o.event_id = e.id
+            where e.request_id = $1`,
+          [requestId],
+        );
+        expect(event.rows).toEqual([
+          {
+            type: "request.assigned.v1",
+            organization_id: f.organizationId,
+            outbox_state: "pending",
+          },
+        ]);
+        const audit = await session.query(
+          `select organization_id, actor_id, action, target_type
+             from public.security_audit_records
+            where target_id = $1 and correlation_id = $2`,
+          [requestId, correlationId],
+        );
+        expect(audit.rows).toEqual([
+          {
+            organization_id: f.organizationId,
+            actor_id: f.userId,
+            action: "request.assigned",
+            target_type: "request",
+          },
+        ]);
+      });
+    });
+  });
 });
 
 describe.sequential("the grant family claim, now in its definer function (§2.5.0)", () => {
@@ -2870,6 +3103,7 @@ describe("the application surface binds before its first read (§2.3 items 2 and
       "revokeCredentialForCompensation",
       "listCredentials",
       "touchCredential",
+      "touchOAuthGrant",
     ],
     "repositories/agent-repository.ts": ["canManage", "findPrincipal"],
     "repositories/foundation-query.ts": [
@@ -2904,6 +3138,9 @@ describe("the application surface binds before its first read (§2.3 items 2 and
       "authorizeInvitationRevocation",
       "setMember",
       "revokeInvitation",
+      // Ruling 260.
+      "authorizeInvitationResend",
+      "resendInvitation",
     ],
     "repositories/outbox-repository.ts": [
       "listWebhookOperations",

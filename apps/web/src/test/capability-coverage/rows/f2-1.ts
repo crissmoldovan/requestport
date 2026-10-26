@@ -7,6 +7,10 @@
  * and the preview reach one evaluation entry (`evaluateRouteForMember`),
  * which `/api/v1` reaches for an operator through an administration entry
  * per purpose.
+ *
+ * `assignRequestAction` (ruling 262) runs `assign_request` on the same bus,
+ * which `/api/v1` and MCP reach for an agent credential through its registry
+ * entry (ruling 264).
  */
 const routing = "app/(app)/settings/routing/actions.ts";
 
@@ -40,5 +44,11 @@ export const rows = [
     action: "previewRequestRouteAction",
     status: "ported",
     surfaces: [{ registry: "preview_administration_route" }],
+  },
+  {
+    module: "app/(app)/requests/actions.ts",
+    action: "assignRequestAction",
+    status: "ported",
+    surfaces: [{ registry: "assign_request" }],
   },
 ];

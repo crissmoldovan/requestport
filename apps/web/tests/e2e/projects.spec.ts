@@ -11,6 +11,7 @@ import {
 } from "../fixtures/auth.js";
 import { test } from "../fixtures/engine.ts";
 import {
+  accountMenuPanel,
   chooseOption,
   chooseOrganization,
   expectOrganizationChoices,
@@ -24,7 +25,9 @@ import {
  */
 async function signOutFromAccountMenu(page: Page) {
   await page.getByRole("button", { name: /^Open user menu for/u }).click();
-  const panel = page.getByRole("dialog");
+  // The panel by what it holds: the invitation's confirmation toast, a
+  // `dialog` too, is still up when this journey signs out after it.
+  const panel = accountMenuPanel(page);
   await expect(panel).toBeVisible();
   await panel.getByRole("button", { name: "Sign out" }).click();
 }
@@ -140,15 +143,33 @@ test("completes owner setup, project administration, invitation, and member acce
       "Check the highlighted field and try again.",
     );
 
+    // The invitation opens in a dialog from the header's "Invite member"
+    // (ruling 259), and a pending invitation is a row of its own rather than a
+    // table cell. Pressed until the dialog opens: before hydration the trigger
+    // swallows a click. Only while it is not expanded: the dialog is not
+    // modal, so a second press on its trigger closes it.
     await page.goto("/settings/members");
-    await onScreen(page.getByLabel("Email address")).fill(scenario.memberEmail);
-    await chooseOption(page, "Role", "Member");
-    await page.getByRole("button", { name: "Invite member" }).click();
+    const invitation = page.getByRole("dialog", { name: "Invite member" });
+    const inviteMember = page.getByRole("button", {
+      exact: true,
+      name: "Invite member",
+    });
+    await expect(async () => {
+      if ((await inviteMember.getAttribute("aria-expanded")) !== "true") {
+        await inviteMember.click();
+      }
+      await expect(invitation).toBeVisible({ timeout: 2_000 });
+    }).toPass({ intervals: [250, 500, 1_000], timeout: 30_000 });
+    await invitation.getByLabel("Email address").fill(scenario.memberEmail);
+    await chooseOption(page, "Role", "Member", invitation);
+    await invitation.getByRole("button", { name: "Send invitation" }).click();
     await expect(
-      page.getByText("Invitation created and queued for email."),
+      page
+        .getByRole("region", { name: "Notifications" })
+        .getByText("Invitation created and queued for email."),
     ).toBeVisible();
     await expect(
-      page.getByRole("cell", { name: scenario.memberEmail }),
+      page.getByText(scenario.memberEmail, { exact: true }),
     ).toBeVisible();
 
     expect(consoleLog.hydration).toEqual([]);

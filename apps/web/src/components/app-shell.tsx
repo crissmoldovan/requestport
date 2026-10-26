@@ -1,14 +1,14 @@
 "use client";
 
 import { AppBar, AppShell as ConsoleFrame } from "@cueplusplus/ui/chrome";
-import { Stack } from "@cueplusplus/ui/layout";
 import { Button, Kbd } from "@cueplusplus/ui/primitives";
 import type { OrganizationAccess } from "@requestport/domain";
-import { Plus, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import NextLink from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useState } from "react";
 
+import { ConsoleToasts } from "./console-toasts.js";
 import { OrganizationSwitcher } from "./organization-switcher.js";
 import { PrimaryNavigation } from "./primary-navigation.js";
 import { RequestPortMark } from "./request-port-mark.js";
@@ -65,84 +65,103 @@ export function AppShell({
     setNavigationOpen(false);
   }
 
+  // The console's one toast provider and viewport (ruling 260), around
+  // everything the frame draws, so a toast outlives the page that raised it.
   return (
-    <ConsoleFrame.Root
-      navOpen={navigationOpen}
-      onNavOpenChange={setNavigationOpen}
-    >
-      {/* The frame owns the viewport, so the bar never scrolls out from under
-       * itself and needs no sticky position of its own. */}
-      <AppBar.Root className="justify-between" sticky={false}>
-        <Stack align="center" className="min-w-0" direction="row" gap={3}>
-          <ConsoleFrame.NavTrigger label="Open navigation" />
-          <AppBar.Brand
-            render={<NextLink aria-label="RequestPort overview" href="/" />}
-          >
-            <span
-              style={{
-                alignItems: "center",
-                display: "inline-flex",
-                gap: "0.5rem",
-              }}
-            >
-              <RequestPortMark />
-              requestport
-            </span>
-          </AppBar.Brand>
+    <ConsoleToasts>
+      <ConsoleFrame.Root
+        navOpen={navigationOpen}
+        onNavOpenChange={setNavigationOpen}
+      >
+        {/* The frame owns the viewport, so the bar never scrolls out from under
+         * itself and needs no sticky position of its own. `AppShell.Bar` is a
+         * `<div>`, so it names itself the banner landmark the retired
+         * `AppBar.Root` `<header>` used to be.
+         *
+         * The brand cell sits over the navigation column and is measured from
+         * the same length: the drawer trigger (drawn below the shell's
+         * breakpoint only) and the mark with the product's name, which link to
+         * the overview. The name gives way to the mark alone while the column is
+         * railed, because the cell is then only as wide as the rail.
+         *
+         * The tenant switcher leads the rest of the bar and the search entry
+         * takes the middle of what is left. It is not the bar's `center` slot:
+         * cue-ui draws that slot `pointer-events-none` and documents it as inert
+         * by construction, so a link placed there could not be clicked.
+         *
+         * There is no New request action here (ruling 256). It stays in the
+         * Requests page's header. */}
+        <ConsoleFrame.Bar
+          actions={
+            <UserControl
+              appearance={appearance}
+              email={user.email}
+              name={user.name}
+            />
+          }
+          brand={
+            <>
+              <ConsoleFrame.NavTrigger label="Open navigation" />
+              <AppBar.Brand
+                render={<NextLink aria-label="RequestPort overview" href="/" />}
+              >
+                <span
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    gap: "0.5rem",
+                  }}
+                >
+                  <RequestPortMark />
+                  <span className="group-data-[rail]/app-shell:hidden">
+                    requestport
+                  </span>
+                </span>
+              </AppBar.Brand>
+            </>
+          }
+          role="banner"
+        >
           <OrganizationSwitcher
             currentOrganization={currentOrganization}
             organizations={organizations}
           />
-        </Stack>
-        {/* Below the shell's own breakpoint both actions keep their icon and
-         * drop their label: a bar is one row, and three labelled controls plus
-         * the tenant switcher do not fit a 390px viewport. The label moves to
-         * `aria-label` rather than disappearing, so each control is named the
-         * same at every width — to a screen reader and to a journey alike.
-         *
-         * The accessible name is the visible label, ellipsis included, rather
-         * than a tidied-up paraphrase of it. WCAG 2.5.3 asks that a control's
-         * name contain the text a sighted user reads on it, because that is the
-         * string a speech-input user will say — and "Search or run a command"
-         * is not the label the wide viewport shows. The `⌘K` badge stays out of
-         * it: a shortcut hint is not part of what the control is called. */}
-        <AppBar.Actions>
+          {/* Below the shell's own breakpoint the control keeps its icon and
+           * drops its label: a bar is one row, and a labelled search beside the
+           * brand, the tenant switcher and the account menu does not fit a 390px
+           * viewport. The label moves to `aria-label` rather than disappearing,
+           * so the control is named the same at every width — to a screen reader
+           * and to a journey alike.
+           *
+           * The accessible name is the visible label, ellipsis included, rather
+           * than a tidied-up paraphrase of it. WCAG 2.5.3 asks that a control's
+           * name contain the text a sighted user reads on it, because that is the
+           * string a speech-input user will say — and "Search or run a command"
+           * is not the label the wide viewport shows. The `⌘K` badge stays out of
+           * it: a shortcut hint is not part of what the control is called. */}
           <Button
             aria-label="Search or run a command…"
+            className="mx-auto"
             icon={Search}
             render={<NextLink href="/search" />}
             size="sm"
-            variant="ghost"
+            variant="outline"
           >
             <span className="hidden md:contents">
               Search or run a command…
               <Kbd>⌘K</Kbd>
             </span>
           </Button>
-          <Button
-            aria-label="New request"
-            icon={Plus}
-            render={<NextLink href="/requests/new" />}
-            size="sm"
-            variant="primary"
-          >
-            <span className="hidden md:contents">New request</span>
-          </Button>
-          <UserControl
-            appearance={appearance}
-            email={user.email}
-            name={user.name}
-          />
-        </AppBar.Actions>
-      </AppBar.Root>
-      <ConsoleFrame.Body>
-        <ConsoleFrame.Sidebar aria-label="Primary" drawerTitle="Navigation">
-          <PrimaryNavigation />
-        </ConsoleFrame.Sidebar>
-        <ConsoleFrame.Content>
-          <ConsoleFrame.Scroller>{children}</ConsoleFrame.Scroller>
-        </ConsoleFrame.Content>
-      </ConsoleFrame.Body>
-    </ConsoleFrame.Root>
+        </ConsoleFrame.Bar>
+        <ConsoleFrame.Body>
+          <ConsoleFrame.Sidebar aria-label="Primary" drawerTitle="Navigation">
+            <PrimaryNavigation />
+          </ConsoleFrame.Sidebar>
+          <ConsoleFrame.Content>
+            <ConsoleFrame.Scroller>{children}</ConsoleFrame.Scroller>
+          </ConsoleFrame.Content>
+        </ConsoleFrame.Body>
+      </ConsoleFrame.Root>
+    </ConsoleToasts>
   );
 }

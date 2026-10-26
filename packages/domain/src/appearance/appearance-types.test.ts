@@ -14,8 +14,10 @@ import {
 } from "./appearance-types.js";
 
 describe("locked appearance vocabulary", () => {
-  test("exposes exactly the nine themes, three densities, and three modes", () => {
-    expect(appearanceThemes).toEqual([
+  // Ruling 255 widened the themes to every stock cue-ui 0.29.0 theme and
+  // added three axes; `appearance-six-axes.test.ts` pins those lists.
+  test("keeps the first nine themes, the four densities and the three modes in place", () => {
+    expect(appearanceThemes.slice(0, 9)).toEqual([
       "requestport",
       "cue",
       "terminal",
@@ -26,16 +28,24 @@ describe("locked appearance vocabulary", () => {
       "luma",
       "snuffle",
     ]);
-    expect(appearanceDensities).toEqual(["ultra-compact", "normal", "large"]);
+    expect(appearanceDensities).toEqual([
+      "ultra-compact",
+      "compact",
+      "normal",
+      "large",
+    ]);
     expect(appearanceModes).toEqual(["system", "dark", "light"]);
-    expect(appearanceAxes).toEqual(["theme", "density", "mode"]);
+    expect(appearanceAxes.slice(0, 3)).toEqual(["theme", "density", "mode"]);
   });
 
-  test("pins the RequestPort fallback triple", () => {
+  test("pins the fallback ruling 255 decided", () => {
     expect(appearanceFallback).toEqual({
-      theme: "requestport",
-      density: "ultra-compact",
+      theme: "cue",
+      density: "normal",
       mode: "system",
+      font: "match",
+      look: "match",
+      paint: "match",
     });
   });
 
@@ -62,7 +72,14 @@ describe("locked appearance vocabulary", () => {
     ]) {
       expect(isAppearanceTheme(invalid), JSON.stringify(invalid)).toBe(false);
     }
-    for (const invalid of ["cosy", "compact", "ultra compact", "Large", 0]) {
+    for (const invalid of [
+      "cosy",
+      "ultra-large",
+      "Compact",
+      "ultra compact",
+      "Large",
+      0,
+    ]) {
       expect(isAppearanceDensity(invalid), String(invalid)).toBe(false);
     }
     for (const invalid of ["auto", "Dark", "os", true]) {
@@ -73,13 +90,14 @@ describe("locked appearance vocabulary", () => {
 
 describe("runtime parsing of untrusted appearance values", () => {
   test("keeps every valid personal override and drops every malformed axis", () => {
+    const unset = { font: null, look: null, paint: null };
     expect(
       parseAppearanceOverrides({
         theme: "venu",
         density: "large",
         mode: "dark",
       }),
-    ).toEqual({ theme: "venu", density: "large", mode: "dark" });
+    ).toEqual({ theme: "venu", density: "large", mode: "dark", ...unset });
 
     expect(
       parseAppearanceOverrides({
@@ -87,11 +105,11 @@ describe("runtime parsing of untrusted appearance values", () => {
         density: "cosy",
         mode: "auto",
       }),
-    ).toEqual({ theme: null, density: null, mode: null });
+    ).toEqual({ theme: null, density: null, mode: null, ...unset });
 
     expect(
       parseAppearanceOverrides({ theme: "cue", density: 7, mode: undefined }),
-    ).toEqual({ theme: "cue", density: null, mode: null });
+    ).toEqual({ theme: "cue", density: null, mode: null, ...unset });
   });
 
   test("treats non-object personal input as fully inherited", () => {
@@ -100,6 +118,9 @@ describe("runtime parsing of untrusted appearance values", () => {
         theme: null,
         density: null,
         mode: null,
+        font: null,
+        look: null,
+        paint: null,
       });
     }
   });
@@ -111,7 +132,14 @@ describe("runtime parsing of untrusted appearance values", () => {
         density: "normal",
         mode: "light",
       }),
-    ).toEqual({ theme: "terminal", density: "normal", mode: "light" });
+    ).toEqual({
+      theme: "terminal",
+      density: "normal",
+      mode: "light",
+      font: "match",
+      look: "match",
+      paint: "match",
+    });
 
     expect(
       parseAppearanceDefaults({ theme: "midnight", density: null, mode: 3 }),

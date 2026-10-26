@@ -35,7 +35,7 @@ import {
   releaseScenarioRun,
   scenarioReleaseAttemptTimeoutMs,
 } from "./scenario-release.js";
-import { onScreen, organizationSwitcher } from "./shell.js";
+import { accountMenuPanel, onScreen, organizationSwitcher } from "./shell.js";
 
 /**
  * Everything a matrix case needs in order to run: one authenticated tenant,
@@ -922,8 +922,10 @@ const fastRefreshTransport =
  *   addressed a different element.
  * - that `@base-ui/react` creates no style element at all, recorded in the
  *   reskin's staging acceptance evidence while attributing a *different*
- *   refusal to `react-resizable-panels`. That one is a constructed sheet and is still
- *   real; the claim beside it was not, at least of the version installed now.
+ *   refusal to `react-resizable-panels`. That one was a constructed sheet, and
+ *   real for as long as the requests workbench drew its seam with that
+ *   package; the claim beside it was not. The workbench is cue-ui's
+ *   `SplitPane` now, and the console no longer loads the package.
  *
  * What remains below is the development server's entry, which these lanes do
  * not run. It is attributed, and not here: `console-hygiene.test.ts` — the test
@@ -1096,23 +1098,38 @@ export type AcceptanceRecords = Readonly<{
  * absent cookie and a cookie naming an invisible membership are different
  * faults with the same surface.
  */
-const TENANT_NOT_FOUND_HINT =
-  "That record is not available in the current organization.";
+/*
+ * The tenant's not-found lines: the authenticated segment's, and the settings
+ * segment's, whose boundary answers a settings page's not-found inside the
+ * settings layout. Read from the boundary table rather than spelled again, so
+ * a reworded boundary cannot leave this detector looking for a line nothing
+ * prints.
+ */
+const TENANT_NOT_FOUND_HINTS = [
+  boundarySentence("app", "not-found"),
+  boundarySentence("app-settings", "not-found"),
+];
 
-async function refuseTenantNotFound(
+export async function refuseTenantNotFound(
   page: Page,
   landmark: AcceptanceLandmark,
 ): Promise<void> {
   // The `boundary:not-found` cases expect this page and say so: their landmark
   // is that very sentence. Refusing it for them would fail the surfaces the
   // matrix drives here deliberately.
-  if (landmark.kind === "text" && landmark.text === TENANT_NOT_FOUND_HINT) {
+  if (
+    landmark.kind === "text" &&
+    TENANT_NOT_FOUND_HINTS.includes(landmark.text)
+  ) {
     return;
   }
 
   // Cheap and immediate: no waiting, so a surface still rendering is simply not
   // this page yet, and the landmark's own wait remains the one that matters.
-  if ((await page.getByText(TENANT_NOT_FOUND_HINT).count()) === 0) return;
+  const shown = await Promise.all(
+    TENANT_NOT_FOUND_HINTS.map((hint) => page.getByText(hint).count()),
+  );
+  if (shown.every((count) => count === 0)) return;
 
   // Through the shared fixture, which is the one place that names the switcher.
   // A second spelling of that label here is a copy that drifts, and the browser
@@ -1253,9 +1270,11 @@ export function acceptancePath(
  * The control that opens the account menu, and the menu itself.
  *
  * Shared rather than private to the appearance drivers because the account menu
- * is the only way into `/settings/appearance` without a document load: the
- * primary navigation does not link it, and `user-control.tsx` renders the link
- * inside this menu.
+ * is the one way into `/settings/appearance` from any page, in one step and
+ * without a document load: the primary navigation does not link it (its
+ * Settings entry opens `/settings/organization`, and only the settings section
+ * navigation drawn there links Appearance), and `user-control.tsx` renders the
+ * link inside this menu.
  *
  * The open is retried, and the retry is the wait. A committed write lands a new
  * document, and between the server's markup arriving and React attaching to it
@@ -1266,7 +1285,7 @@ export const accountMenuTrigger = (page: Page) =>
   page.getByRole("button", { name: /^Open user menu for/u });
 
 export async function openAccountMenu(page: Page) {
-  const panel = page.getByRole("dialog");
+  const panel = accountMenuPanel(page);
 
   await expect(async () => {
     await accountMenuTrigger(page).click();

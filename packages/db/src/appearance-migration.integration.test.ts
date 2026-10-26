@@ -23,10 +23,20 @@ const migrationUrl = new URL(
   "../migrations/0014_requestport_appearance.sql",
   import.meta.url,
 );
+/** What 0014's backfill wrote, and what its trigger seeded until 0026. */
 const fallbackTriple = {
   theme: "requestport",
   density: "ultra-compact",
   mode: "system",
+};
+/** What the trigger seeds since 0026 replaced its body (ruling 255). */
+const sixAxisSeed = {
+  theme: "cue",
+  density: "normal",
+  mode: "system",
+  font: "match",
+  look: "match",
+  paint: "match",
 };
 const initializerActor = {
   type: "service",
@@ -455,7 +465,9 @@ describe.sequential("0014 appearance migration behaviour", () => {
         ),
       ).toEqual({ organizationId: backfilledId, ...fallbackTriple });
 
-      // Post-migration owner activation goes through the trigger instead.
+      // Post-migration owner activation goes through the trigger instead,
+      // whose body 0026 replaced: on a migrated database it seeds 0026's
+      // values, not 0014's.
       const activatedId = await seedOrganization(tx);
       const activatedOwner = await seedMembership(tx, activatedId, {
         status: "revoked",
@@ -470,7 +482,9 @@ describe.sequential("0014 appearance migration behaviour", () => {
 
       const [activated] = await readDefault(tx, activatedId);
       expect(activated).toMatchObject({
-        ...fallbackTriple,
+        theme: sixAxisSeed.theme,
+        density: sixAxisSeed.density,
+        mode: sixAxisSeed.mode,
         last_updated_by_user_id: activatedOwner,
         version: 1,
       });
@@ -633,5 +647,361 @@ describe.sequential("0014 appearance migration behaviour", () => {
         ),
       ).toMatch(/domain_events is append-only/u);
     });
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * 0026: six axes, the new seed, and the backfill of 0014's seed
+ * (ruling 255).
+ * ------------------------------------------------------------------ */
+
+const sixAxesMigrationUrl = new URL(
+  "../migrations/0026_requestport_appearance_six_axes.sql",
+  import.meta.url,
+);
+
+/** 0026's backfill: its last statement, the one that starts `WITH "reseeded"`. */
+async function sixAxesBackfill() {
+  const statements = (await readFile(sixAxesMigrationUrl, "utf8"))
+    .split("--> statement-breakpoint")
+    .map((statement) => statement.replace(/^\s*--[^\n]*$/gmu, "").trim())
+    .filter((statement) => statement.length > 0);
+  const backfill = statements.find((statement) =>
+    statement.startsWith('WITH "reseeded" AS ('),
+  );
+  expect(backfill, "0026 has no backfill statement").toBeDefined();
+  return backfill ?? "";
+}
+
+async function readSixAxes(tx: Tx, organizationId: string) {
+  const result = await tx.execute(sql`
+    select "aggregate_id", "theme", "density", "mode", "font", "look", "paint",
+      "last_updated_by_user_id", "version"
+    from "organization_appearance_defaults"
+    where "organization_id" = ${organizationId}
+  `);
+  return result.rows[0] as Record<string, unknown>;
+}
+
+async function readUpdateEvents(tx: Tx, organizationId: string) {
+  const result = await tx.execute(sql`
+    select e."type", e."schema_version", e."aggregate_id", e."aggregate_version",
+      e."actor", e."correlation_id", e."causation_id", e."data", e."links",
+      o."state" as "outbox_state"
+    from "domain_events" e
+    left join "outbox" o on o."event_id" = e."id"
+    where e."organization_id" = ${organizationId}
+      and e."type" = 'appearance.organization_defaults_updated.v1'
+  `);
+  return result.rows as Record<string, unknown>[];
+}
+
+/** An owned organization, with its defaults row set to `values` at `version`. */
+async function seedDefaults(
+  tx: Tx,
+  values: Record<string, string>,
+  version: number,
+) {
+  const organizationId = await seedOrganization(tx);
+  const owner = await seedMembership(tx, organizationId);
+  await tx.execute(sql`
+    update "organization_appearance_defaults"
+    set "theme" = ${values.theme}, "density" = ${values.density},
+      "mode" = ${values.mode}, "font" = ${values.font ?? "match"},
+      "look" = ${values.look ?? "match"}, "paint" = ${values.paint ?? "match"},
+      "version" = ${version}
+    where "organization_id" = ${organizationId}
+  `);
+  return { organizationId, owner };
+}
+
+async function seedPerson(tx: Tx) {
+  const userId = `user_${crypto.randomUUID()}`;
+  const email = `${userId}@example.invalid`;
+  await tx.execute(sql`
+    insert into "signup_allowlist" ("normalized_email", "status")
+    values (${email}, 'active')
+  `);
+  await tx.execute(sql`
+    insert into "user" ("id", "name", "email", "updated_at")
+    values (${userId}, 'Appearance person', ${email}, now())
+  `);
+  return userId;
+}
+
+describe.sequential("0026 appearance six-axes migration behaviour", () => {
+  test("seeds a newly owned organization with cue, normal, system and match, in the row and the event", {
+    timeout: 60_000,
+  }, async () => {
+    await inRollbackTransaction(async (tx) => {
+      const organizationId = await seedOrganization(tx);
+      const owner = await seedMembership(tx, organizationId);
+
+      expect(await readSixAxes(tx, organizationId)).toMatchObject({
+        ...sixAxisSeed,
+        last_updated_by_user_id: owner,
+        version: 1,
+      });
+      const [event] = await readInitializationEvents(tx, organizationId);
+      expect(event).toMatchObject({
+        aggregate_version: 1,
+        actor: initializerActor,
+        data: { organizationId, ...sixAxisSeed },
+        outbox_state: "pending",
+      });
+      expect(
+        createCoreEventSchemaRegistry().parse(
+          appearanceInitializedEventType,
+          event?.data,
+        ),
+      ).toEqual({ organizationId, ...sixAxisSeed });
+    });
+  });
+
+  test("moves a row still exactly 0014's seed, as an update at version 2, and leaves every edited row and every person alone", {
+    timeout: 60_000,
+  }, async () => {
+    await inRollbackTransaction(async (tx) => {
+      const untouched = await seedDefaults(tx, fallbackTriple, 1);
+      // Edited and then set back to the old values: its version says so.
+      const editedBack = await seedDefaults(tx, fallbackTriple, 3);
+      // The same at the boundary, version 2, and with no event past version 1
+      // in its stream, so only the version keeps it out.
+      const editedBackOnce = await seedDefaults(tx, fallbackTriple, 2);
+      // Version 1, but not 0014's seed on every axis.
+      const otherMode = await seedDefaults(
+        tx,
+        { ...fallbackTriple, mode: "dark" },
+        1,
+      );
+      const otherDensity = await seedDefaults(
+        tx,
+        { ...fallbackTriple, density: "normal" },
+        1,
+      );
+      const otherFont = await seedDefaults(
+        tx,
+        { ...fallbackTriple, font: "plex" },
+        1,
+      );
+      // 0014's seed at version 1, but its stream already has a version-2
+      // event: the row and the stream disagree, so it is left alone.
+      const streamAhead = await seedDefaults(tx, fallbackTriple, 1);
+      await tx.execute(sql`
+        insert into "domain_events"
+          ("id", "organization_id", "aggregate_type", "aggregate_id",
+           "aggregate_version", "type", "schema_version", "actor",
+           "correlation_id", "causation_id", "data", "links")
+        select gen_random_uuid(), "organization_id", 'organization_appearance',
+          "aggregate_id", 2, 'appearance.organization_defaults_updated.v1', 1,
+          '{"type": "service", "id": "appearance-migration-test"}'::jsonb,
+          'appearance-migration-test', 'appearance-migration-test',
+          '{}'::jsonb, '{}'::jsonb
+        from "organization_appearance_defaults"
+        where "organization_id" = ${streamAhead.organizationId}
+      `);
+      const person = await seedPerson(tx);
+      await tx.execute(sql`
+        insert into "user_appearance_preferences" ("user_id", "theme", "density")
+        values (${person}, 'requestport', 'ultra-compact')
+      `);
+      const before = await readSixAxes(tx, untouched.organizationId);
+
+      await tx.execute(sql.raw(await sixAxesBackfill()));
+
+      expect(await readSixAxes(tx, untouched.organizationId)).toEqual({
+        aggregate_id: before.aggregate_id,
+        ...sixAxisSeed,
+        last_updated_by_user_id: null,
+        version: 2,
+      });
+      const events = await readUpdateEvents(tx, untouched.organizationId);
+      expect(events).toHaveLength(1);
+      const reseed = {
+        organizationId: untouched.organizationId,
+        changedFields: ["density", "theme"],
+        before: {
+          ...fallbackTriple,
+          font: "match",
+          look: "match",
+          paint: "match",
+        },
+        after: sixAxisSeed,
+      };
+      expect(events[0]).toEqual({
+        type: "appearance.organization_defaults_updated.v1",
+        schema_version: 1,
+        aggregate_id: before.aggregate_id,
+        aggregate_version: 2,
+        actor: initializerActor,
+        correlation_id: `appearance-default-reseed:${untouched.organizationId}`,
+        causation_id: `appearance-default-reseed:${untouched.organizationId}`,
+        data: reseed,
+        links: {},
+        outbox_state: "pending",
+      });
+      // What the outbox worker will run it through.
+      expect(
+        createCoreEventSchemaRegistry().parse(
+          "appearance.organization_defaults_updated.v1",
+          events[0]?.data,
+        ),
+      ).toEqual(reseed);
+
+      for (const [label, edited, values, version, events] of [
+        ["edited back", editedBack, fallbackTriple, 3, 0],
+        ["edited back once", editedBackOnce, fallbackTriple, 2, 0],
+        ["other mode", otherMode, { ...fallbackTriple, mode: "dark" }, 1, 0],
+        [
+          "other density",
+          otherDensity,
+          { ...fallbackTriple, density: "normal" },
+          1,
+          0,
+        ],
+        ["other font", otherFont, { ...fallbackTriple, font: "plex" }, 1, 0],
+        ["stream ahead", streamAhead, fallbackTriple, 1, 1],
+      ] as const) {
+        expect(
+          await readSixAxes(tx, edited.organizationId),
+          label,
+        ).toMatchObject({
+          ...values,
+          last_updated_by_user_id: edited.owner,
+          version,
+        });
+        // Only the event the case planted, and nothing from the backfill.
+        expect(
+          await readUpdateEvents(tx, edited.organizationId),
+          label,
+        ).toHaveLength(events);
+      }
+      const personRow = await tx.execute(sql`
+        select "theme", "density", "font", "version"
+        from "user_appearance_preferences" where "user_id" = ${person}
+      `);
+      expect(personRow.rows[0]).toEqual({
+        theme: "requestport",
+        density: "ultra-compact",
+        font: null,
+        version: 1,
+      });
+
+      // Run again, it finds nothing: the moved row is at version 2 now.
+      await tx.execute(sql.raw(await sixAxesBackfill()));
+      expect(await readUpdateEvents(tx, untouched.organizationId)).toHaveLength(
+        1,
+      );
+      expect((await readSixAxes(tx, untouched.organizationId)).version).toBe(2);
+    });
+  });
+
+  // Ruling 255, item 8: density gains cue-ui's `compact`, on both tables,
+  // under the checks 0014 named; cue-ui's `ultra-large` is not admitted.
+  test("admits compact density for an organization and a person, and refuses ultra-large under each density check's name (ruling 255)", {
+    timeout: 60_000,
+  }, async () => {
+    await inRollbackTransaction(async (tx) => {
+      const id = await seedOrganization(tx);
+      await seedMembership(tx, id);
+      await tx.execute(sql`
+        update "organization_appearance_defaults" set "density" = 'compact'
+        where "organization_id" = ${id}
+      `);
+      expect(await readSixAxes(tx, id)).toMatchObject({ density: "compact" });
+      const person = await seedPerson(tx);
+      await tx.execute(sql`
+        insert into "user_appearance_preferences" ("user_id", "density")
+        values (${person}, 'compact')
+      `);
+      const personRow = await tx.execute(sql`
+        select "density" from "user_appearance_preferences"
+        where "user_id" = ${person}
+      `);
+      expect(personRow.rows[0]).toEqual({ density: "compact" });
+    });
+
+    await inRollbackTransaction(async (tx) => {
+      const id = await seedOrganization(tx);
+      await seedMembership(tx, id);
+      const failure = await failureChain(() =>
+        tx.transaction(async (savepoint) => {
+          await savepoint.execute(sql`
+            update "organization_appearance_defaults"
+            set "density" = 'ultra-large'
+            where "organization_id" = ${id}
+          `);
+        }),
+      );
+      expect(failure).toContain(
+        "organization_appearance_defaults_density_check",
+      );
+    });
+    await inRollbackTransaction(async (tx) => {
+      const person = await seedPerson(tx);
+      const failure = await failureChain(() =>
+        tx.transaction(async (savepoint) => {
+          await savepoint.execute(sql`
+            insert into "user_appearance_preferences" ("user_id", "density")
+            values (${person}, 'ultra-large')
+          `);
+        }),
+      );
+      expect(failure).toContain("user_appearance_preferences_density_check");
+    });
+  });
+
+  test("holds font, look and paint to their vocabularies and admits every new theme", {
+    timeout: 60_000,
+  }, async () => {
+    await inRollbackTransaction(async (tx) => {
+      const id = await seedOrganization(tx);
+      await seedMembership(tx, id);
+      for (const theme of ["graphite", "quotamate", "zine"]) {
+        await tx.execute(sql`
+          update "organization_appearance_defaults" set "theme" = ${theme}
+          where "organization_id" = ${id}
+        `);
+      }
+      await tx.execute(sql`
+        update "organization_appearance_defaults"
+        set "font" = 'fraunces-mono', "look" = 'editorial', "paint" = 'frost'
+        where "organization_id" = ${id}
+      `);
+      expect(await readSixAxes(tx, id)).toMatchObject({
+        theme: "zine",
+        font: "fraunces-mono",
+        look: "editorial",
+        paint: "frost",
+      });
+      const person = await seedPerson(tx);
+      await tx.execute(sql`
+        insert into "user_appearance_preferences"
+          ("user_id", "theme", "font", "look", "paint")
+        values (${person}, 'kiln', null, 'match', 'glaze')
+      `);
+    });
+
+    for (const [column, value, constraint] of [
+      ["font", "roboto", "organization_appearance_defaults_font_check"],
+      ["look", "midnight", "organization_appearance_defaults_look_check"],
+      ["paint", "chrome", "organization_appearance_defaults_paint_check"],
+      ["font", null, "organization_appearance_defaults"],
+    ] as const) {
+      await inRollbackTransaction(async (tx) => {
+        const id = await seedOrganization(tx);
+        await seedMembership(tx, id);
+        const failure = await failureChain(() =>
+          tx.transaction(async (savepoint) => {
+            await savepoint.execute(sql`
+              update "organization_appearance_defaults"
+              set ${sql.identifier(column)} = ${value}
+              where "organization_id" = ${id}
+            `);
+          }),
+        );
+        expect(failure, `${column}=${value}`).toContain(constraint);
+      });
+    }
   });
 });

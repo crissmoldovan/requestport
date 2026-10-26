@@ -7,7 +7,11 @@ import {
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 
-import { RequestDetailView } from "../../../../components/request-workflow.js";
+import {
+  type RequestDetailTab,
+  RequestDetailView,
+  requestDetailTabs,
+} from "../../../../components/request-workflow.js";
 import { getApplicationContext } from "../../../../lib/server-application-context.js";
 import { webStorage } from "../../../../lib/server-request-port.js";
 
@@ -23,20 +27,13 @@ export default async function RequestDetailPage({
   const parsedId = z.uuid().safeParse((await params).requestId);
   if (!parsedId.success) notFound();
   const resolvedSearch = await searchParams;
-  const activeTab = [
-    "activity",
-    "relations",
-    "artifacts",
-    "sessions",
-    "provenance",
-  ].includes(resolvedSearch.tab ?? "")
-    ? (resolvedSearch.tab as
-        | "activity"
-        | "relations"
-        | "artifacts"
-        | "sessions"
-        | "provenance")
-    : "activity";
+  // The record draws its description, questions and activity always; `tab`
+  // picks which of the linked-work sections shows beneath them. An address
+  // from before that split (`?tab=activity`) or any other value lands on the
+  // first section rather than failing.
+  const activeTab: RequestDetailTab =
+    requestDetailTabs.find((tab) => tab.value === resolvedSearch.tab)?.value ??
+    "relations";
   const storage = webStorage();
   const requestQueries = createRequestQueryRepository(storage.db);
   const [request, timeline, members] = await Promise.all([
@@ -68,6 +65,7 @@ export default async function RequestDetailPage({
       activeTab={activeTab}
       keys={{
         artifact: `web:artifact:${randomUUID()}`,
+        assign: `web:assign:${randomUUID()}`,
         edit: `web:request:update:${randomUUID()}`,
         answers: Object.fromEntries(
           request.questions.map((question) => [

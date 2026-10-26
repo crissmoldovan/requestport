@@ -50,6 +50,7 @@ function harness(
     resolveApiKey: vi.fn(async () => grant ?? null),
     resolveOAuth: vi.fn(async () => grant ?? null),
     touchCredential: vi.fn(async () => {}),
+    touchOAuthGrant: vi.fn(async () => {}),
     verifyApiKey: vi.fn(async (_token: string) => apiKey),
     verifyJwt: vi.fn(async () => payload),
   };
@@ -280,11 +281,53 @@ describe("an agent's bearer credential", () => {
     });
   });
 
+  test("stamps the OAuth grant a token authenticated against, in the grant's organisation (ruling 261)", async () => {
+    const {
+      authenticate: authenticateBearer,
+      touchCredential,
+      touchOAuthGrant,
+    } = harness({ payload: claims(audiences.mcp) });
+    const grant = resolved();
+
+    await authenticateBearer(bearer(), "mcp");
+
+    expect(touchOAuthGrant).toHaveBeenCalledTimes(1);
+    expect(touchOAuthGrant).toHaveBeenCalledWith(
+      grant.authorizationId,
+      grant.organizationId,
+    );
+    expect(touchCredential).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["the grant lookup finds none", { grant: null }],
+    [
+      "the token's family claim does not carry the grant",
+      {
+        payload: {
+          ...claims(audiences.mcp),
+          [requestportAgentGrantFamiliesClaim]: ["another-family"],
+        },
+      },
+    ],
+  ])("stamps no grant when %s", async (_case, overrides) => {
+    const { authenticate: authenticateBearer, touchOAuthGrant } = harness({
+      payload: claims(audiences.mcp),
+      ...overrides,
+    });
+
+    await expect(authenticateBearer(bearer(), "mcp")).rejects.toMatchObject({
+      code: "unauthenticated",
+    });
+    expect(touchOAuthGrant).not.toHaveBeenCalled();
+  });
+
   test("authenticates an API key against the grant it resolves to", async () => {
     const {
       authenticate: authenticateBearer,
       resolveApiKey,
       touchCredential,
+      touchOAuthGrant,
       verifyApiKey,
     } = harness({ apiKey: { key: { id: "an-api-key-id" }, valid: true } });
     const grant = resolved();
@@ -312,6 +355,7 @@ describe("an agent's bearer credential", () => {
       grant.authorizationId,
       grant.organizationId,
     );
+    expect(touchOAuthGrant).not.toHaveBeenCalled();
   });
 
   test("refuses an API key the verifier rejects", async () => {

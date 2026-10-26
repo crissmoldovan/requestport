@@ -1,12 +1,20 @@
 import { sql } from "drizzle-orm";
-import { afterAll, describe, expect, test } from "vitest";
+import { afterAll, describe, expect, test, vi } from "vitest";
 
 import type { Database } from "../client.js";
-import { createStorage, storageOptionsFromEnv } from "../client.js";
+import {
+  createStorage,
+  selectDriver,
+  storageOptionsFromEnv,
+} from "../client.js";
 import { createAgentManagementRepository } from "../queries/agent-management-repository.js";
 import { tenantWrappingEnabled } from "../tenant-context.js";
+import { openSession } from "../testing.js";
 import type { Tx } from "../transaction.js";
-import { createAgentAuthRepository } from "./agent-auth-repository.js";
+import {
+  agentLastUseStampSeconds,
+  createAgentAuthRepository,
+} from "./agent-auth-repository.js";
 
 // Built from this process's environment, as each test lane sets it.
 const suiteStorage = createStorage({
@@ -958,6 +966,267 @@ describe.sequential("repairing a consent no grant stands behind", () => {
         // consent screen, which would have fixed it, is skipped in that state.
         expect(await consentScopes(tx, clientId)).toEqual([]);
       });
+    },
+    seedingTimeoutMs,
+  );
+});
+
+/*
+  The last-use stamp (ruling 261): the bearer path stamps the key or the
+  grant it has just resolved, bound to the organisation the lookup found, and
+  writes at most once per `agentLastUseStampSeconds` for each key or grant.
+  The stamp and its comparison both read the database's clock.
+*/
+
+type StampedTable = "agent_credentials" | "agent_oauth_grants";
+
+const stampedKinds = [
+  ["an API key", "agent_credentials"],
+  ["an OAuth grant", "agent_oauth_grants"],
+] as const satisfies readonly (readonly [string, StampedTable])[];
+
+/** The key or grant a seeded credential stands for, by table. */
+function stampedId(
+  seeded: Awaited<ReturnType<typeof seedCredential>>,
+  table: StampedTable,
+) {
+  const id =
+    table === "agent_credentials"
+      ? seeded.credentialId
+      : seeded.issuedByGrantId;
+  if (!id) throw new Error("the seed has no issuing grant");
+  return id;
+}
+
+function touch(
+  repository: ReturnType<typeof createAgentAuthRepository>,
+  table: StampedTable,
+  id: string,
+  organizationId: string,
+) {
+  return table === "agent_credentials"
+    ? repository.touchCredential(id, organizationId)
+    : repository.touchOAuthGrant(id, organizationId);
+}
+
+/**
+ * `last_used_at` in epoch milliseconds, read outside the repository: a raw
+ * read hands a timestamp back as text, so the database converts it.
+ */
+async function lastUsedAt(tx: Tx, table: StampedTable, id: string) {
+  const { rows } = await tx.execute<{ ms: number | string | null }>(
+    table === "agent_credentials"
+      ? sql`select (extract(epoch from "last_used_at") * 1000)::float8 as "ms" from "agent_credentials" where "id" = ${id}`
+      : sql`select (extract(epoch from "last_used_at") * 1000)::float8 as "ms" from "agent_oauth_grants" where "id" = ${id}`,
+  );
+  const ms = rows[0]?.ms ?? null;
+  return ms === null ? null : Number(ms);
+}
+
+/** The database's clock, in epoch milliseconds, read by the database. */
+async function databaseNow(tx: Tx) {
+  const { rows } = await tx.execute<{ ms: number | string }>(
+    sql`select (extract(epoch from clock_timestamp()) * 1000)::float8 as "ms"`,
+  );
+  return Number(rows[0]?.ms);
+}
+
+/** Moves `last_used_at` to `ago` before the database's now. */
+async function stampedAgo(
+  tx: Tx,
+  table: StampedTable,
+  id: string,
+  ago: string,
+) {
+  await tx.execute(
+    table === "agent_credentials"
+      ? sql`update "agent_credentials" set "last_used_at" = clock_timestamp() - ${ago}::interval where "id" = ${id}`
+      : sql`update "agent_oauth_grants" set "last_used_at" = clock_timestamp() - ${ago}::interval where "id" = ${id}`,
+  );
+}
+
+describe.sequential("the last-use stamp (ruling 261)", () => {
+  test("stamps at most once every five minutes", () => {
+    expect(agentLastUseStampSeconds).toBe(300);
+  });
+
+  test.each(stampedKinds)(
+    "stamps %s once per interval, by the database's clock",
+    async (_kind, table) => {
+      await inRollbackTransaction(async (tx) => {
+        const seeded = await seedCredential(tx, { issuingGrant: "active" });
+        const id = stampedId(seeded, table);
+        const repository = createAgentAuthRepository(tx);
+        expect(await lastUsedAt(tx, table, id)).toBeNull();
+
+        // On PostgreSQL this process's clock runs a day ahead of the
+        // database's from here on (only `Date` is faked, so timers run as
+        // they do). A stamp taken from it would be a day off the database's
+        // now, and a threshold taken from it would find the 280-second-old
+        // stamp below due. Not on PGlite, which runs inside this process and
+        // whose `clock_timestamp()` follows this process's `Date` (measured
+        // 2026-10-25 with PGlite 0.5.8): there the skew would move both
+        // clocks, so the case runs without it.
+        if (selectDriver(process.env) !== "pglite") {
+          vi.useFakeTimers({ now: Date.now() + 86_400_000, toFake: ["Date"] });
+        }
+        try {
+          // The first authentication stamps, with the database's now.
+          await expect(
+            touch(repository, table, id, seeded.organizationId),
+          ).resolves.toBe(true);
+          const first = await lastUsedAt(tx, table, id);
+          expect(first).toEqual(expect.any(Number));
+          expect(Math.abs((first ?? 0) - (await databaseNow(tx)))).toBeLessThan(
+            60_000,
+          );
+
+          // A second one inside the interval writes nothing.
+          await expect(
+            touch(repository, table, id, seeded.organizationId),
+          ).resolves.toBe(false);
+          expect(await lastUsedAt(tx, table, id)).toEqual(first);
+
+          // Twenty seconds short of the interval, still nothing.
+          await stampedAgo(tx, table, id, "280 seconds");
+          const almost = await lastUsedAt(tx, table, id);
+          await expect(
+            touch(repository, table, id, seeded.organizationId),
+          ).resolves.toBe(false);
+          expect(await lastUsedAt(tx, table, id)).toEqual(almost);
+
+          // Past it, a fresh stamp from the database's now.
+          await stampedAgo(tx, table, id, "301 seconds");
+          const stale = await lastUsedAt(tx, table, id);
+          await expect(
+            touch(repository, table, id, seeded.organizationId),
+          ).resolves.toBe(true);
+          const fresh = await lastUsedAt(tx, table, id);
+          expect(fresh).toBeGreaterThan((stale ?? 0) + 300_000);
+          expect(Math.abs((fresh ?? 0) - (await databaseNow(tx)))).toBeLessThan(
+            60_000,
+          );
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+    },
+    seedingTimeoutMs,
+  );
+
+  test.each(stampedKinds)(
+    "stamps %s only in the organisation it is handed",
+    async (_kind, table) => {
+      await inRollbackTransaction(async (tx) => {
+        const seeded = await seedCredential(tx, { issuingGrant: "active" });
+        const id = stampedId(seeded, table);
+
+        await expect(
+          touch(createAgentAuthRepository(tx), table, id, crypto.randomUUID()),
+        ).resolves.toBe(false);
+        expect(await lastUsedAt(tx, table, id)).toBeNull();
+      });
+    },
+    seedingTimeoutMs,
+  );
+
+  /*
+    Two sessions at once, which PGlite's one connection cannot hold: the
+    second stamp waits for the first one's row lock and, once it commits,
+    reads the row again and finds it fresh, so the pair writes once. Skipped
+    on PGlite for that reason alone; the lane's single-session exclusions are
+    the same kind of case (packages/db/vitest.config.ts).
+  */
+  test.skipIf(selectDriver(process.env) === "pglite").each(stampedKinds)(
+    "writes once when two authentications of %s stamp at the same moment",
+    async (_kind, table) => {
+      let seeded: Awaited<ReturnType<typeof seedCredential>> | undefined;
+      await suiteStorage.transaction(async (tx) => {
+        seeded = await seedCredential(tx, { issuingGrant: "active" });
+      });
+      if (!seeded) throw new Error("no seed");
+      const organizationId = seeded.organizationId;
+      const id = stampedId(seeded, table);
+      const first = await openSession(suiteStorage);
+      const second = await openSession(suiteStorage);
+      let releaseFirst = () => {};
+      const firstHolds = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      const transactions: Promise<unknown>[] = [];
+      try {
+        let firstStamped: (stamped: boolean) => void = () => {};
+        let firstFailed: (reason: unknown) => void = () => {};
+        const firstAnswer = new Promise<boolean>((resolve, reject) => {
+          firstStamped = resolve;
+          firstFailed = reject;
+        });
+        const firstTransaction = first.db.transaction(async (tx) => {
+          firstStamped(
+            await touch(
+              createAgentAuthRepository(tx),
+              table,
+              id,
+              organizationId,
+            ),
+          );
+          // Holds the row lock the stamp took until the second one waits.
+          await firstHolds;
+        });
+        transactions.push(firstTransaction);
+        // A stamp that throws ends the first transaction before it answers.
+        // Its failure settles the answer, so the case fails at once rather
+        // than waiting out its timeout, and the `finally` below still
+        // releases both sessions.
+        void firstTransaction.catch(firstFailed);
+        expect(await firstAnswer).toBe(true);
+
+        const secondTransaction = second.db.transaction((tx) =>
+          touch(createAgentAuthRepository(tx), table, id, organizationId),
+        );
+        transactions.push(secondTransaction);
+        let settled = false;
+        void secondTransaction.then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+        await new Promise<void>((resolve) => setTimeout(resolve, 200));
+        expect(settled).toBe(false);
+
+        releaseFirst();
+        await firstTransaction;
+        await expect(secondTransaction).resolves.toBe(false);
+      } finally {
+        // A failed expectation must not leave the first transaction holding
+        // its row lock over the teardown below.
+        releaseFirst();
+        await Promise.allSettled(transactions);
+        first.release();
+        second.release();
+        // Committed rows: the tenant is archived and its key and grant
+        // revoked, as committed choreography fixtures are released
+        // (appearance-repository.integration.test.ts), since the owner
+        // membership's appearance event cannot be deleted.
+        await suiteStorage.transaction(async (tx) => {
+          await tx.execute(sql`
+            update "agent_credentials" set "revoked_at" = now()
+            where "organization_id" = ${organizationId}
+          `);
+          await tx.execute(sql`
+            update "agent_oauth_grants"
+            set "status" = 'revoked', "revoked_at" = now()
+            where "organization_id" = ${organizationId}
+          `);
+          await tx.execute(sql`
+            update "organizations" set "status" = 'archived'
+            where "id" = ${organizationId}
+          `);
+        });
+      }
     },
     seedingTimeoutMs,
   );

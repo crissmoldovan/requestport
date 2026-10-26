@@ -2,7 +2,10 @@ import {
   type AppearanceDefaults,
   type AppearanceOverrides,
   appearanceDensitySchema,
+  appearanceFontSchema,
+  appearanceLookSchema,
   appearanceModeSchema,
+  appearancePaintSchema,
   appearanceThemeSchema,
   DomainError,
   type DomainErrorCode,
@@ -46,6 +49,19 @@ export type AppearanceCommandMeta = {
   idempotencyKey: string;
 };
 
+/** The three axes ruling 255 added. */
+type AddedAxis = "font" | "look" | "paint";
+
+/**
+ * What a form write carries: every axis but the three ruling 255 added, which
+ * are optional — a page rendered before the change posts theme, density and
+ * mode alone, and the command keeps what is stored on an axis left out.
+ */
+export type AppearanceDefaultsWrite = Omit<AppearanceDefaults, AddedAxis> &
+  Partial<Pick<AppearanceDefaults, AddedAxis>>;
+export type AppearanceOverridesWrite = Omit<AppearanceOverrides, AddedAxis> &
+  Partial<Pick<AppearanceOverrides, AddedAxis>>;
+
 export type AppearanceActionDependencies = {
   enforceRateLimit: (input: {
     scope: AppearanceWriteScope;
@@ -54,14 +70,14 @@ export type AppearanceActionDependencies = {
   loadActor: () => Promise<AppearanceActorContext>;
   revalidate: () => void;
   updateOrganizationDefaults: (input: {
-    defaults: AppearanceDefaults;
+    defaults: AppearanceDefaultsWrite;
     meta: AppearanceCommandMeta;
     organizationId: string;
     userId: string;
   }) => Promise<void>;
   updatePersonalPreferences: (input: {
     meta: AppearanceCommandMeta;
-    overrides: AppearanceOverrides;
+    overrides: AppearanceOverridesWrite;
     userId: string;
   }) => Promise<void>;
   verifyFormContext: (input: {
@@ -77,18 +93,28 @@ const metadataSchema = {
   returnTo: z.string().check(utf16Max(512)).optional(),
 };
 
-/** Personal axes accept `inherit`; the tenant default never does. */
+/**
+ * Personal axes accept `inherit`; the tenant default never does. Today's forms
+ * submit all six axes (ruling 255); font, look and paint are optional so a
+ * page rendered before that change still saves (`AppearanceDefaultsWrite`).
+ */
 const personalSchema = z.object({
   ...metadataSchema,
   density: z.union([inheritSchema, appearanceDensitySchema]),
   expectedVersion: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  font: z.union([inheritSchema, appearanceFontSchema]).optional(),
+  look: z.union([inheritSchema, appearanceLookSchema]).optional(),
   mode: z.union([inheritSchema, appearanceModeSchema]),
+  paint: z.union([inheritSchema, appearancePaintSchema]).optional(),
   theme: z.union([inheritSchema, appearanceThemeSchema]),
 });
 
 const organizationSchema = z.object({
   ...metadataSchema,
   density: appearanceDensitySchema,
+  font: appearanceFontSchema.optional(),
+  look: appearanceLookSchema.optional(),
+  paint: appearancePaintSchema.optional(),
   // A persisted tenant default starts at version 1, so `0` is never expected.
   expectedVersion: z.coerce
     .number()
@@ -188,6 +214,15 @@ function axis<T extends string>(value: T | typeof appearanceInheritValue) {
   return value === appearanceInheritValue ? null : (value as T);
 }
 
+/** The added axes the form sent, and no key for one it left out. */
+function sentAxes<T>(values: Partial<Record<AddedAxis, T>>) {
+  return Object.fromEntries(
+    (["font", "look", "paint"] as const)
+      .filter((name) => values[name] !== undefined)
+      .map((name) => [name, values[name]]),
+  ) as Partial<Record<AddedAxis, T>>;
+}
+
 function contextConflict(): AppearanceActionState {
   return {
     message: appearanceActionMessages.context_conflict,
@@ -232,7 +267,12 @@ export function createAppearanceActions(
             density: parsed.data.density,
             mode: parsed.data.mode,
             theme: parsed.data.theme,
-          },
+            ...sentAxes({
+              font: parsed.data.font,
+              look: parsed.data.look,
+              paint: parsed.data.paint,
+            }),
+          } as AppearanceDefaultsWrite,
           meta: {
             expectedVersion: parsed.data.expectedVersion,
             idempotencyKey: parsed.data.idempotencyKey,
@@ -283,7 +323,21 @@ export function createAppearanceActions(
             density: axis(parsed.data.density),
             mode: axis(parsed.data.mode),
             theme: axis(parsed.data.theme),
-          },
+            ...sentAxes({
+              font:
+                parsed.data.font === undefined
+                  ? undefined
+                  : axis(parsed.data.font),
+              look:
+                parsed.data.look === undefined
+                  ? undefined
+                  : axis(parsed.data.look),
+              paint:
+                parsed.data.paint === undefined
+                  ? undefined
+                  : axis(parsed.data.paint),
+            }),
+          } as AppearanceOverridesWrite,
           userId: actor.userId,
         });
         dependencies.revalidate();

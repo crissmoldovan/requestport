@@ -459,6 +459,64 @@ describe("createAuth's agent services and the bus's re-check of a person", () =>
   });
 });
 
+/*
+ * The last-use stamps the bearer path `createAuth` composes calls (ruling
+ * 261). The bearer path's own suites hand it stamps of their own, so this is
+ * the one place the production wiring is pinned: db's
+ * `createAgentAuthRepository` is replaced by one whose two stamps record
+ * what they are asked, and `createAuthenticateAgentBearer` by the real one,
+ * with the dependencies `createAuth` hands it kept.
+ */
+describe("createAuth's bearer path and the last-use stamps", () => {
+  afterEach(() => {
+    vi.doUnmock("@requestport/db");
+    vi.doUnmock("./agent/authenticate-bearer.js");
+  });
+
+  test("an OAuth grant is stamped through the repository's touchOAuthGrant, and an API key through its touchCredential", async () => {
+    const touchCredential = vi.fn(async () => true);
+    const touchOAuthGrant = vi.fn(async () => true);
+    vi.doMock("@requestport/db", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("@requestport/db")>();
+      return {
+        ...actual,
+        createAgentAuthRepository: () => ({ touchCredential, touchOAuthGrant }),
+      };
+    });
+    type Dependencies = Parameters<
+      typeof import("./agent/authenticate-bearer.js").createAuthenticateAgentBearer
+    >[0];
+    const handed: Dependencies[] = [];
+    vi.doMock("./agent/authenticate-bearer.js", async (importOriginal) => {
+      const actual =
+        await importOriginal<typeof import("./agent/authenticate-bearer.js")>();
+      return {
+        ...actual,
+        createAuthenticateAgentBearer: (dependencies: Dependencies) => {
+          handed.push(dependencies);
+          return actual.createAuthenticateAgentBearer(dependencies);
+        },
+      };
+    });
+    const { createAuth } = await import("./create-auth.js");
+    createAuth({ database: vi.fn(() => ({}) as Database), env });
+
+    expect(handed).toHaveLength(1);
+    const [dependencies] = handed;
+    if (!dependencies) throw new Error("the bearer path was not composed");
+
+    await dependencies.touchOAuthGrant("grant_1", "organization_1");
+    expect(touchOAuthGrant.mock.calls).toEqual([["grant_1", "organization_1"]]);
+    expect(touchCredential).not.toHaveBeenCalled();
+
+    await dependencies.touchCredential?.("credential_1", "organization_1");
+    expect(touchCredential.mock.calls).toEqual([
+      ["credential_1", "organization_1"],
+    ]);
+    expect(touchOAuthGrant).toHaveBeenCalledTimes(1);
+  });
+});
+
 /** Where `@requestport/db`'s role guard keeps this process's declaration. */
 const DECLARATION = Symbol.for("requestport.database-surface");
 

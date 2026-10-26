@@ -86,16 +86,38 @@ afterEach(() => {
 const snapshot: AppearanceSnapshot = {
   effective: {
     density: "normal",
+    font: "match",
+    look: "match",
     mode: "dark",
+    paint: "match",
     source: {
       density: "organization",
+      font: "organization",
+      look: "organization",
       mode: "organization",
+      paint: "organization",
       theme: "organization",
     },
     theme: "cue",
   },
-  organization: { density: "normal", mode: "dark", theme: "cue", version: 3 },
-  user: { density: null, mode: null, theme: null, version: 0 },
+  organization: {
+    density: "normal",
+    font: "match",
+    look: "match",
+    mode: "dark",
+    paint: "match",
+    theme: "cue",
+    version: 3,
+  },
+  user: {
+    density: null,
+    font: null,
+    look: null,
+    mode: null,
+    paint: null,
+    theme: null,
+    version: 0,
+  },
 };
 
 function menuTree(
@@ -255,7 +277,8 @@ describe("user menu appearance panel", () => {
 /**
  * The panel names the organization default and offers no route to it.
  *
- * *Reset to organization defaults* implies those defaults exist; nothing said
+ * *Use organization defaults* (once *Reset to organization defaults*) implies
+ * those defaults exist; nothing said
  * they were the viewer's to change, or that the link below the panel is where
  * that happens. An owner who changed a theme here and looked for a way to make
  * it everyone's found a button that resets *to* the default and nothing that
@@ -266,7 +289,8 @@ describe("user menu appearance panel", () => {
 /**
  * The panel names the organization default and offered no route to it.
  *
- * *Reset to organization defaults* implies those defaults exist; nothing said
+ * *Use organization defaults* (once *Reset to organization defaults*) implies
+ * those defaults exist; nothing said
  * they were the viewer's to change, or that the link below is where that
  * happens. An owner who changed a theme here and looked for a way to make it
  * everyone's found a button that resets *to* the default and nothing that sets

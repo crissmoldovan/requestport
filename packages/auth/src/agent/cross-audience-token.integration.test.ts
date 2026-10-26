@@ -6,7 +6,11 @@ import {
   identitySchema,
   type Tx,
 } from "@requestport/db";
-import { queueQueriesOn, usePrivateJwksTable } from "@requestport/db/testing";
+import {
+  endTenantBinding,
+  queueQueriesOn,
+  usePrivateJwksTable,
+} from "@requestport/db/testing";
 import { storageOptionsFromEnv } from "@requestport/db/wiring";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -227,6 +231,16 @@ async function wire() {
       jwks: async () => await auth.api.getJwks(),
     }),
     resolveOAuth: (input) => repository.resolveOAuthGrant(input),
+    // The stamp binds the grant's organisation (ruling 261). In production it
+    // runs on the pool, so the binding ends with it; here every case shares
+    // the file's one transaction, so the binding is ended after each stamp.
+    touchOAuthGrant: async (grantId, organizationId) => {
+      try {
+        await repository.touchOAuthGrant(grantId, organizationId);
+      } finally {
+        await endTenantBinding(tx);
+      }
+    },
   });
   presentAt = (endpoint, accessToken) =>
     authenticateAgentBearer(
@@ -556,6 +570,14 @@ describe.sequential("a client authorised for one resource asks for the other", (
         actor: { type: "agent", id: person.agentPrincipalId },
         audience: consented,
       });
+      // The provider's own token, once it authenticates, stamps its grant's
+      // last use (ruling 261).
+      const stamped = await tx.execute<{ stamped: boolean }>(sql`
+        select "last_used_at" is not null as "stamped"
+        from "agent_oauth_grants"
+        where "oauth_client_id" = ${second.clientId}
+      `);
+      expect(stamped.rows).toEqual([{ stamped: true }]);
     },
   );
 

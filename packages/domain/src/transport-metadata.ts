@@ -1125,17 +1125,20 @@ export const capabilityRegistry: readonly Capability[] = [
   ),
   // Plan 13, F.2.7: inviting a member, changing a member's role or access,
   // revoking an invitation, and the organisation's appearance defaults, for
-  // an operator credential only (ruling 25), on REST only (ruling 2). Each
-  // checks `members:manage`, takes the acting member from `memberAuthority`
-  // and refuses a context bound to a project, because every row it touches
-  // is the organisation's (`organization-administration-commands.ts`,
-  // `appearance-commands.ts`). The route writes the credential's organisation
-  // into the input.
+  // an operator credential only (ruling 25), on REST only (ruling 2); and,
+  // beside revoking, resending an invitation (ruling 263), whose command
+  // applies revoking's role rule, so an owner invitation is an owner's to
+  // resend. Each checks `members:manage`, takes the acting member from
+  // `memberAuthority` and refuses a context bound to a project, because every
+  // row it touches is the organisation's
+  // (`organization-administration-commands.ts`, `appearance-commands.ts`).
+  // The route writes the credential's organisation into the input.
   ...(
     [
       "invite_organization_member",
       "set_organization_member",
       "revoke_organization_invitation",
+      "resend_organization_invitation",
       "appearance.update_organization_defaults.v1",
     ] as const
   ).map((name) =>
@@ -1160,6 +1163,12 @@ export const capabilityRegistry: readonly Capability[] = [
     "organization",
     "members:manage",
   ),
+  // Ruling 264: assigning a request, as its neighbours `update_request` and
+  // the triage actions are reached — on REST, and on MCP as a tool of its
+  // own, for an agent credential. The command admits an agent that could
+  // begin triage on the request (`request-commands.ts`); the route writes
+  // the credential's organisation into the input.
+  busCommand("assign_request", "assign_request", "request:triage"),
 ];
 
 /** Every POST command, in registry order: the commands the route accepts. */

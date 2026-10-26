@@ -1,6 +1,13 @@
 import { Dialog } from "@cueplusplus/ui/overlays";
 import { ThemeProvider } from "@cueplusplus/ui/system";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, onTestFinished, test, vi } from "vitest";
@@ -8,6 +15,7 @@ import { beforeEach, describe, expect, onTestFinished, test, vi } from "vitest";
 import type { AgentActionState } from "../app/(app)/agents/agent-action-state.js";
 import {
   AgentStatusForm,
+  ConnectAgentSheet,
   CreateAgentForm,
   CredentialActions,
   IssueAgentKeyForm,
@@ -649,5 +657,216 @@ describe("revealing private machine telemetry", () => {
     expect(
       await screen.findByText('{"hostname":"build-01"}'),
     ).toBeInTheDocument();
+  });
+});
+
+describe("connecting an agent in three steps", () => {
+  const endpoints = {
+    mcp: "https://requestport.example/mcp",
+    metadata:
+      "https://requestport.example/.well-known/oauth-protected-resource/mcp",
+    rest: "https://requestport.example/api/v1",
+  };
+  const created = {
+    displayName: "Claude Code",
+    id: "00000000-0000-4000-8000-0000000000a9",
+    projectId: projects[1].id,
+    slug: "claude-code",
+  };
+
+  function sheet(agents: (typeof created)[]) {
+    return (
+      <ThemeProvider
+        density="ultra-compact"
+        mode="system"
+        persistPreferences={false}
+        theme="requestport"
+      >
+        <ConnectAgentSheet
+          agents={agents}
+          allowOrganizationWide
+          createAction={action}
+          createIdempotencyKey={key}
+          endpoints={endpoints}
+          issueAction={second}
+          issueIdempotencyKey={`${key}:issue`}
+          lanes={lanes}
+          projects={projects}
+        />
+      </ThemeProvider>
+    );
+  }
+
+  /**
+   * Opens the sheet and creates the agent through its first step. The page
+   * revalidates after a create, so the agent list the sheet is handed next
+   * carries the new principal; the re-render below stands in for that.
+   */
+  async function createThroughFirstStep(
+    user: ReturnType<typeof userEvent.setup>,
+    slug = "claude-code",
+  ) {
+    action.mockResolvedValue({
+      message: "Agent principal created.",
+      status: "success",
+    } satisfies AgentActionState);
+    const view = render(sheet([]));
+    await user.click(screen.getByRole("button", { name: "Connect an agent" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(
+      within(dialog).getByLabelText("Display name"),
+      "Claude Code",
+    );
+    await user.type(within(dialog).getByLabelText("Agent slug"), slug);
+    const create = within(dialog).getByRole("button", { name: "Create agent" });
+    if (slug === "claude-code") {
+      await user.click(create);
+    } else {
+      // The slug input's pattern stops a browser from submitting a slug that
+      // is not already trimmed and lower-case; the submit event goes past it,
+      // as a client that skips the pattern would.
+      const form = create.closest("form");
+      if (!form) throw new Error("the create button is outside a form");
+      fireEvent.submit(form);
+    }
+    await waitFor(() => expect(action).toHaveBeenCalled());
+    view.rerender(sheet([created]));
+    await within(dialog).findByRole("radiogroup", { name: "How it signs in" });
+    return dialog;
+  }
+
+  test("opens a right sheet whose first step is the existing create form", async () => {
+    const user = userEvent.setup();
+    render(sheet([]));
+
+    await user.click(screen.getByRole("button", { name: "Connect an agent" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Connect an agent")).toBeInTheDocument();
+    const steps = within(dialog).getByRole("navigation", {
+      name: "Steps to connect an agent",
+    });
+    expect(steps).toHaveTextContent(/name.*sign-in.*connect/u);
+    expect(within(dialog).getByLabelText("Display name")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Agent slug")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Software")).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("combobox", { name: "Default project" }),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByRole("radiogroup")).toBeNull();
+  });
+
+  test("submits the create form unchanged, then asks how the new agent signs in", async () => {
+    const user = userEvent.setup();
+    const dialog = await createThroughFirstStep(user);
+
+    expect(entries(action)).toMatchObject({
+      displayName: "Claude Code",
+      idempotencyKey: key,
+    });
+    expect(
+      within(dialog).getByRole("radio", { name: /^OAuth \(recommended\)/u }),
+    ).toBeChecked();
+    expect(within(dialog).getByText(/choose Claude Code/u)).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("Credential name")).toBeNull();
+  });
+
+  test("issues the new agent's key through the existing one-time flow", async () => {
+    const user = userEvent.setup();
+    const secret = "rqp_test_not_a_real_credential";
+    second.mockResolvedValue({
+      message: "Credential issued.",
+      plaintextKey: secret,
+      status: "success",
+    } satisfies AgentActionState);
+    const dialog = await createThroughFirstStep(user);
+
+    await user.click(within(dialog).getByRole("radio", { name: /^API key/u }));
+    await user.type(within(dialog).getByLabelText("Credential name"), "CI");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Issue one-time key" }),
+    );
+    await waitFor(() => expect(second).toHaveBeenCalled());
+    expect(entries(second)).toMatchObject({
+      agentPrincipalId: created.id,
+      idempotencyKey: `${key}:issue`,
+      projectId: created.projectId,
+    });
+
+    const oneTime = await screen.findByRole("dialog", {
+      name: "Copy this credential now",
+    });
+    expect(within(oneTime).getByText(secret)).toBeInTheDocument();
+    await user.click(within(oneTime).getByRole("button", { name: "Close" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Copy this credential now" }),
+      ).toBeNull(),
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: "Continue" }));
+    expect(
+      await within(dialog).findByText(
+        `claude mcp add --transport http requestport ${endpoints.mcp}`,
+      ),
+    ).toBeInTheDocument();
+    // No command carries the key, or a reference the shell would expand into
+    // the command's arguments: the connection guide says never to put a
+    // credential in a command argument.
+    expect(within(dialog).queryByText(/--header/u)).toBeNull();
+    expect(within(dialog).queryByText(/REQUESTPORT_API_KEY/u)).toBeNull();
+    expect(screen.queryByText(secret)).toBeNull();
+  });
+
+  test("finds the new agent by the slug the schema stores, trimmed and lower-cased", async () => {
+    const user = userEvent.setup();
+    const dialog = await createThroughFirstStep(user, "Claude-Code ");
+
+    expect(entries(action)).toMatchObject({ slug: "Claude-Code " });
+    expect(within(dialog).getByText(/choose Claude Code/u)).toBeInTheDocument();
+  });
+
+  test("ends with the endpoints to copy and the Claude Code command", async () => {
+    const user = userEvent.setup();
+    const dialog = await createThroughFirstStep(user);
+
+    await user.click(within(dialog).getByRole("button", { name: "Continue" }));
+    expect(
+      await within(dialog).findByText(
+        `claude mcp add --transport http requestport ${endpoints.mcp}`,
+      ),
+    ).toBeInTheDocument();
+    for (const [label, url] of [
+      ["MCP endpoint", endpoints.mcp],
+      ["REST base URL", endpoints.rest],
+    ]) {
+      expect(within(dialog).getByText(url)).toBeInTheDocument();
+      // userEvent.setup() stands a clipboard in for the browser's, so what
+      // each control copied can be read back.
+      await user.click(
+        within(dialog).getByRole("button", { name: `Copy the ${label}` }),
+      );
+      await waitFor(async () =>
+        expect(await navigator.clipboard.readText()).toBe(url),
+      );
+    }
+    expect(
+      within(dialog).getByRole("link", { name: "Manage Claude Code" }),
+    ).toHaveAttribute("href", `/agents/${created.id}`);
+
+    await user.click(within(dialog).getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  test("starts again from an empty form when it is opened again", async () => {
+    const user = userEvent.setup();
+    const dialog = await createThroughFirstStep(user);
+    await user.click(within(dialog).getByRole("button", { name: "Continue" }));
+    await user.click(within(dialog).getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "Connect an agent" }));
+    const reopened = await screen.findByRole("dialog");
+    expect(within(reopened).getByLabelText("Display name")).toHaveValue("");
+    expect(within(reopened).queryByRole("radiogroup")).toBeNull();
   });
 });

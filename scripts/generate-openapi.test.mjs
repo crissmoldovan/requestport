@@ -493,6 +493,8 @@ describe("the OpenAPI document generated from the transport metadata", () => {
         "POST /api/v1/commands/revoke_organization_invitation",
         "POST /api/v1/commands/appearance.update_organization_defaults.v1",
       ],
+      // Ruling 263: resending an invitation, beside revoking one.
+      "ruling 263": ["POST /api/v1/commands/resend_organization_invitation"],
     };
     assert.deepEqual(
       withOperator.sort(),
@@ -640,6 +642,7 @@ describe("the OpenAPI document generated from the transport metadata", () => {
       "invite_organization_member",
       "set_organization_member",
       "revoke_organization_invitation",
+      "resend_organization_invitation",
       "appearance.update_organization_defaults.v1",
     ])
       assert.deepEqual(

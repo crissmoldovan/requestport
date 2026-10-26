@@ -65,6 +65,7 @@ function harness(
     resolveApiKey: vi.fn(async () => agent()),
     resolveOAuth: vi.fn(async () => null),
     touchCredential: vi.fn(async () => {}),
+    touchOAuthGrant: vi.fn(async () => {}),
     verifyApiKey: vi.fn(async (_key: string) => ({
       valid: true,
       key: { id: "agent-key-id" },

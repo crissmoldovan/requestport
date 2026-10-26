@@ -10,6 +10,7 @@ import {
 } from "@cueplusplus/ui/forms";
 import { Stack } from "@cueplusplus/ui/layout";
 import { Button, Chip } from "@cueplusplus/ui/primitives";
+import { Archive } from "lucide-react";
 import { type ReactNode, useActionState } from "react";
 
 import {
@@ -20,6 +21,11 @@ import {
   actionBannerMessage,
   actionFieldIssues,
 } from "../lib/action-field-issues.js";
+import {
+  DialogCancel,
+  FormDialog,
+  useReportSuccess,
+} from "./administration-forms.js";
 
 /**
  * The recovery controls, on native CUE++ controls.
@@ -28,6 +34,9 @@ import {
  * work back on a queue that already owns an idempotency key — so it stays one
  * press. What every form here does carry is the record's own expected version
  * and the page-minted key, which is what makes a double press safe.
+ *
+ * A new retention hold opens in a dialog from its panel's "Add hold" action
+ * (ruling 259); the dialog closes on success and a toast confirms it.
  */
 
 type Action = (
@@ -194,15 +203,21 @@ const holdFields = ["category", "reason"] as const;
 
 export function RetentionHoldForm({
   action,
+  cancel,
   idempotencyKey,
+  onSuccess,
 }: {
   action: Action;
+  /** The dialog's Cancel, when the form is opened in one. */
+  cancel?: ReactNode;
   idempotencyKey: string;
+  onSuccess?: (message: string) => void;
 }) {
   const [state, formAction, pending] = useActionState(
     action,
     initialOperationsActionState,
   );
+  useReportSuccess(state, onSuccess);
   return (
     <form action={formAction}>
       <Stack direction="column" gap={4}>
@@ -233,11 +248,42 @@ export function RetentionHoldForm({
           <FieldError issues={actionFieldIssues(state, "reason")} />
         </Field>
         <Status fields={holdFields} state={state} />
-        <Button disabled={pending} size="sm" type="submit" variant="secondary">
-          {pending ? "Creating…" : "Create hold"}
-        </Button>
+        <Stack direction="row" gap={2} justify="end" wrap>
+          {cancel}
+          <Button disabled={pending} size="sm" type="submit" variant="primary">
+            {pending ? "Creating…" : "Create hold"}
+          </Button>
+        </Stack>
       </Stack>
     </form>
+  );
+}
+
+/** The retention panel's action: a new hold, in a dialog. */
+export function RetentionHoldDialog({
+  action,
+  idempotencyKey,
+}: {
+  action: Action;
+  idempotencyKey: string;
+}) {
+  return (
+    <FormDialog
+      description="Pause eligible organization-scoped cleanup until the hold is released."
+      icon={Archive}
+      title="Add a retention hold"
+      trigger="Add hold"
+      triggerVariant="secondary"
+    >
+      {(done) => (
+        <RetentionHoldForm
+          action={action}
+          cancel={<DialogCancel />}
+          idempotencyKey={idempotencyKey}
+          onSuccess={done}
+        />
+      )}
+    </FormDialog>
   );
 }
 

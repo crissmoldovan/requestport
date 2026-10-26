@@ -59,11 +59,14 @@ import { test } from "../fixtures/engine.ts";
  *   nothing and on a case skipped without one.
  */
 
-/** The fallback triple `global-error` paints, having resolved nothing. */
+/**
+ * The fallback triple `global-error` paints, having resolved nothing: the
+ * theme, density and mode of the domain's fallback.
+ */
 const appearanceFallback = {
-  density: "ultra-compact",
+  density: "normal",
   mode: "system",
-  theme: "requestport",
+  theme: "cue",
 } as const;
 
 let tenantPromise: Promise<AcceptanceTenant> | null = null;

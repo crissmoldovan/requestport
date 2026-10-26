@@ -74,4 +74,18 @@ export const rows = [
     status: "human-only",
     reason: "Ruling 3: it mints a credential.",
   },
+  {
+    module: "app/(app)/overview-actions.ts",
+    action: "hideSetupCardAction",
+    status: "human-only",
+    reason:
+      "Ruling 261: a person's own choice to hide the overview's setup card, kept in their browser's cookie; nothing a machine reads.",
+  },
+  {
+    module: "app/(app)/overview-actions.ts",
+    action: "showSetupCardAction",
+    status: "human-only",
+    reason:
+      "Ruling 261: a person's own choice to show the overview's setup card again, kept in their browser's cookie; nothing a machine reads.",
+  },
 ];

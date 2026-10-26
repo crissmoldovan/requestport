@@ -30,6 +30,11 @@ const generated = vi.hoisted(() => ({
   monoFamily:
     "__Geist_Mono_4c5b6a, __Geist_Mono_Fallback_4c5b6a, ui-monospace, monospace",
   getAppearance: vi.fn(),
+  faceClassName: "__variable_face_geist __variable_face_inter",
+}));
+
+vi.mock("./appearance-faces.js", () => ({
+  appearanceFaceClassName: generated.faceClassName,
 }));
 
 vi.mock("geist/font/sans", () => ({
@@ -60,15 +65,29 @@ const personalised = {
   theme: "terminal",
   density: "normal",
   mode: "light",
+  font: "plex",
+  look: "match",
+  paint: "frost",
 } as const;
 
 function personalisedSnapshot() {
   return {
-    user: { theme: "terminal", density: null, mode: null, version: 6 },
+    user: {
+      theme: "terminal",
+      density: null,
+      mode: null,
+      font: "plex",
+      look: null,
+      paint: null,
+      version: 6,
+    },
     organization: {
       theme: "venu",
       density: "normal",
       mode: "light",
+      font: "match",
+      look: "match",
+      paint: "frost",
       version: 2,
     },
     effective: {
@@ -77,6 +96,9 @@ function personalisedSnapshot() {
         theme: "user",
         density: "organization",
         mode: "organization",
+        font: "user",
+        look: "organization",
+        paint: "organization",
       },
     },
   };
@@ -157,19 +179,24 @@ const asChildPattern = /(?:^|[\s{])asChild(?![0-9A-Za-z_])/mu;
 const approvedFontFamiliesTuple =
   "fontFamilies={{ sans: GeistSans.style.fontFamily, mono: GeistMono.style.fontFamily }}";
 
-/** The two modules whose provider root may publish the loaded Geist faces. */
-const fontFamiliesBoundaries = [
-  join("app", "appearance-root.tsx"),
-  join("app", "global-error.tsx"),
-];
+/**
+ * The one module whose provider root may publish the loaded Geist faces:
+ * `global-error`, which resolves nothing. The root provider publishes none
+ * since ruling 255 — `fontFamilies` would shadow the pairing the person's
+ * typeface names — and its faces reach that pairing through the
+ * `--cue-face-*` classes the root layout puts on `<html>`.
+ */
+const fontFamiliesBoundaries = [join("app", "global-error.tsx")];
 
 /**
  * The reviewed application `style` props, keyed by the module allowed to write
  * them.
  *
- * Only RequestPort's mark (ruling 192): the app bar's wrapper that sets it
- * beside the name, and the mark's own fill, stroke and flex. No cue-ui
- * component takes custom artwork in the theme's accent. Every other `style`
+ * RequestPort's mark (ruling 192): the app bar's wrapper that sets it beside
+ * the name, and the mark's own fill, stroke and flex. No cue-ui component takes
+ * custom artwork in the theme's accent. And the account menu's height cap
+ * (ruling 255): cue-ui's popover limits its width and not its height, so the
+ * panel takes the room Base UI's positioner measured. Every other `style`
  * attribute anywhere under `apps/web/src` is a violation, and adding one means
  * reviewing it here first.
  */
@@ -181,6 +208,9 @@ const reviewedStyleProps: Record<string, readonly string[]> = {
     "style={{ fill: accent }}",
     "style={{ flexShrink: 0 }}",
     "style={{ stroke: accent }}",
+  ],
+  "components/user-control.tsx": [
+    'style={{ maxHeight: "var(--available-height)" }}',
   ],
 };
 
@@ -214,7 +244,9 @@ function auditFontFamiliesSink(text: string, expectedTuples: number): string[] {
 function styleProps(text: string): string[] {
   const props: string[] = [];
 
-  for (const match of text.matchAll(/(?<![0-9A-Za-z_.])style=\{/gu)) {
+  // Not preceded by a name character, `.` or `-`: `data-style={…}` is an
+  // attribute of its own, not the style attribute.
+  for (const match of text.matchAll(/(?<![0-9A-Za-z_.-])style=\{/gu)) {
     const start = match.index;
     let depth = 0;
     let quote = "";
@@ -338,8 +370,8 @@ beforeEach(() => {
  * element, the head, and the `<body>` opening tag with every attribute on it.
  *
  * The region ends at the end of that tag rather than at its start. `<body>` is
- * server-rendered by `AppearanceRoot` — the appearance triple, the provider
- * root marker and the published font families are attributes on it — so a
+ * server-rendered by `AppearanceRoot` — the appearance axes and the provider
+ * root marker are attributes on it — so a
  * region cut at the `<` left the one element written from a server read of a
  * person's stored preferences outside the only sweep that looks for a leak.
  * Reading to the next `>` is exact rather than approximate: React escapes `>`
@@ -418,7 +450,7 @@ function documentRegions(markup: string) {
 }
 
 describe("root document appearance boundary", () => {
-  test("carries the validated triple and both loaded font variables on <html>", async () => {
+  test("carries the six validated axes, a match resolved, and every face's class on <html> (ruling 255)", async () => {
     const element = await rootElement();
 
     expect(element.type).toBe("html");
@@ -427,8 +459,66 @@ describe("root document appearance boundary", () => {
     expect(element.props["data-theme"]).toBe(personalised.theme);
     expect(element.props["data-density"]).toBe(personalised.density);
     expect(element.props["data-mode"]).toBe(personalised.mode);
-    expect(element.props.className).toContain(generated.sansVariable);
-    expect(element.props.className).toContain(generated.monoVariable);
+    expect(element.props["data-font"]).toBe("plex");
+    // terminal has no Look of its own, so its match is classic's set.
+    expect(element.props["data-style"]).toBe("console");
+    expect(element.props["data-paint"]).toBe("frost");
+    expect(element.props.className).toBe(generated.faceClassName);
+  });
+
+  test("stamps match on typeface, Look and surface as the classic Look on a theme with none of its own (ruling 255)", async () => {
+    const matching = {
+      theme: "requestport",
+      density: "normal",
+      mode: "system",
+      font: "match",
+      look: "match",
+      paint: "match",
+    } as const;
+    generated.getAppearance.mockResolvedValue({
+      snapshot: {
+        user: {
+          theme: null,
+          density: null,
+          mode: null,
+          font: null,
+          look: null,
+          paint: null,
+          version: 0,
+        },
+        organization: { ...matching, version: 3 },
+        effective: {
+          ...matching,
+          source: {
+            theme: "organization",
+            density: "organization",
+            mode: "organization",
+            font: "organization",
+            look: "organization",
+            paint: "organization",
+          },
+        },
+      },
+      status: "authenticated",
+    });
+
+    const element = await rootElement();
+
+    // requestport has no Look in the registry, so each match is classic's:
+    // Geist, the console style set, no paint. None of them is the stored word.
+    expect(element.props["data-theme"]).toBe("requestport");
+    expect(element.props["data-font"]).toBe("geist");
+    expect(element.props["data-style"]).toBe("console");
+    expect(element.props["data-paint"]).toBe("none");
+  });
+
+  // Since `@cueplusplus/ui` 0.24.0 a field outside this attribute draws its
+  // focus ring as `--cue-focus` mixed to 15% with transparent, which §13's
+  // keyboard-focus rows refuse; inside it the ring is the full token again.
+  test("opts every field on the page into the contrast edge and its full focus ring", async () => {
+    const element = await rootElement();
+
+    expect(element.props["data-field-edge"]).toBe("contrast");
   });
 
   /**
@@ -488,8 +578,12 @@ describe("root document appearance boundary", () => {
     expect(body).toContain(`data-theme="${personalised.theme}"`);
     expect(body).toContain(`data-density="${personalised.density}"`);
     expect(body).toContain(`data-mode="${personalised.mode}"`);
-    expect(body).toContain(`--cue-font-sans:${generated.sansFamily}`);
-    expect(body).toContain(`--cue-font-mono:${generated.monoFamily}`);
+    expect(body).toContain('data-style="console"');
+    expect(body).toContain('data-paint="frost"');
+    // No font family is written on it: the typeface is the pairing `<html>`
+    // carries, and an inline family here would shadow it.
+    expect(body).not.toContain("--cue-font-sans");
+    expect(body).not.toContain("--cue-font-mono");
     expect(body).toContain("color-scheme:light");
     expect(markup).toContain("Overview");
   });
@@ -700,9 +794,12 @@ describe("provider boundary source contract", () => {
 });
 
 describe("inline-style source contract", () => {
-  test("permits exactly one approved provider tuple at each boundary", async () => {
+  test("permits exactly one approved provider tuple at each boundary, and none at the root", async () => {
     expect(auditFontFamiliesSink(await source("./layout.tsx"), 0)).toEqual([]);
-    for (const file of ["./appearance-root.tsx", "./global-error.tsx"]) {
+    expect(
+      auditFontFamiliesSink(await source("./appearance-root.tsx"), 0),
+    ).toEqual([]);
+    for (const file of ["./global-error.tsx"]) {
       expect(auditFontFamiliesSink(await source(file), 1)).toEqual([]);
 
       const text = (await source(file)).replaceAll(/\s+/gu, " ");
@@ -761,10 +858,12 @@ describe("inline-style source contract", () => {
     expect(Object.keys(reviewedStyleProps)).toEqual([
       "components/app-shell.tsx",
       "components/request-port-mark.tsx",
+      "components/user-control.tsx",
     ]);
     expect(Object.keys(reviewedInlineStyleProps)).toEqual([
       "apps/web/src/components/app-shell.tsx",
       "apps/web/src/components/request-port-mark.tsx",
+      "apps/web/src/components/user-control.tsx",
     ]);
   });
 
@@ -782,6 +881,15 @@ describe("inline-style source contract", () => {
         'style={{ "--x": "50%" }}',
       ]),
     ).toEqual([]);
+    // An attribute whose name ends in `style` is not the style attribute: the
+    // root layout stamps cue-ui's `data-style` axis (ruling 255), which writes
+    // no inline style.
+    expect(
+      auditInlineStyleSinks("<html data-style={presentation.styleSet} />"),
+    ).toEqual([]);
+    expect(
+      auditInlineStyleSinks("<html data-style={x} style={{ color: y }} />"),
+    ).toEqual(["style-prop:style={{ color: y }}"]);
   });
 });
 
@@ -812,6 +920,17 @@ const boundaryRenderers: Record<string, () => Promise<string>> = {
   "(app)/settings/appearance/loading.tsx": async () =>
     renderToStaticMarkup(
       (await import("./(app)/settings/appearance/loading.js")).default(),
+    ),
+  "(app)/settings/error.tsx": async () =>
+    renderToStaticMarkup(
+      (await import("./(app)/settings/error.js")).default({
+        error: thrown(),
+        reset: () => {},
+      }),
+    ),
+  "(app)/settings/not-found.tsx": async () =>
+    renderToStaticMarkup(
+      (await import("./(app)/settings/not-found.js")).default(),
     ),
   "(auth)/error.tsx": async () =>
     renderToStaticMarkup(
@@ -925,6 +1044,7 @@ describe("App Router framework boundaries", () => {
     for (const source of [
       "(app)/error.tsx",
       "(app)/settings/appearance/error.tsx",
+      "(app)/settings/error.tsx",
       "(auth)/error.tsx",
       "error.tsx",
       "global-error.tsx",
@@ -938,9 +1058,11 @@ describe("App Router framework boundaries", () => {
     }
   });
 
-  test("routes both not-found boundaries back to a reachable destination", async () => {
+  test("routes every not-found boundary back to a reachable destination", async () => {
     for (const [source, href] of [
       ["(app)/not-found.tsx", "/"],
+      // The organization page, which every member may open (ruling 260).
+      ["(app)/settings/not-found.tsx", "/settings/organization"],
       ["(auth)/not-found.tsx", "/sign-in"],
       ["not-found.tsx", "/"],
     ] as const) {
@@ -988,6 +1110,8 @@ describe("App Router framework boundaries", () => {
     for (const source of [
       "(app)/error.tsx",
       "(app)/not-found.tsx",
+      "(app)/settings/error.tsx",
+      "(app)/settings/not-found.tsx",
       "(auth)/error.tsx",
       "(auth)/not-found.tsx",
       "error.tsx",

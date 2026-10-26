@@ -39,6 +39,15 @@ export const pageShellWidth = {
  * token widens the column past the shell's one scroller, which scrolls the
  * whole console sideways rather than wrapping the word. `overflow-wrap` is
  * inherited, so the column sets it once for everything inside it.
+ *
+ * The eyebrow needs more than that. `Eyebrow` is an `inline-flex` box, so its
+ * text is a flex item whose minimum width is its min-content width, and
+ * `break-word` does not lower min-content: the item grows to the longest
+ * unbroken run and overflows anyway. `anywhere` does lower it. A 63-character
+ * organization slug at 390px ran past the edge this way once the default
+ * density became `normal`, whose label size is larger than ultra-compact's.
+ * It is set on the eyebrow alone because, on the column, it would also let an
+ * auto-layout table squeeze its columns to a character's width.
  */
 export function Page({
   action,
@@ -59,7 +68,7 @@ export function Page({
     <PageShell
       actions={action}
       className="break-words"
-      eyebrow={<Eyebrow>{eyebrow}</Eyebrow>}
+      eyebrow={<Eyebrow className="wrap-anywhere">{eyebrow}</Eyebrow>}
       subtitle={description}
       title={title}
       width={pageShellWidth[width]}

@@ -305,6 +305,12 @@ export const restCommands: readonly RestCommand[] = [
     workSessionId: ids.workSession,
     reason,
   }),
+  // Ruling 264: the request goes to the delegating person, as a member of
+  // the organisation would be named.
+  command("assign_request", "request:triage", {
+    requestId: ids.request,
+    assigneeUserId: ids.delegatingUser,
+  }),
 ];
 
 /**

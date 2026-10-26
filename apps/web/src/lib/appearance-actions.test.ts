@@ -26,8 +26,11 @@ function personalForm(overrides: Record<string, string> = {}) {
   return formData({
     density: appearanceInheritValue,
     expectedVersion: "0",
+    font: "plex",
     idempotencyKey,
+    look: appearanceInheritValue,
     mode: appearanceInheritValue,
+    paint: "match",
     renderContext: "v1.personal.token",
     returnTo: "/requests?view=inbox",
     theme: "cue",
@@ -39,11 +42,14 @@ function organizationForm(overrides: Record<string, string> = {}) {
   return formData({
     density: "normal",
     expectedVersion: "1",
+    font: "match",
     idempotencyKey,
+    look: "editorial",
     mode: "dark",
+    paint: "frost",
     renderContext: "v1.organization.token",
     returnTo: "/settings/appearance",
-    theme: "cue",
+    theme: "graphite",
     ...overrides,
   });
 }
@@ -85,7 +91,7 @@ function expectGlobalError(
 }
 
 describe("personal appearance action", () => {
-  test("submits the validated triple, metadata, and destination", async () => {
+  test("submits the six validated axes, metadata, and destination", async () => {
     const { actions, dependencies } = harness();
 
     const state = await actions.updatePersonalPreferences(personalForm());
@@ -96,7 +102,14 @@ describe("personal appearance action", () => {
     });
     expect(dependencies.updatePersonalPreferences).toHaveBeenCalledWith({
       meta: { expectedVersion: 0, idempotencyKey },
-      overrides: { density: null, mode: null, theme: "cue" },
+      overrides: {
+        density: null,
+        font: "plex",
+        look: null,
+        mode: null,
+        paint: "match",
+        theme: "cue",
+      },
       userId,
     });
     expect(dependencies.revalidate).toHaveBeenCalledTimes(1);
@@ -108,6 +121,8 @@ describe("personal appearance action", () => {
     const state = await actions.updatePersonalPreferences(
       personalForm({
         expectedVersion: "3",
+        font: appearanceInheritValue,
+        paint: appearanceInheritValue,
         theme: appearanceInheritValue,
       }),
     );
@@ -115,7 +130,14 @@ describe("personal appearance action", () => {
     expect(state.status).toBe("success");
     expect(dependencies.updatePersonalPreferences).toHaveBeenCalledWith({
       meta: { expectedVersion: 3, idempotencyKey },
-      overrides: { density: null, mode: null, theme: null },
+      overrides: {
+        density: null,
+        font: null,
+        look: null,
+        mode: null,
+        paint: null,
+        theme: null,
+      },
       userId,
     });
   });
@@ -197,6 +219,38 @@ describe("personal appearance action", () => {
 
     expect(state).toEqual({
       field: "density",
+      message: appearanceActionMessages.field,
+      status: "field_error",
+    });
+    expect(dependencies.updatePersonalPreferences).not.toHaveBeenCalled();
+  });
+
+  test("saves a form rendered before ruling 255, which sends three axes, and leaves the other three to the command", async () => {
+    // A page loaded before the deploy posts theme, density and mode alone. The
+    // command keeps what is stored on an axis left out.
+    const { actions, dependencies } = harness();
+    const data = personalForm();
+    for (const axis of ["font", "look", "paint"]) data.delete(axis);
+
+    const state = await actions.updatePersonalPreferences(data);
+
+    expect(state.status).toBe("success");
+    expect(dependencies.updatePersonalPreferences).toHaveBeenCalledWith({
+      meta: { expectedVersion: 0, idempotencyKey },
+      overrides: { density: null, mode: null, theme: "cue" },
+      userId,
+    });
+  });
+
+  test("refuses a typeface RequestPort does not bundle, on the typeface field", async () => {
+    const { actions, dependencies } = harness();
+
+    const state = await actions.updatePersonalPreferences(
+      personalForm({ font: "roboto" }),
+    );
+
+    expect(state).toEqual({
+      field: "font",
       message: appearanceActionMessages.field,
       status: "field_error",
     });
@@ -298,7 +352,7 @@ describe("personal appearance action", () => {
 });
 
 describe("organization appearance action", () => {
-  test("submits the server-derived tenant with the validated triple", async () => {
+  test("submits the server-derived tenant with the six validated axes", async () => {
     const { actions, dependencies } = harness();
 
     const state = await actions.updateOrganizationDefaults(organizationForm());
@@ -308,12 +362,35 @@ describe("organization appearance action", () => {
       status: "success",
     });
     expect(dependencies.updateOrganizationDefaults).toHaveBeenCalledWith({
-      defaults: { density: "normal", mode: "dark", theme: "cue" },
+      defaults: {
+        density: "normal",
+        font: "match",
+        look: "editorial",
+        mode: "dark",
+        paint: "frost",
+        theme: "graphite",
+      },
       meta: { expectedVersion: 1, idempotencyKey },
       organizationId,
       userId,
     });
     expect(dependencies.revalidate).toHaveBeenCalledTimes(1);
+  });
+
+  test("saves an organization form rendered before ruling 255, leaving the other three to the command", async () => {
+    const { actions, dependencies } = harness();
+    const data = organizationForm();
+    for (const axis of ["font", "look", "paint"]) data.delete(axis);
+
+    const state = await actions.updateOrganizationDefaults(data);
+
+    expect(state.status).toBe("success");
+    expect(dependencies.updateOrganizationDefaults).toHaveBeenCalledWith({
+      defaults: { density: "normal", mode: "dark", theme: "graphite" },
+      meta: { expectedVersion: 1, idempotencyKey },
+      organizationId,
+      userId,
+    });
   });
 
   test("ignores an organization identifier supplied by the form", async () => {

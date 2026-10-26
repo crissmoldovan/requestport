@@ -102,7 +102,17 @@ describe("server appearance composition root", () => {
       theme: "dusk",
       density: "normal",
       mode: "light",
-      source: { theme: "user", density: "organization", mode: "organization" },
+      font: "match",
+      look: "match",
+      paint: "match",
+      source: {
+        theme: "user",
+        density: "organization",
+        mode: "organization",
+        font: "organization",
+        look: "organization",
+        paint: "organization",
+      },
     });
   });
 

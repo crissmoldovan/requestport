@@ -1,3 +1,4 @@
+import * as domain from "@requestport/domain";
 import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, test } from "vitest";
 
@@ -5,8 +6,12 @@ import * as databasePackage from "../index.js";
 import {
   appearanceDefaultInitializerActor,
   appearanceDensityValues,
+  appearanceFallback,
+  appearanceFontValues,
   appearanceInitializedEventType,
+  appearanceLookValues,
   appearanceModeValues,
+  appearancePaintValues,
   appearanceThemeValues,
   organizationAppearanceDefaults,
   userAppearancePreferences,
@@ -14,6 +19,17 @@ import {
 import * as schemaModule from "./index.js";
 
 const dialect = new PgDialect();
+
+/** Each axis's check-constraint vocabulary, by column. */
+const vocabularies = {
+  theme: appearanceThemeValues,
+  density: appearanceDensityValues,
+  mode: appearanceModeValues,
+  font: appearanceFontValues,
+  look: appearanceLookValues,
+  paint: appearancePaintValues,
+} as const;
+const axes = ["theme", "density", "mode", "font", "look", "paint"] as const;
 
 function checkSql(table: Parameters<typeof getTableConfig>[0], name: string) {
   const found = getTableConfig(table).checks.find(
@@ -43,13 +59,42 @@ describe("appearance preference schema", () => {
       "dusk",
       "luma",
       "snuffle",
+      "command",
+      "graphite",
+      "kiln",
+      "ledger",
+      "monolith",
+      "porcelain",
+      "prism",
+      "quotamate",
+      "tender",
+      "zine",
     ]);
     expect(appearanceDensityValues).toEqual([
       "ultra-compact",
+      "compact",
       "normal",
       "large",
     ]);
     expect(appearanceModeValues).toEqual(["system", "dark", "light"]);
+  });
+
+  test("declares the same six vocabularies and fallback as the domain (ruling 255)", () => {
+    expect(appearanceThemeValues).toEqual(domain.appearanceThemes);
+    expect(appearanceDensityValues).toEqual(domain.appearanceDensities);
+    expect(appearanceModeValues).toEqual(domain.appearanceModes);
+    expect(appearanceFontValues).toEqual(domain.appearanceFonts);
+    expect(appearanceLookValues).toEqual(domain.appearanceLooks);
+    expect(appearancePaintValues).toEqual(domain.appearancePaints);
+    expect(appearanceFallback).toEqual(domain.appearanceFallback);
+    expect(appearanceFallback).toEqual({
+      theme: "cue",
+      density: "normal",
+      mode: "system",
+      font: "match",
+      look: "match",
+      paint: "match",
+    });
   });
 
   test("names the fixed initializer service actor and initialization event", () => {
@@ -78,13 +123,16 @@ describe("appearance preference schema", () => {
       "version",
       "created_at",
       "updated_at",
+      "font",
+      "look",
+      "paint",
     ]);
     expect(columns.get("user_id")?.primary).toBe(true);
     expect(columns.get("user_id")?.getSQLType()).toBe("text");
 
     // Null is "inherit". Every axis stays independently nullable so an all-null
     // row can be retained as the reset tombstone rather than deleted.
-    for (const axis of ["theme", "density", "mode"]) {
+    for (const axis of axes) {
       expect(columns.get(axis)?.notNull, axis).toBe(false);
     }
 
@@ -127,18 +175,14 @@ describe("appearance preference schema", () => {
   });
 
   test("restricts every personal axis to the locked vocabulary or inherit", () => {
-    for (const axis of ["theme", "density", "mode"] as const) {
+    for (const axis of axes) {
       const sql = checkSql(
         userAppearancePreferences,
         `user_appearance_preferences_${axis}_check`,
       );
 
       expect(sql, axis).toMatch(/is null or/u);
-      for (const value of {
-        theme: appearanceThemeValues,
-        density: appearanceDensityValues,
-        mode: appearanceModeValues,
-      }[axis]) {
+      for (const value of vocabularies[axis]) {
         expect(sql, `${axis}:${value}`).toContain(`'${value}'`);
       }
     }
@@ -151,7 +195,7 @@ describe("appearance preference schema", () => {
     ).toContain("> 0");
   });
 
-  test("keys organization defaults by tenant with a required triple", () => {
+  test("keys organization defaults by tenant with all six axes required", () => {
     const config = getTableConfig(organizationAppearanceDefaults);
     const columns = new Map(
       config.columns.map((column) => [column.name, column]),
@@ -168,17 +212,25 @@ describe("appearance preference schema", () => {
       "version",
       "created_at",
       "updated_at",
+      "font",
+      "look",
+      "paint",
     ]);
     expect(columns.get("organization_id")?.primary).toBe(true);
     expect(columns.get("organization_id")?.getSQLType()).toBe("uuid");
 
-    for (const required of ["theme", "density", "mode", "version"]) {
+    for (const required of [...axes, "version"]) {
       expect(columns.get(required)?.notNull, required).toBe(true);
     }
+    // 0026 added these with a default, so every existing row reads `match`.
+    for (const added of ["font", "look", "paint"]) {
+      expect(columns.get(added)?.default, added).toBe("match");
+    }
 
-    // The updater is nullable only so the migration-owned updater foreign key
-    // can null it when the recorded membership is deleted; every write path
-    // sets it. See the updater-foreign-key test below.
+    // The updater is nullable so the migration-owned updater foreign key can
+    // null it when the recorded membership is deleted, and so 0026's backfill
+    // can say no member made its change; every command write sets it. See the
+    // updater-foreign-key test below.
     expect(columns.get("last_updated_by_user_id")?.notNull).toBe(false);
 
     expect(columns.get("version")?.default).toBe(1);
@@ -240,18 +292,14 @@ describe("appearance preference schema", () => {
   });
 
   test("requires organization axes to be exactly the locked vocabulary", () => {
-    for (const axis of ["theme", "density", "mode"] as const) {
+    for (const axis of axes) {
       const sql = checkSql(
         organizationAppearanceDefaults,
         `organization_appearance_defaults_${axis}_check`,
       );
 
       expect(sql, axis).not.toMatch(/is null/u);
-      for (const value of {
-        theme: appearanceThemeValues,
-        density: appearanceDensityValues,
-        mode: appearanceModeValues,
-      }[axis]) {
+      for (const value of vocabularies[axis]) {
         expect(sql, `${axis}:${value}`).toContain(`'${value}'`);
       }
     }

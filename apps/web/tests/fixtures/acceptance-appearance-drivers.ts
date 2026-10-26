@@ -32,8 +32,8 @@ import { developmentOverlaySelectors } from "./development-overlay.js";
 import {
   type FocusIndicatorSample,
   focusIndicatorFailures,
+  focusTokenExpressions,
   focusTokenNames,
-  unresolvedFocusToken,
 } from "./focus-indicator.js";
 import { attachLaneDiagnostics } from "./lane-diagnostics.js";
 import { tolerateRestarts } from "./scenario-navigation.js";
@@ -346,9 +346,8 @@ const keyboardFocus: Driver = async (input) => {
   for (let step = 0; step < 8; step += 1) {
     await input.page.keyboard.press("Tab");
     const sample = await input.page.evaluate(
-      ([tokenNames, unresolved, overlays]: [
+      ([tokenExpressions, overlays]: [
         readonly string[],
-        string,
         readonly string[],
       ]) => {
         const active = document.activeElement;
@@ -368,12 +367,14 @@ const keyboardFocus: Driver = async (input) => {
         // The theme's own focus colours, resolved where the focused control
         // sits rather than at the document root, so a nested theme or density
         // island is judged against its own values. A probe is the only way to
-        // read them in the same notation `getComputedStyle` reports a colour.
+        // read them in the notations `getComputedStyle` reports a ring in:
+        // each token as written, and mixed in oklab at full strength, the form
+        // a field's ring computes to (`focusTokenExpressions`).
         const probe = document.createElement("span");
         probe.style.display = "none";
         (active.parentElement ?? document.body).append(probe);
-        const tokenColors = tokenNames.map((name) => {
-          probe.style.color = `var(${name}, ${unresolved})`;
+        const tokenColors = tokenExpressions.map((expression) => {
+          probe.style.color = expression;
           return getComputedStyle(probe).color;
         });
         probe.remove();
@@ -388,10 +389,9 @@ const keyboardFocus: Driver = async (input) => {
         };
       },
       [
-        [...focusTokenNames],
-        unresolvedFocusToken,
+        focusTokenNames.flatMap((name) => [...focusTokenExpressions(name)]),
         [...developmentOverlaySelectors],
-      ] as [readonly string[], string, readonly string[]],
+      ] as [readonly string[], readonly string[]],
     );
     if (sample) reached.push(sample);
   }

@@ -1,7 +1,10 @@
+import { useToast } from "@cueplusplus/ui/overlays";
+import { Button } from "@cueplusplus/ui/primitives";
 import { ThemeProvider } from "@cueplusplus/ui/system";
 import type { AppearanceSnapshot } from "@requestport/domain/browser";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { AppShell } from "./app-shell.js";
@@ -29,17 +32,38 @@ vi.mock("@requestport/auth/client", () => ({
 const snapshot: AppearanceSnapshot = {
   effective: {
     density: "ultra-compact",
+    font: "match",
+    look: "match",
     mode: "system",
-    source: { density: "fallback", mode: "fallback", theme: "fallback" },
+    paint: "match",
+    source: {
+      density: "fallback",
+      font: "fallback",
+      look: "fallback",
+      mode: "fallback",
+      paint: "fallback",
+      theme: "fallback",
+    },
     theme: "requestport",
   },
   organization: {
     density: "ultra-compact",
+    font: "match",
+    look: "match",
     mode: "system",
+    paint: "match",
     theme: "requestport",
     version: 0,
   },
-  user: { density: null, mode: null, theme: null, version: 0 },
+  user: {
+    density: null,
+    font: null,
+    look: null,
+    mode: null,
+    paint: null,
+    theme: null,
+    version: 0,
+  },
 };
 
 const organization = {
@@ -49,7 +73,7 @@ const organization = {
   slug: "example-org",
 } as const;
 
-function shellElement() {
+function shellElement(page: ReactNode = <h1>Requests</h1>) {
   return (
     <ThemeProvider
       density={snapshot.effective.density}
@@ -69,7 +93,7 @@ function shellElement() {
         organizations={[organization]}
         user={{ email: "owner@example.com", image: null, name: "Owner" }}
       >
-        <h1>Requests</h1>
+        {page}
       </AppShell>
     </ThemeProvider>
   );
@@ -114,6 +138,14 @@ describe("responsive navigation drawer", () => {
     expect(
       within(drawer).getByRole("link", { name: "Questions" }),
     ).toHaveAttribute("href", "/questions");
+    // The drawer carries the same three sections as the column, Settings
+    // included.
+    for (const caption of ["Work", "Connect", "Organization"]) {
+      expect(within(drawer).getByText(caption)).toBeInTheDocument();
+    }
+    expect(
+      within(drawer).getByRole("link", { name: "Settings" }),
+    ).toHaveAttribute("href", "/settings/organization");
     await waitFor(() =>
       expect(drawer.contains(document.activeElement)).toBe(true),
     );
@@ -185,6 +217,27 @@ describe("responsive navigation drawer", () => {
 });
 
 describe("the bar's actions", () => {
+  test("holds the switcher, the search entry and the account menu in one banner, and no New request", () => {
+    renderShell();
+
+    const banner = screen.getByRole("banner");
+
+    expect(
+      within(banner).getByRole("link", { name: "RequestPort overview" }),
+    ).toHaveAttribute("href", "/");
+    expect(
+      within(banner).getByRole("combobox", { name: "Current organization" }),
+    ).toBeInTheDocument();
+    expect(
+      within(banner).getByRole("link", { name: /^Search or run a command/u }),
+    ).toHaveAttribute("href", "/search");
+    expect(
+      within(banner).getByRole("button", { name: "Open user menu for Owner" }),
+    ).toBeInTheDocument();
+    // Ruling 256: New request stays in the Requests page's header.
+    expect(screen.queryByRole("link", { name: "New request" })).toBeNull();
+  });
+
   test("names the search control with the label it shows", () => {
     // WCAG 2.5.3: the accessible name has to contain the visible label, because
     // that is the string a speech-input user will say. The control keeps its
@@ -274,5 +327,41 @@ describe("desktop navigation column", () => {
         screen.getByRole("button", { name: "Expand sidebar" }),
       ).toHaveAttribute("aria-expanded", "false"),
     );
+  });
+});
+
+/** A page that raises a toast, as a settings control does when a write lands. */
+function PageRaisingToast() {
+  const toast = useToast();
+  return (
+    <Button
+      onClick={() => toast.add({ title: "Invitation revoked.", tone: "ok" })}
+      type="button"
+    >
+      Revoke
+    </Button>
+  );
+}
+
+describe("the console's toasts (ruling 260)", () => {
+  test("keep a toast a page raised on screen after that page is replaced, as a redirect or a revalidation replaces it", async () => {
+    const user = userEvent.setup();
+    navigation.pathname = "/settings/members";
+    const { rerender } = render(shellElement(<PageRaisingToast />));
+
+    await user.click(screen.getByRole("button", { name: "Revoke" }));
+    // The page goes, as it does when the write redirects elsewhere or its row
+    // leaves on revalidation; the shell, and the toast it holds, stay.
+    navigation.pathname = "/settings/projects";
+    rerender(shellElement(<h1>Projects</h1>));
+
+    expect(screen.queryByRole("button", { name: "Revoke" })).toBeNull();
+    const viewports = screen.getAllByRole("region", { name: "Notifications" });
+    expect(viewports).toHaveLength(1);
+    expect(
+      await within(viewports[0] as HTMLElement).findByText(
+        "Invitation revoked.",
+      ),
+    ).toBeVisible();
   });
 });

@@ -13,14 +13,21 @@ const confirmed = {
   theme: "venu",
   density: "large",
   mode: "light",
+  font: "plex",
+  look: "match",
+  paint: "frost",
 } as const;
 
 /** Every byte a value could use to escape the host `<script>` element. */
 const hostileValue = "</script><svg onload=alert(1)>\u2028\u2029";
 
-/** The whole emitted mirror body, so nothing can be smuggled between assertions. */
+/**
+ * The whole emitted mirror body, so nothing can be smuggled between assertions:
+ * CUE++'s record shape, with venu's `match` look resolved to classic's
+ * `console` (venu has no Look of its own).
+ */
 const expectedMirrorScript =
-  'try{localStorage.setItem("cue-ui","{\\"theme\\":\\"venu\\",\\"density\\":\\"large\\",\\"mode\\":\\"light\\"}")}catch(e){}';
+  'try{localStorage.setItem("cue-ui","{\\"theme\\":\\"venu\\",\\"density\\":\\"large\\",\\"font\\":\\"plex\\",\\"mode\\":\\"light\\",\\"style\\":\\"console\\",\\"paint\\":\\"frost\\"}")}catch(e){}';
 
 describe("script-safe serialisation", () => {
   test("escapes every sequence that can break out of an inline script", () => {
@@ -40,7 +47,7 @@ describe("script-safe serialisation", () => {
 });
 
 describe("authoritative no-flash mirror script", () => {
-  test("writes exactly the complete validated triple under the published key", () => {
+  test("writes exactly the six validated axes, in CUE++'s record shape, under the published key", () => {
     expect(appearanceStorageKey).toBe(DEFAULT_STORAGE_KEY);
     expect(appearanceMirrorScript(confirmed)).toBe(expectedMirrorScript);
   });
@@ -49,11 +56,30 @@ describe("authoritative no-flash mirror script", () => {
     expect(appearanceMirrorScript(confirmed)).toMatch(/^try\{.+\}catch\(/su);
   });
 
-  test("degrades an unknown axis to the fixed RequestPort fallback", () => {
+  test("writes what a match resolves to through the theme's Look, never the word match", () => {
+    const script = appearanceMirrorScript({
+      theme: "graphite",
+      density: "normal",
+      mode: "system",
+      font: "match",
+      look: "match",
+      paint: "match",
+    });
+
+    expect(script).toContain('\\"font\\":\\"geist-mono\\"');
+    expect(script).toContain('\\"style\\":\\"graphite\\"');
+    expect(script).toContain('\\"paint\\":\\"bevel\\"');
+    expect(script).not.toContain("match");
+  });
+
+  test("degrades an unknown axis to the fixed fallback", () => {
     const script = appearanceMirrorScript({
       theme: "midnight",
       density: "gigantic",
       mode: "sepia",
+      font: "comic",
+      look: "brutal",
+      paint: "chrome",
     } as unknown as typeof confirmed);
 
     expect(script).toBe(
@@ -62,6 +88,7 @@ describe("authoritative no-flash mirror script", () => {
     expect(script).not.toContain("midnight");
     expect(script).not.toContain("gigantic");
     expect(script).not.toContain("sepia");
+    expect(script).not.toContain("comic");
   });
 
   test("cannot close the host script element from a hostile axis", () => {
@@ -69,6 +96,9 @@ describe("authoritative no-flash mirror script", () => {
       theme: hostileValue,
       density: hostileValue,
       mode: hostileValue,
+      font: hostileValue,
+      look: hostileValue,
+      paint: hostileValue,
     } as unknown as typeof confirmed);
 
     expect(script).not.toContain("<");
@@ -92,12 +122,15 @@ describe("authoritative no-flash mirror script", () => {
 });
 
 describe("authoritative pre-paint script", () => {
-  test("stamps the server triple and never reads stored preferences", () => {
+  test("stamps the server's six axes and never reads stored preferences", () => {
     const script = appearancePrepaintScript(confirmed);
 
     expect(script).toContain('"venu"');
     expect(script).toContain('"large"');
     expect(script).toContain('"light"');
+    expect(script).toContain('"plex"');
+    expect(script).toContain('"console"');
+    expect(script).toContain('"frost"');
     expect(script).not.toContain("localStorage");
     // The published body legitimately contains `>` in `indexOf(…)>-1`; what it
     // must never contain is a `<`, which is the only way to close the host
@@ -110,6 +143,9 @@ describe("authoritative pre-paint script", () => {
       theme: "midnight",
       density: "gigantic",
       mode: "sepia",
+      font: "comic",
+      look: "brutal",
+      paint: "chrome",
     } as unknown as typeof confirmed);
 
     expect(script).toBe(

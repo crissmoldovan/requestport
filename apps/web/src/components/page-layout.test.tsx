@@ -92,6 +92,23 @@ describe("page layout boundaries", () => {
     expect(markup).not.toContain("page-width");
   });
 
+  test("lets the eyebrow break a long unbroken token anywhere", () => {
+    const markup = renderToStaticMarkup(
+      <Page
+        description="1 active member"
+        eyebrow={`density-workspace-${"x".repeat(45)}`}
+        title="Overview"
+      />,
+    );
+
+    // `Eyebrow` is inline-flex, so its text is a flex item sized no smaller
+    // than its min-content width. `break-word` leaves that width at the whole
+    // token; `anywhere` is the value that lowers it.
+    expect(markup).toMatch(
+      /data-slot="eyebrow"[^>]*class="[^"]*\bwrap-anywhere\b/u,
+    );
+  });
+
   test("passes an action through the shell's own action slot", () => {
     const markup = renderToStaticMarkup(
       <Page

@@ -85,6 +85,16 @@ async function expectBoundary(
   await expect(
     onScreen(page.getByText(boundaryLine(entry, kind), { exact: true })),
   ).toBeVisible();
+  // The settings boundaries exist so that a failing or missing settings page
+  // keeps the section navigation (ruling 260): they sit below
+  // settings/layout.tsx. The sentence alone would also pass a boundary drawn
+  // above the layout, so the navigation is asserted beside it. Loading is left
+  // out: it is still (app)'s boundary, which renders above the layout.
+  if (entry.segment === "app-settings" && kind !== "loading") {
+    await expect(
+      onScreen(page.getByRole("navigation", { name: "Settings" })),
+    ).toBeVisible();
+  }
 }
 
 async function landAndAssert(input: DriveInput): Promise<void> {
@@ -177,16 +187,6 @@ async function fillControl(control: Locator): Promise<void> {
 }
 
 /**
- * Fill and return the primary form of the surface, or `null` when it has none.
- *
- * "Primary" is the first form in the work area that carries a submit control —
- * which is the same one a person would reach first, and the only definition a
- * driver that must work on every catalogued surface can hold. A case whose
- * surface draws several passes the accessible name of the one it means, and
- * then only that
- * form is filled and returned.
- */
-/**
  * Every overlay a choice may have left open, closed before anything is clicked.
  *
  * `answerChoice` already dismisses a choice it could not answer, and asks the
@@ -203,7 +203,12 @@ async function fillControl(control: Locator): Promise<void> {
  * here would report the overlay rather than the surface.
  */
 async function dismissOpenOverlays(page: Page): Promise<void> {
-  const open = page.locator("[data-slot$='-popup'][data-open]");
+  // Never the dialog a form was opened in (`formOpener`): it is the form's
+  // own container, and pressing Escape at it would close the form the case is
+  // about to submit.
+  const open = page.locator(
+    "[data-slot$='-popup'][data-open]:not([data-slot='dialog-popup'])",
+  );
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     if ((await open.count()) === 0) return;
@@ -224,11 +229,66 @@ async function dismissOpenOverlays(page: Page): Promise<void> {
   }
 }
 
+/**
+ * Where a surface's forms are: the work area, or the dialog its opener opens.
+ *
+ * A settings page opens a form that used to sit under its list in a dialog
+ * from the page's or the panel's action (ruling 259). The dialog is portalled
+ * out of `<main>` and only exists once it is open, so for a surface that names
+ * its opener the button is pressed first and the dialog is where the form is
+ * looked for.
+ *
+ * The dialog is the one the opener names in `aria-controls`, which Base UI's
+ * `Dialog.Trigger` sets while its dialog is open, not the first `dialog` on
+ * the page: a settings page's confirmation toast is a Base UI `Toast.Root`,
+ * whose role is `dialog` too, and it stays up for five seconds after a write.
+ */
+async function formScope(page: Page, opener?: string): Promise<Locator> {
+  if (opener === undefined) return page.locator("main");
+
+  // Pressed until the dialog is open. Between the server's markup arriving and
+  // React attaching to it the trigger is a button that swallows a click, and
+  // nothing rendered on the server says when hydration has finished, so the
+  // press is retried, as the account menu's own fixture retries its trigger.
+  // Only a trigger that is not already expanded is pressed: the dialog is not
+  // modal, so its trigger stays pressable, and a second press closes it.
+  const trigger = page
+    .locator("main")
+    .getByRole("button", { exact: true, name: opener });
+  const controlled = async () => {
+    const controls = await trigger.getAttribute("aria-controls", {
+      timeout: 2_000,
+    });
+    expect(controls, `${opener} names the dialog it opened`).toBeTruthy();
+    return page.locator(`[id="${controls}"]`);
+  };
+  await expect(async () => {
+    if ((await trigger.getAttribute("aria-expanded")) !== "true") {
+      await trigger.click();
+    }
+    await expect(await controlled()).toBeVisible({ timeout: 2_000 });
+  }).toPass({ intervals: [250, 500, 1_000], timeout: 30_000 });
+
+  return controlled();
+}
+
+/**
+ * Fill and return the primary form of the surface, or `null` when it has none.
+ *
+ * "Primary" is the first form in the work area that carries a submit control —
+ * which is the same one a person would reach first, and the only definition a
+ * driver that must work on every catalogued surface can hold. A case whose
+ * surface draws several passes the accessible name of the one it means, and
+ * then only that form is filled and returned. A surface whose form opens in a
+ * dialog names the button that opens it (`formOpener`), and the form is looked
+ * for in that dialog instead.
+ */
 async function prepareSubmission(
   page: Page,
   submitName?: string,
+  opener?: string,
 ): Promise<Locator | null> {
-  const forms = page.locator("main form");
+  const forms = (await formScope(page, opener)).locator("form");
   const count = await forms.count();
 
   for (let index = 0; index < count; index += 1) {
@@ -310,10 +370,16 @@ async function prepareSubmission(
   return null;
 }
 
-/** The accessible name of every control the work area currently refuses. */
+/**
+ * The accessible name of every control the work area, or a dialog opened from
+ * it, currently refuses. The dialog counts because a form opened in one draws
+ * its pending state there (`formOpener`).
+ */
 async function disabledControls(page: Page): Promise<string[]> {
   const names = await page
-    .locator("main button, main input, main [data-slot='select-trigger']")
+    .locator(
+      "main button, main input, main [data-slot='select-trigger'], [role='dialog'] button, [role='dialog'] input, [role='dialog'] [data-slot='select-trigger']",
+    )
     .evaluateAll((elements) =>
       elements
         .filter(
@@ -489,6 +555,44 @@ const globalErrorBoundary: Driver = async (input) => {
 };
 
 /**
+ * The controls an entry's `ownerOnlyControlOpener` reveals, read from the
+ * dialog it opens; none when the entry names no opener or the reading does
+ * not offer it. The dialog is a portal outside `<main>`, which is why
+ * `controlNames` cannot see it, and it is closed again before returning so
+ * the reading that follows starts from the page as it was.
+ */
+async function namesBehindOpener(
+  page: Page,
+  entry: { ownerOnlyControlOpener?: string },
+): Promise<string[]> {
+  const opener = entry.ownerOnlyControlOpener;
+  if (opener === undefined) return [];
+  const control = page
+    .locator("main")
+    .getByRole("button", { exact: true, name: opener });
+  if ((await control.count()) === 0) return [];
+  const dialog = page.getByRole("dialog");
+  // The press is retried, and the retry is the wait: between the server's
+  // markup and hydration the trigger swallows a click without saying so.
+  await expect(async () => {
+    await control.click();
+    await expect(dialog).toBeVisible({ timeout: 2_000 });
+  }).toPass({ intervals: [250, 500, 1_000], timeout: 30_000 });
+  const names = await dialog
+    .locator("a, button")
+    .evaluateAll((elements) =>
+      elements.map((element) =>
+        (element.getAttribute("aria-label") ?? element.textContent ?? "")
+          .replace(/\s+/gu, " ")
+          .trim(),
+      ),
+    );
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  return [...new Set(names.filter((name) => name !== ""))].sort();
+}
+
+/**
  * A reduced role removes affordances and adds none.
  *
  * The claim is made against the same surface rendered for the same account
@@ -510,6 +614,7 @@ const memberDenied: Driver = async (input) => {
   // ran against it, with `{"member": [], "owner": []}`.
   await expectLandmark(input.page, input.entry, input.seeded);
   const asOwner = await controlNames(input.page);
+  const ownerBehindOpener = await namesBehindOpener(input.page, input.entry);
   const notice = input.entry.ownerOnlyNotice;
   const ownerSawNotice =
     notice === undefined
@@ -570,6 +675,7 @@ const memberDenied: Driver = async (input) => {
     }
 
     const asMember = await controlNames(input.page);
+    const memberBehindOpener = await namesBehindOpener(input.page, input.entry);
     const ownerOnly = input.entry.ownerOnlyControl;
 
     // A fourth shape, for a surface that offers both roles the same controls
@@ -578,8 +684,8 @@ const memberDenied: Driver = async (input) => {
     // neither, fails here.
     if (ownerOnly !== undefined) {
       expect({
-        member: asMember.includes(ownerOnly),
-        owner: asOwner.includes(ownerOnly),
+        member: [...asMember, ...memberBehindOpener].includes(ownerOnly),
+        owner: [...asOwner, ...ownerBehindOpener].includes(ownerOnly),
       }).toEqual({ member: false, owner: true });
       await input.settle();
 
@@ -654,6 +760,7 @@ const conflictingWrite: Driver = async (input) => {
   const submit = await prepareSubmission(
     input.page,
     input.entry.conflictSubmit,
+    input.entry.formOpener,
   );
   expect(submit).not.toBeNull();
   await dismissOpenOverlays(input.page);
@@ -720,7 +827,11 @@ const seededProjectData: Driver = async (input) => {
     await input.page.goto(input.url);
     await expectLandmark(input.page, input.entry, input.seeded);
 
-    const submit = await prepareSubmission(input.page);
+    const submit = await prepareSubmission(
+      input.page,
+      undefined,
+      input.entry.formOpener,
+    );
     expect(submit).not.toBeNull();
     const before = await disabledControls(input.page);
     // Held, and then aborted rather than let through: a write that reached the
@@ -739,7 +850,7 @@ const seededProjectData: Driver = async (input) => {
 
       // Every migrated form names its own pending state and disables the
       // control that started it. Some surfaces rename theirs ("Creating…",
-      // "Inviting…") and some only disable it, so the claim is the one both
+      // "Sending…") and some only disable it, so the claim is the one both
       // make: the set of disabled controls grew, and grew only.
       await expect
         .poll(async () => (await disabledControls(input.page)).length, {

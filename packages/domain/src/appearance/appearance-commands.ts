@@ -25,9 +25,14 @@ import {
 } from "./appearance-service.js";
 import {
   type AppearanceAxis,
+  type AppearanceDefaults,
+  type AppearanceOverrides,
   appearanceAxes,
   appearanceDensitySchema,
+  appearanceFontSchema,
+  appearanceLookSchema,
   appearanceModeSchema,
+  appearancePaintSchema,
   appearanceThemeSchema,
 } from "./appearance-types.js";
 
@@ -53,11 +58,19 @@ const organizationReason = "Organization appearance defaults were updated";
  * organization command's tenant discriminator is injected server-side from the
  * authenticated context by `withOrganizationAppearanceInput` and validated
  * against that context again in `authorize`.
+ *
+ * `font`, `look` and `paint` (ruling 255) are optional in both: a writer that
+ * predates them — 0.2.2's `@requestport/core`, an `/api/v1` operator client —
+ * sends theme, density and mode alone, and an axis it leaves out keeps the
+ * value already stored rather than being reset.
  */
 const personalInputSchema = z.strictObject({
   theme: appearanceThemeSchema.nullable(),
   density: appearanceDensitySchema.nullable(),
   mode: appearanceModeSchema.nullable(),
+  font: appearanceFontSchema.nullable().optional(),
+  look: appearanceLookSchema.nullable().optional(),
+  paint: appearancePaintSchema.nullable().optional(),
 });
 
 const organizationInputSchema = z.strictObject({
@@ -65,6 +78,9 @@ const organizationInputSchema = z.strictObject({
   theme: appearanceThemeSchema,
   density: appearanceDensitySchema,
   mode: appearanceModeSchema,
+  font: appearanceFontSchema.optional(),
+  look: appearanceLookSchema.optional(),
+  paint: appearancePaintSchema.optional(),
 });
 
 /**
@@ -87,14 +103,21 @@ export type OrganizationAppearanceInput = z.infer<
 >;
 
 /**
- * Builds the organization command input from a validated triple plus the
+ * Builds the organization command input from validated axes plus the
  * authenticated tenant. Callers never read the tenant from form data.
  */
 export function withOrganizationAppearanceInput(
   organizationId: string,
-  triple: { theme: string; density: string; mode: string },
+  axes: {
+    theme: string;
+    density: string;
+    mode: string;
+    font?: string;
+    look?: string;
+    paint?: string;
+  },
 ) {
-  return { organizationId, ...triple };
+  return { organizationId, ...axes };
 }
 
 function changedAxes(
@@ -106,20 +129,29 @@ function changedAxes(
     .sort() as AppearanceAxis[];
 }
 
-function personalResult(row: {
-  aggregateId: string | null;
-  version: number;
-  theme: string | null;
-  density: string | null;
-  mode: string | null;
-  changedFields: readonly string[];
-}): JsonObject {
+/** The six stored axes of a row, in the vocabulary's order. */
+function axesOf<T extends AppearanceOverrides | AppearanceDefaults>(row: T) {
   return {
-    aggregateId: row.aggregateId,
-    version: row.version,
     theme: row.theme,
     density: row.density,
     mode: row.mode,
+    font: row.font,
+    look: row.look,
+    paint: row.paint,
+  } as Pick<T, AppearanceAxis>;
+}
+
+function personalResult(
+  row: {
+    aggregateId: string | null;
+    version: number;
+    changedFields: readonly string[];
+  } & AppearanceOverrides,
+): JsonObject {
+  return {
+    aggregateId: row.aggregateId,
+    version: row.version,
+    ...axesOf(row),
     changedFields: [...row.changedFields],
   };
 }
@@ -188,12 +220,24 @@ export function createPersonalAppearanceCommandDefinitions(): Array<
           "Appearance preferences changed in another session",
         );
       }
-      const current = {
+      const current: AppearanceOverrides = {
         theme: existing?.theme ?? null,
         density: existing?.density ?? null,
         mode: existing?.mode ?? null,
+        font: existing?.font ?? null,
+        look: existing?.look ?? null,
+        paint: existing?.paint ?? null,
       };
-      const changed = changedAxes(current, input);
+      // An axis the writer left out keeps what is stored (see the schema).
+      const next: AppearanceOverrides = {
+        theme: input.theme,
+        density: input.density,
+        mode: input.mode,
+        font: input.font === undefined ? current.font : input.font,
+        look: input.look === undefined ? current.look : input.look,
+        paint: input.paint === undefined ? current.paint : input.paint,
+      };
+      const changed = changedAxes(current, next);
       if (changed.length === 0) {
         // An identical same-value write keeps its receipt but must not move the
         // version or produce an audit record.
@@ -213,11 +257,11 @@ export function createPersonalAppearanceCommandDefinitions(): Array<
         ? await port.updateUserPreferences({
             userId: context.actor.id,
             expectedVersion: currentVersion,
-            ...input,
+            ...next,
           })
         : await port.createUserPreferences({
             userId: context.actor.id,
-            ...input,
+            ...next,
           });
       if (!saved) {
         throw new DomainError(
@@ -243,9 +287,7 @@ export function createPersonalAppearanceCommandDefinitions(): Array<
         result: personalResult({
           aggregateId: saved.aggregateId,
           version: saved.version,
-          theme: saved.theme,
-          density: saved.density,
-          mode: saved.mode,
+          ...axesOf(saved),
           changedFields: changed,
         }),
         aggregateId: saved.aggregateId,
@@ -276,13 +318,15 @@ function organizationAppearanceMember(context: AuthorizedCommandContext) {
 
 /**
  * `appearance.update_organization_defaults.v1`. Stays on the tenant core
- * registry. The members page's appearance form dispatches it, and so does
- * `/api/v1`, for an operator credential only (its registry entry names
- * `credentialKinds: ["operator"]` and no MCP tool). It admits a person and an
- * operator credential and no other actor, requires `members:manage` (F.2.7's
- * scope, which the web's `humanScopes` gives every person), refuses a context
- * bound to a project, and then requires that the member it acts for is an
- * active owner of an active organization. It binds its receipt input to the
+ * registry. Settings › Appearance and the account menu's promotion dispatch
+ * it, and so does `/api/v1`, for an operator credential only (its registry
+ * entry names `credentialKinds: ["operator"]` and no MCP tool). It admits a
+ * person and an operator credential and no other actor, requires
+ * `members:manage` (F.2.7's scope, which the web's `humanScopes` gives every
+ * person), refuses a context bound to a project, and then requires that the
+ * member it acts for is an active owner or admin of an active organization
+ * (ruling 255: "If I am the org administrator, that will apply to that
+ * organisation"); a member is refused. It binds its receipt input to the
  * server-injected tenant so one actor/key pair cannot replay another
  * organization's update. Its audit row records who acted — a person as
  * `user`, an operator as the `service` actor `operator:<lineage>` — and the
@@ -319,11 +363,12 @@ export function createAppearanceCommandDefinitions(dependencies: {
         authorization.organization.status !== "active" ||
         !authorization.membership ||
         authorization.membership.status !== "active" ||
-        authorization.membership.role !== "owner"
+        (authorization.membership.role !== "owner" &&
+          authorization.membership.role !== "admin")
       ) {
         throw new DomainError(
           "forbidden",
-          "Organization appearance ownership is required",
+          "An owner or admin is required to change the organization's appearance",
         );
       }
     },
@@ -334,9 +379,9 @@ export function createAppearanceCommandDefinitions(dependencies: {
         input.organizationId,
       );
       if (!existing) {
-        // Version-1 initialization belongs to migration 0014's backfill and its
-        // membership trigger. A command must never invent a second aggregate
-        // identity for the same tenant.
+        // Version-1 initialization belongs to migration 0014's backfill and the
+        // membership trigger it installed (whose body 0026 replaced). A command
+        // must never invent a second aggregate identity for the same tenant.
         throw new DomainError(
           "conflict",
           "Organization appearance defaults are not initialized",
@@ -348,15 +393,15 @@ export function createAppearanceCommandDefinitions(dependencies: {
           "Appearance preferences changed in another session",
         );
       }
-      const before = {
-        theme: existing.theme,
-        density: existing.density,
-        mode: existing.mode,
-      };
-      const after = {
+      const before: AppearanceDefaults = axesOf(existing);
+      // An axis the writer left out keeps what is stored (see the schema).
+      const after: AppearanceDefaults = {
         theme: input.theme,
         density: input.density,
         mode: input.mode,
+        font: input.font ?? existing.font,
+        look: input.look ?? existing.look,
+        paint: input.paint ?? existing.paint,
       };
       const changed = changedAxes(before, after);
       if (changed.length === 0) {

@@ -166,5 +166,5 @@ export const readDescriptions: Readonly<Record<string, string>> = {
   "/administration/invitations":
     "Operator credentials only: each pending invitation's id, role and version, with no address.",
   "/administration/appearance":
-    "Operator credentials only: the organisation's appearance defaults and their version, for an owner's credential.",
+    "Operator credentials only: the organisation's appearance defaults and their version, for an owner's or an admin's credential.",
 };

@@ -97,6 +97,13 @@ export const agentOauthGrants = pgTable(
     version: integer("version").default(1).notNull(),
     expiresAt: utcTimestamp("expires_at").notNull(),
     revokedAt: utcTimestamp("revoked_at"),
+    /**
+     * When an agent last authenticated with a token this grant authorizes
+     * (migration 0027, ruling 261), by the database's clock. The bearer path
+     * stamps it through `touchOAuthGrant`, at most once every
+     * `agentLastUseStampSeconds`; null until the first use after 0027.
+     */
+    lastUsedAt: utcTimestamp("last_used_at"),
     createdAt: utcTimestamp("created_at").defaultNow().notNull(),
     updatedAt: utcTimestamp("updated_at").defaultNow().notNull(),
   },

@@ -401,6 +401,9 @@ async function defaults(tx: Tx, organizationId: string) {
       theme: organizationAppearanceDefaults.theme,
       density: organizationAppearanceDefaults.density,
       mode: organizationAppearanceDefaults.mode,
+      font: organizationAppearanceDefaults.font,
+      look: organizationAppearanceDefaults.look,
+      paint: organizationAppearanceDefaults.paint,
     })
     .from(organizationAppearanceDefaults)
     .where(eq(organizationAppearanceDefaults.organizationId, organizationId));
@@ -409,7 +412,7 @@ async function defaults(tx: Tx, organizationId: string) {
 }
 
 describe("get_administration_organization_appearance", () => {
-  test("answers an owner with the version, theme, density and mode, and nothing else", async () => {
+  test("answers an owner with the version and the six axes, and nothing else (ruling 255)", async () => {
     await inRollbackTransaction(async (tx) => {
       const tenant = await seedTenant(tx);
       const answer = await getAdministrationOrganizationAppearance(
@@ -420,23 +423,52 @@ describe("get_administration_organization_appearance", () => {
       expect(answer).toEqual(await defaults(tx, tenant.organizationId));
       expect(Object.keys(answer).sort()).toEqual([
         "density",
+        "font",
+        "look",
         "mode",
+        "paint",
         "theme",
         "version",
       ]);
     });
   });
 
-  test("refuses an admin who is not an owner, a member, a revoked owner, and anyone in a suspended organisation", async () => {
+  // Ruling 255, item 7: an admin changes the organization's defaults as an
+  // owner does, so the read that serves the write answers an admin too.
+  test("answers an admin exactly as it answers an owner (ruling 255)", async () => {
     await inRollbackTransaction(async (tx) => {
       const tenant = await seedTenant(tx);
-      const revoked = await seedMember(
+      const answer = await getAdministrationOrganizationAppearance(
+        tx,
+        read(tenant.organizationId, tenant.admin),
+      );
+
+      expect(answer).toEqual(await defaults(tx, tenant.organizationId));
+      expect(answer).toEqual(
+        await getAdministrationOrganizationAppearance(
+          tx,
+          read(tenant.organizationId, tenant.owner),
+        ),
+      );
+    });
+  });
+
+  test("refuses a member, a revoked owner, a revoked admin, and anyone in a suspended organisation", async () => {
+    await inRollbackTransaction(async (tx) => {
+      const tenant = await seedTenant(tx);
+      const revokedOwner = await seedMember(
         tx,
         tenant.organizationId,
         "owner",
         "revoked",
       );
-      for (const memberUserId of [tenant.admin, tenant.member, revoked]) {
+      const revokedAdmin = await seedMember(
+        tx,
+        tenant.organizationId,
+        "admin",
+        "revoked",
+      );
+      for (const memberUserId of [tenant.member, revokedOwner, revokedAdmin]) {
         const error = await refusal(
           getAdministrationOrganizationAppearance(
             tx,
@@ -446,21 +478,24 @@ describe("get_administration_organization_appearance", () => {
         expect(error).toBeInstanceOf(DomainError);
         expect(error).toMatchObject({
           code: "forbidden",
-          message: "Organization appearance ownership is required",
+          message:
+            "An owner or admin is required to change the organization's appearance",
         });
       }
       await tx.execute(sql`
         update "organizations" set "status" = 'suspended'
         where "id" = ${tenant.organizationId}
       `);
-      expect(
-        await refusal(
-          getAdministrationOrganizationAppearance(
-            tx,
-            read(tenant.organizationId, tenant.owner),
+      for (const memberUserId of [tenant.owner, tenant.admin]) {
+        expect(
+          await refusal(
+            getAdministrationOrganizationAppearance(
+              tx,
+              read(tenant.organizationId, memberUserId),
+            ),
           ),
-        ),
-      ).toMatchObject({ code: "forbidden" });
+        ).toMatchObject({ code: "forbidden" });
+      }
     });
   });
 
@@ -884,7 +919,7 @@ describe.sequential("the two reads as REST dispatches them, and the appearance w
     });
   });
 
-  test("an admin's operator reads the invitations, and is refused the appearance, as its member is", async () => {
+  test("an admin's operator reads the invitations and the appearance, exactly what its member would (ruling 255)", async () => {
     await inRollbackTransaction(async (tx) => {
       const tenant = await seedTenant(tx);
       const { context } = await issueOperator(tx, {
@@ -892,10 +927,12 @@ describe.sequential("the two reads as REST dispatches them, and the appearance w
         userId: tenant.admin,
       });
       expect(await asOperator.invitations(tx, context)).toHaveLength(2);
-      expect(await refusal(asOperator.appearance(tx, context))).toMatchObject({
-        code: "forbidden",
-        message: "Organization appearance ownership is required",
-      });
+      expect(await asOperator.appearance(tx, context)).toEqual(
+        await getAdministrationOrganizationAppearance(
+          tx,
+          read(tenant.organizationId, tenant.admin),
+        ),
+      );
     });
   });
 
@@ -1103,10 +1140,10 @@ describe.sequential("the two reads as REST dispatches them, and the appearance w
     });
   });
 
-  test("an admin's operator is refused the appearance write, and a person's write still records the person", async () => {
+  test("an admin's operator writes the appearance as its member may (ruling 255); a member's own write is refused, and an admin's own write records the person", async () => {
     await inRollbackTransaction(async (tx) => {
       const tenant = await seedTenant(tx);
-      const { context } = await issueOperator(tx, {
+      const { credential, context } = await issueOperator(tx, {
         organizationId: tenant.organizationId,
         userId: tenant.admin,
       });
@@ -1117,47 +1154,84 @@ describe.sequential("the two reads as REST dispatches them, and the appearance w
         density: before.density,
         mode: before.mode,
       };
+      await expect(
+        appearanceBus(tx).execute({
+          name: "appearance.update_organization_defaults.v1",
+          context,
+          input,
+          meta: {
+            idempotencyKey: `member-reads-${crypto.randomUUID()}`,
+            expectedVersion: before.version,
+          },
+        }),
+      ).resolves.toMatchObject({ version: before.version + 1 });
+      const [row] = await tx
+        .select({
+          lastUpdatedByUserId:
+            organizationAppearanceDefaults.lastUpdatedByUserId,
+        })
+        .from(organizationAppearanceDefaults)
+        .where(
+          eq(
+            organizationAppearanceDefaults.organizationId,
+            tenant.organizationId,
+          ),
+        );
+      expect(row?.lastUpdatedByUserId).toBe(tenant.admin);
+
+      // The human path. Every person holds members:manage, so the role rule
+      // is what refuses a member.
+      const personContext = async (userId: string) => {
+        const sessionId = `session_${crypto.randomUUID()}`;
+        await tx.execute(sql`
+          insert into "session" ("id", "expires_at", "token", "updated_at", "user_id")
+          values (${sessionId}, now() + interval '1 hour',
+            ${`token_${crypto.randomUUID()}`}, now(), ${userId})
+        `);
+        return {
+          actor: { type: "user" as const, id: userId },
+          organizationId: tenant.organizationId,
+          scopes: new Set(["members:manage"]),
+          credentialId: sessionId,
+          correlationId: crypto.randomUUID(),
+        };
+      };
+      const afterOperator = await defaults(tx, tenant.organizationId);
+      const personInput = {
+        ...input,
+        theme: afterOperator.theme === "venu" ? "dusk" : "venu",
+      };
       expect(
         await refusal(
           appearanceBus(tx).execute({
             name: "appearance.update_organization_defaults.v1",
-            context,
-            input,
+            context: await personContext(tenant.member),
+            input: personInput,
             meta: {
               idempotencyKey: `member-reads-${crypto.randomUUID()}`,
-              expectedVersion: before.version,
+              expectedVersion: afterOperator.version,
             },
           }),
         ),
       ).toMatchObject({
         code: "forbidden",
-        message: "Organization appearance ownership is required",
+        message:
+          "An owner or admin is required to change the organization's appearance",
       });
-      expect(await defaults(tx, tenant.organizationId)).toEqual(before);
+      expect(await defaults(tx, tenant.organizationId)).toEqual(afterOperator);
 
-      // The human path: the owner's own write is recorded as `user` and the
-      // owner's id, as before the registry half.
-      const sessionId = `session_${crypto.randomUUID()}`;
-      await tx.execute(sql`
-        insert into "session" ("id", "expires_at", "token", "updated_at", "user_id")
-        values (${sessionId}, now() + interval '1 hour',
-          ${`token_${crypto.randomUUID()}`}, now(), ${tenant.owner})
-      `);
-      await appearanceBus(tx).execute({
-        name: "appearance.update_organization_defaults.v1",
-        context: {
-          actor: { type: "user", id: tenant.owner },
-          organizationId: tenant.organizationId,
-          scopes: new Set(["members:manage"]),
-          credentialId: sessionId,
-          correlationId: crypto.randomUUID(),
-        },
-        input,
-        meta: {
-          idempotencyKey: `member-reads-${crypto.randomUUID()}`,
-          expectedVersion: before.version,
-        },
-      });
+      // The admin's own write is recorded as `user` and the admin's id.
+      await expect(
+        appearanceBus(tx).execute({
+          name: "appearance.update_organization_defaults.v1",
+          context: await personContext(tenant.admin),
+          input: personInput,
+          meta: {
+            idempotencyKey: `member-reads-${crypto.randomUUID()}`,
+            expectedVersion: afterOperator.version,
+          },
+        }),
+      ).resolves.toMatchObject({ version: afterOperator.version + 1 });
       const audits = await tx
         .select({
           actorType: securityAuditRecords.actorType,
@@ -1173,7 +1247,14 @@ describe.sequential("the two reads as REST dispatches them, and the appearance w
             ),
           ),
         );
-      expect(audits).toEqual([{ actorType: "user", actorId: tenant.owner }]);
+      expect(
+        audits.toSorted((left, right) =>
+          left.actorType.localeCompare(right.actorType),
+        ),
+      ).toEqual([
+        { actorType: "service", actorId: `operator:${credential.lineageId}` },
+        { actorType: "user", actorId: tenant.admin },
+      ]);
     });
   });
 

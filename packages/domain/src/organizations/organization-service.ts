@@ -33,7 +33,11 @@ export const BOOTSTRAP_OWNER_ACTOR = {
   system: "bootstrap-owner-cli" as const,
 };
 
-const DEFAULT_INVITATION_EXPIRY_SECONDS = 7 * 24 * 60 * 60;
+/**
+ * The lifetime an invitation gets when its input names none, as the members
+ * page's invitation does: seven days. A resend re-issues for the same.
+ */
+export const defaultInvitationExpirySeconds = 7 * 24 * 60 * 60;
 const MIN_INVITATION_EXPIRY_SECONDS = 60;
 const MAX_INVITATION_EXPIRY_SECONDS = 30 * 24 * 60 * 60;
 
@@ -112,7 +116,7 @@ export function parseOrganizationInvitationInput(
     throw validationError("role", "Invitation role is invalid");
   }
   const expiresInSeconds =
-    values.expiresInSeconds ?? DEFAULT_INVITATION_EXPIRY_SECONDS;
+    values.expiresInSeconds ?? defaultInvitationExpirySeconds;
   if (
     typeof expiresInSeconds !== "number" ||
     !Number.isInteger(expiresInSeconds) ||
@@ -342,10 +346,13 @@ export async function createOrganizationInvitation(
  * The payload of `organization.invitation_created.v1`: no address, no token.
  * A renewal is evented as this type too, because the invitation email and
  * every worker already deployed send for it and dead-letter a type they do not
- * know; `renewedFrom`, present only on a renewal, is what marks one.
+ * know; `renewedFrom`, present only on a renewal, is what marks one. A resend
+ * of a pending invitation (ruling 260) is evented as this type with no
+ * `renewedFrom`: a value the deployed workers' schema does not list would be
+ * dead-lettered as an invalid payload, so its audit row is what marks it.
  */
 export function invitationCreatedEventData(
-  invitation: InvitationRecord,
+  invitation: Pick<InvitationRecord, "id" | "role" | "expiresAt">,
   renewedFrom?: InvitationRenewedFrom,
 ) {
   return {

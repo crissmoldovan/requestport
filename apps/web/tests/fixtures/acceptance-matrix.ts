@@ -17,7 +17,7 @@ export type AcceptanceViewport = Readonly<{ height: number; width: number }>;
 
 export type AcceptanceCase = Readonly<{
   cleanupOwner: "browser-context" | "scenario-run";
-  density: "large" | "normal" | "ultra-compact";
+  density: "compact" | "large" | "normal" | "ultra-compact";
   engine: "chromium" | "webkit";
   fixtureOwner: string;
   id: string;

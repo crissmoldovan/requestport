@@ -20,7 +20,13 @@
  * They were recorded from the routes at 29a3aac6 (main, the merge of G.7a,
  * #198), behind the proxy at the same commit. Recording again is a
  * deliberate change to what neutrality is measured against, and belongs in a
- * commit of its own that says why.
+ * commit of its own that says why. Two cases have been added since, each
+ * the registry's new REST command, recorded on its branch: `POST
+ * commands/resend_organization_invitation as an operator` (ruling 263), whose
+ * recording changed no case already held, and `POST commands/assign_request
+ * as an agent` (ruling 264), whose recording changed one: `tools/list with
+ * every working agent scope` in the MCP family lists the new `assign_request`
+ * tool, every other tool as it was.
  *
  * Turbo does not hash `apps/web` into this package's test task, so a cached
  * pass can outlive a change to a route: run this suite with `--force`, or
@@ -391,10 +397,10 @@ if (!recording) {
         expect.arrayContaining(Object.keys(notReplayedByTheHost)),
       );
       // Health's 4 of 6, and every one of the auth family's 20, discovery's
-      // 4, REST's 120, the artifact import's 15 and MCP's 12.
+      // 4, REST's 122, the artifact import's 15 and MCP's 12.
       expect(
         cases.filter((name) => !(name in notReplayedByTheHost)),
-      ).toHaveLength(175);
+      ).toHaveLength(177);
     });
 
     for (const [family, cases] of families) {
@@ -587,7 +593,14 @@ for (const [family, cases] of families) {
   a route's headers with the middleware's was never measured, so the routes
   are also replayed bare against the goldens as first recorded, at 366ad0a7
   (the ten routes at 29a3aac6, before ruling 147), under the same
-  normalisation.
+  normalisation. The two cases added since are derived, and the replay below
+  compares each with what the route answers bare: ruling 263's resend is
+  `revoke_organization_invitation`'s bare entry under the new name, its
+  proxied recording equalling revoke's under that substitution; ruling 264's
+  assign is its proxied recording with the route's own headers, which every
+  agent command's bare entry holds (`update_request`'s, taken). The MCP
+  `tools/list` case's body, which the proxy does not touch, is the proxied
+  recording's, with the new tool.
 */
 if (!recording) {
   describe("the routes' own answers, without the proxy, against the recording before ruling 147", () => {

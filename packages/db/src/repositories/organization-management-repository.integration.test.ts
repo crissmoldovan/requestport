@@ -19,6 +19,7 @@ import {
   commandReceipts,
   domainEvents,
   invitations,
+  notificationIntents,
   organizationMembers,
   outbox,
   securityAuditRecords,
@@ -32,6 +33,7 @@ import type { Tx } from "../transaction.js";
 import { createCommandAuthorizationRepository } from "./command-authorization.js";
 import { createCommandTransactionManager } from "./command-repository.js";
 import { createFoundationRepository } from "./foundation-repository.js";
+import { createNotificationRepository } from "./notification-repository.js";
 import { createOperatorCredentialRepository } from "./operator-credential-repository.js";
 import { createOrganizationManagementRepository } from "./organization-management-repository.js";
 
@@ -1585,10 +1587,547 @@ describe("invite_organization_member, on the real database", () => {
 
 /* ------------------------------------------------------------------------ */
 
-describe("all three commands", () => {
+/* ------------------------------------------------------------------------ */
+
+const resend = "resend_organization_invitation";
+const emailBaseUrl = "https://requestport.invalid";
+const invitationLifetimeMs = 7 * 24 * 60 * 60 * 1_000;
+
+/** The invitation row as a resend changes it, its token hash included. */
+async function issuedInvitation(tx: Tx, invitationId: string) {
+  const [row] = await tx
+    .select({
+      version: invitations.version,
+      role: invitations.role,
+      tokenHash: invitations.tokenHash,
+      createdAt: invitations.createdAt,
+      expiresAt: invitations.expiresAt,
+      acceptedAt: invitations.acceptedAt,
+      revokedAt: invitations.revokedAt,
+      createdByUserId: invitations.createdByUserId,
+    })
+    .from(invitations)
+    .where(eq(invitations.id, invitationId));
+  if (!row) throw new Error("no invitation");
+  return row;
+}
+
+describe("resend_organization_invitation, on the real database", () => {
+  test.each(["owner", "admin"] as const)(
+    "an %s resends a pending member invitation: a new token, the lifetime a new invitation gets, version 2, one user audit row, and the invitation's own event at the new version, dispatched after commit",
+    async (actorRole) => {
+      await inRollbackTransaction(async (tx) => {
+        const tenant = await seedTenant(tx);
+        const actor = tenant[actorRole];
+        const invitationId = await seedInvitation(
+          tx,
+          tenant.organizationId,
+          tenant.owner.userId,
+          "member",
+        );
+        const before = await issuedInvitation(tx, invitationId);
+        const committed: DomainEvent[] = [];
+        const result = await run(tx, {
+          name: resend,
+          context: humanContext(actor, tenant.organizationId),
+          fields: { invitationId },
+          committed,
+        });
+        const after = await issuedInvitation(tx, invitationId);
+
+        expect(result).toEqual({
+          id: invitationId,
+          role: "member",
+          expiresAt: after.expiresAt.toISOString(),
+          version: 2,
+        });
+        expect(after).toMatchObject({
+          version: 2,
+          role: "member",
+          acceptedAt: null,
+          revokedAt: null,
+          createdByUserId: tenant.owner.userId,
+        });
+        // A new token: the stored hash is replaced by a fresh SHA-256, and no
+        // row holds the old one, so nothing can still be matched against it.
+        expect(after.tokenHash).toMatch(/^[0-9a-f]{64}$/u);
+        expect(after.tokenHash).not.toBe(before.tokenHash);
+        expect(
+          await tx
+            .select({ id: invitations.id })
+            .from(invitations)
+            .where(eq(invitations.tokenHash, before.tokenHash)),
+        ).toEqual([]);
+        // Issued now, for the lifetime a new invitation gets.
+        expect(after.createdAt.getTime()).toBeGreaterThan(
+          before.createdAt.getTime(),
+        );
+        expect(after.expiresAt.getTime() - after.createdAt.getTime()).toBe(
+          invitationLifetimeMs,
+        );
+        expect(await auditRows(tx, tenant.organizationId)).toEqual([
+          {
+            actorType: "user",
+            actorId: actor.userId,
+            action: "organization.invitation_resent",
+            targetId: invitationId,
+          },
+        ]);
+        const events = await organizationEvents(tx, tenant.organizationId);
+        expect(events).toEqual([
+          expect.objectContaining({
+            type: "organization.invitation_created.v1",
+            aggregateId: invitationId,
+            aggregateVersion: 2,
+            actor: { type: "user", id: actor.userId },
+            data: { invitationId, role: "member", expiresAt: result.expiresAt },
+            outboxState: "pending",
+          }),
+        ]);
+        expect(committed.map((event) => event.id)).toEqual([events[0]?.id]);
+        // No token, old or new, in what the command answers or records.
+        const recorded = JSON.stringify([
+          result,
+          events,
+          await receiptsWrittenHere(tx),
+        ]);
+        expect(recorded).not.toContain(after.tokenHash);
+        expect(recorded).not.toContain(before.tokenHash);
+      });
+    },
+  );
+
+  test("sends the email a new invitation sends, from the same event, and suppresses the one its earlier issue still had scheduled", async () => {
+    await inRollbackTransaction(async (tx) => {
+      const tenant = await seedTenant(tx);
+      const notifications = createNotificationRepository(tx);
+      const created: DomainEvent[] = [];
+      const invited = await run(tx, {
+        name: invite,
+        context: humanContext(tenant.owner, tenant.organizationId),
+        fields: invitationFields({ role: "admin" }),
+        expectedVersion: 0,
+        committed: created,
+      });
+      const invitationId = String(invited.id);
+      const [creation] = created;
+      if (!creation) throw new Error("no creation event");
+      // The worker routes the creation's event: one email, scheduled.
+      expect(
+        await notifications.materializeInvitationIntents(
+          creation.id,
+          emailBaseUrl,
+        ),
+      ).toHaveLength(1);
+
+      const resent: DomainEvent[] = [];
+      const answer = await run(tx, {
+        name: resend,
+        context: humanContext(tenant.admin, tenant.organizationId),
+        fields: { invitationId },
+        committed: resent,
+      });
+      const [reissue] = resent;
+      if (!reissue) throw new Error("no resend event");
+      expect(reissue).toMatchObject({
+        type: creation.type,
+        aggregateType: creation.aggregateType,
+        aggregateId: invitationId,
+        aggregateVersion: 2,
+      });
+      expect(
+        await notifications.materializeInvitationIntents(
+          reissue.id,
+          emailBaseUrl,
+        ),
+      ).toHaveLength(1);
+
+      const intents = await tx
+        .select()
+        .from(notificationIntents)
+        .where(eq(notificationIntents.invitationId, invitationId));
+      const original = intents.find((intent) => intent.eventId === creation.id);
+      const again = intents.find((intent) => intent.eventId === reissue.id);
+      if (!original || !again) throw new Error("missing an intent");
+      // The same email to the same address, carrying the new expiry.
+      expect(again).toMatchObject({
+        status: "pending",
+        channel: original.channel,
+        template: "organization_invitation_v1",
+        recipientRef: original.recipientRef,
+      });
+      expect(again.template).toBe(original.template);
+      expect(again.viewModel).toEqual({
+        ...original.viewModel,
+        expiresAt: answer.expiresAt,
+      });
+      // The earlier issue's scheduled email does not go out beside it.
+      expect(original).toMatchObject({
+        status: "suppressed",
+        nextAttemptAt: null,
+      });
+    });
+  });
+
+  test("an earlier issue's event that reaches the worker after a resend sends nothing", async () => {
+    await inRollbackTransaction(async (tx) => {
+      const tenant = await seedTenant(tx);
+      const notifications = createNotificationRepository(tx);
+      const created: DomainEvent[] = [];
+      const invited = await run(tx, {
+        name: invite,
+        context: humanContext(tenant.owner, tenant.organizationId),
+        fields: invitationFields({ role: "admin" }),
+        expectedVersion: 0,
+        committed: created,
+      });
+      const invitationId = String(invited.id);
+      const [creation] = created;
+      if (!creation) throw new Error("no creation event");
+
+      // A backlog: the resend lands before the worker has routed the
+      // creation's event, so no email intent exists yet to suppress.
+      const resent: DomainEvent[] = [];
+      await run(tx, {
+        name: resend,
+        context: humanContext(tenant.admin, tenant.organizationId),
+        fields: { invitationId },
+        committed: resent,
+      });
+      const [reissue] = resent;
+      if (!reissue) throw new Error("no resend event");
+
+      expect(
+        await notifications.materializeInvitationIntents(
+          reissue.id,
+          emailBaseUrl,
+        ),
+      ).toHaveLength(1);
+      // The creation's event, routed late, schedules nothing.
+      expect(
+        await notifications.materializeInvitationIntents(
+          creation.id,
+          emailBaseUrl,
+        ),
+      ).toEqual([]);
+      const intents = await tx
+        .select()
+        .from(notificationIntents)
+        .where(eq(notificationIntents.invitationId, invitationId));
+      expect(intents.map((intent) => intent.eventId)).toEqual([reissue.id]);
+    });
+  });
+
+  test("an owner invitation is resent by an owner, and refused to an admin", async () => {
+    await inRollbackTransaction(async (tx) => {
+      const tenant = await seedTenant(tx);
+      const invitationId = await seedInvitation(
+        tx,
+        tenant.organizationId,
+        tenant.owner.userId,
+        "owner",
+      );
+      const before = await issuedInvitation(tx, invitationId);
+      expect(
+        await refusal(
+          run(tx, {
+            name: resend,
+            context: humanContext(tenant.admin, tenant.organizationId),
+            fields: { invitationId },
+          }),
+        ),
+      ).toMatchObject({
+        code: "forbidden",
+        message: "Only an owner may resend an owner invitation",
+      });
+      expect(await issuedInvitation(tx, invitationId)).toEqual(before);
+      expect(await receiptsWrittenHere(tx)).toEqual([]);
+
+      await run(tx, {
+        name: resend,
+        context: humanContext(tenant.owner, tenant.organizationId),
+        fields: { invitationId },
+      });
+      expect(await issuedInvitation(tx, invitationId)).toMatchObject({
+        version: 2,
+      });
+    });
+  });
+
+  test.each([
+    ["an active member", "member", "active"],
+    ["a revoked owner", "owner", "revoked"],
+    ["a revoked admin", "admin", "revoked"],
+  ] as const)(
+    "%s is refused, and nothing is written, audited, evented or receipted",
+    async (_label, role, status) => {
+      await inRollbackTransaction(async (tx) => {
+        const tenant = await seedTenant(tx);
+        const actor = await seedMember(tx, tenant.organizationId, role, status);
+        const invitationId = await seedInvitation(
+          tx,
+          tenant.organizationId,
+          tenant.owner.userId,
+          "member",
+        );
+        const before = await issuedInvitation(tx, invitationId);
+        expect(
+          await refusal(
+            run(tx, {
+              name: resend,
+              context: humanContext(actor, tenant.organizationId),
+              fields: { invitationId },
+            }),
+          ),
+        ).toMatchObject({ code: "forbidden" });
+        expect(await issuedInvitation(tx, invitationId)).toEqual(before);
+        expect(await auditRows(tx, tenant.organizationId)).toEqual([]);
+        expect(await organizationEvents(tx, tenant.organizationId)).toEqual([]);
+        expect(await receiptsWrittenHere(tx)).toEqual([]);
+      });
+    },
+  );
+
+  test("a suspended organisation and an ended session are refused by the re-check", async () => {
+    await inRollbackTransaction(async (tx) => {
+      const tenant = await seedTenant(tx);
+      const invitationId = await seedInvitation(
+        tx,
+        tenant.organizationId,
+        tenant.owner.userId,
+        "member",
+      );
+      await endSession(tx, tenant.owner);
+      expect(
+        await refusal(
+          run(tx, {
+            name: resend,
+            context: humanContext(tenant.owner, tenant.organizationId),
+            fields: { invitationId },
+          }),
+        ),
+      ).toMatchObject({ code: "forbidden" });
+      await setOrganizationStatus(tx, tenant.organizationId, "suspended");
+      expect(
+        await refusal(
+          run(tx, {
+            name: resend,
+            context: humanContext(tenant.admin, tenant.organizationId),
+            fields: { invitationId },
+          }),
+        ),
+      ).toMatchObject({ code: "forbidden" });
+      expect(await issuedInvitation(tx, invitationId)).toMatchObject({
+        version: 1,
+      });
+    });
+  });
+
+  test("another organisation's invitation is not found, for an owner of both", async () => {
+    await inRollbackTransaction(async (tx) => {
+      const home = await seedTenant(tx);
+      const away = await seedTenant(tx);
+      await seedMembership(tx, away.organizationId, home.owner.userId, "owner");
+      const invitationId = await seedInvitation(
+        tx,
+        away.organizationId,
+        away.owner.userId,
+        "member",
+      );
+      expect(
+        await refusal(
+          run(tx, {
+            name: resend,
+            context: humanContext(home.owner, home.organizationId),
+            fields: { invitationId },
+          }),
+        ),
+      ).toMatchObject({
+        code: "not_found",
+        message: "Invitation was not found",
+      });
+      expect(await issuedInvitation(tx, invitationId)).toMatchObject({
+        version: 1,
+      });
+    });
+  });
+
+  test("a stale version is version_conflict; a revoked, accepted or expired invitation is invalid_transition", async () => {
+    await inRollbackTransaction(async (tx) => {
+      const tenant = await seedTenant(tx);
+      const pending = await seedInvitation(
+        tx,
+        tenant.organizationId,
+        tenant.owner.userId,
+        "member",
+      );
+      expect(
+        await refusal(
+          run(tx, {
+            name: resend,
+            context: humanContext(tenant.owner, tenant.organizationId),
+            fields: { invitationId: pending },
+            expectedVersion: 2,
+          }),
+        ),
+      ).toMatchObject({ code: "version_conflict" });
+
+      const expired = await seedInvitation(
+        tx,
+        tenant.organizationId,
+        tenant.owner.userId,
+        "member",
+      );
+      await tx
+        .update(invitations)
+        .set({ expiresAt: new Date(Date.now() - 60_000) })
+        .where(eq(invitations.id, expired));
+      const revoked = await seedInvitation(
+        tx,
+        tenant.organizationId,
+        tenant.owner.userId,
+        "member",
+        "revoked",
+      );
+      const accepted = await seedInvitation(
+        tx,
+        tenant.organizationId,
+        tenant.owner.userId,
+        "member",
+        "accepted",
+      );
+      for (const invitationId of [revoked, accepted, expired]) {
+        expect(
+          await refusal(
+            run(tx, {
+              name: resend,
+              context: humanContext(tenant.owner, tenant.organizationId),
+              fields: { invitationId },
+            }),
+          ),
+        ).toMatchObject({
+          code: "invalid_transition",
+          message: "Only a pending invitation may be resent",
+        });
+      }
+      expect(await auditRows(tx, tenant.organizationId)).toEqual([]);
+      expect(await organizationEvents(tx, tenant.organizationId)).toEqual([]);
+    });
+  });
+
+  test("a replay answers the first result with one new token and one event; other input under the key is idempotency_conflict; after demotion it is refused", async () => {
+    await inRollbackTransaction(async (tx) => {
+      const tenant = await seedTenant(tx);
+      const invitationId = await seedInvitation(
+        tx,
+        tenant.organizationId,
+        tenant.owner.userId,
+        "member",
+      );
+      const other = await seedInvitation(
+        tx,
+        tenant.organizationId,
+        tenant.owner.userId,
+        "member",
+      );
+      const idempotencyKey = key();
+      const committed: DomainEvent[] = [];
+      const first = await run(tx, {
+        name: resend,
+        context: humanContext(tenant.admin, tenant.organizationId),
+        fields: { invitationId },
+        idempotencyKey,
+        committed,
+      });
+      const issued = await issuedInvitation(tx, invitationId);
+      expect(
+        await run(tx, {
+          name: resend,
+          context: humanContext(tenant.admin, tenant.organizationId),
+          fields: { invitationId },
+          idempotencyKey,
+          committed,
+        }),
+      ).toEqual(first);
+      // A double press sends one email: the replay issues no second token
+      // and records no second event.
+      expect(await issuedInvitation(tx, invitationId)).toEqual(issued);
+      expect(await auditRows(tx, tenant.organizationId)).toHaveLength(1);
+      expect(await organizationEvents(tx, tenant.organizationId)).toHaveLength(
+        1,
+      );
+      expect(committed).toHaveLength(1);
+      expect(
+        await refusal(
+          run(tx, {
+            name: resend,
+            context: humanContext(tenant.admin, tenant.organizationId),
+            fields: { invitationId: other },
+            idempotencyKey,
+          }),
+        ),
+      ).toMatchObject({ code: "idempotency_conflict" });
+
+      await setRole(tx, tenant.organizationId, tenant.admin.userId, "member");
+      expect(
+        await refusal(
+          run(tx, {
+            name: resend,
+            context: humanContext(tenant.admin, tenant.organizationId),
+            fields: { invitationId },
+            idempotencyKey,
+          }),
+        ),
+      ).toMatchObject({ code: "forbidden" });
+    });
+  });
+
+  test("an owner's operator resends with its member's authority, recorded as the service it is", async () => {
+    await inRollbackTransaction(async (tx) => {
+      const tenant = await seedTenant(tx);
+      const credential = await issueOperator(tx, {
+        organizationId: tenant.organizationId,
+        userId: tenant.owner.userId,
+      });
+      const context = operatorContext(credential);
+      const invitationId = await seedInvitation(
+        tx,
+        tenant.organizationId,
+        tenant.admin.userId,
+        "owner",
+      );
+      const committed: DomainEvent[] = [];
+      expect(
+        await run(tx, {
+          name: resend,
+          context,
+          fields: { invitationId },
+          committed,
+        }),
+      ).toMatchObject({ id: invitationId, role: "owner", version: 2 });
+
+      const actor = { type: "service", id: `operator:${credential.lineageId}` };
+      expect(await auditRows(tx, tenant.organizationId)).toEqual([
+        {
+          actorType: actor.type,
+          actorId: actor.id,
+          action: "organization.invitation_resent",
+          targetId: invitationId,
+        },
+      ]);
+      expect(committed.map((event) => event.actor)).toEqual([context.actor]);
+      // The invitation keeps the person who issued it as its creator.
+      expect(await issuedInvitation(tx, invitationId)).toMatchObject({
+        createdByUserId: tenant.admin.userId,
+      });
+    });
+  });
+});
+
+describe("every organisation administration command", () => {
   async function fields(tx: Tx, tenant: Tenant, name: string) {
     if (name === invite) return invitationFields();
-    if (name === revoke)
+    if (name === revoke || name === resend)
       return {
         invitationId: await seedInvitation(
           tx,
@@ -1600,7 +2139,7 @@ describe("all three commands", () => {
     return change(tenant);
   }
 
-  test.each([invite, setMember, revoke])(
+  test.each([invite, setMember, revoke, resend])(
     "%s: without members:manage the refusal names the scope; another organisation in the input is refused",
     async (name) => {
       await inRollbackTransaction(async (tx) => {
@@ -1643,7 +2182,7 @@ describe("all three commands", () => {
     },
   );
 
-  test.each([invite, setMember, revoke])(
+  test.each([invite, setMember, revoke, resend])(
     "%s: an agent and a service actor holding members:manage are refused by the command itself",
     async (name) => {
       await inRollbackTransaction(async (tx) => {
@@ -1923,6 +2462,7 @@ describe("an operator credential", () => {
           1,
         ],
         [revoke, { invitationId: ownerInvitation }, 1],
+        [resend, { invitationId: ownerInvitation }, 1],
         [invite, invitationFields({ role: "owner" }), 0],
       ] as const)
         expect(

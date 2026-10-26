@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  appearanceOrganizationDefaultsInitializedSchema,
+  appearanceOrganizationDefaultsUpdatedSchema,
+} from "../appearance/appearance-events.js";
 import { isoDatetime, utf16Max } from "../shared/zod-compat.js";
 import type { EventSchemaRegistry } from "./event-factory.js";
 
@@ -59,47 +63,6 @@ const slackConfigurationSchema = z.object({
   status: z.string().min(1),
 });
 
-/**
- * Migration `0014` writes this envelope itself — from its backfill and from the
- * compatibility trigger it installs on `organization_members` — so the type has
- * to be registered before that migration can meet a running outbox worker.
- * `outbox-delivery` dead-letters, terminally, anything `parse` rejects, and
- * `0014` is immutable once applied. The vocabulary is the locked appearance
- * triple; `packages/db/src/appearance-migration.integration.test.ts` parses the
- * exact rows the migration produced through this registry.
- */
-const appearanceTripleSchema = z.object({
-  theme: z.enum([
-    "requestport",
-    "cue",
-    "terminal",
-    "signal",
-    "venu",
-    "hivehub",
-    "dusk",
-    "luma",
-    "snuffle",
-  ]),
-  density: z.enum(["ultra-compact", "normal", "large"]),
-  mode: z.enum(["system", "dark", "light"]),
-});
-
-const appearanceOrganizationDefaultsSchema = appearanceTripleSchema.safeExtend({
-  organizationId: z.uuid(),
-});
-
-/**
- * The update envelope carries the safe before/after triple downstream consumers
- * need. Security audit rows deliberately carry only the changed field names, so
- * this event is the only place the values appear.
- */
-const appearanceOrganizationDefaultsUpdatedSchema = z.object({
-  organizationId: z.uuid(),
-  changedFields: z.array(z.enum(["theme", "density", "mode"])).max(3),
-  before: appearanceTripleSchema,
-  after: appearanceTripleSchema,
-});
-
 const retentionHoldChangedSchema = z.object({
   category: z.enum(["all", "slack_oauth_state", "slack_action_token"]),
   status: z.enum(["active", "released"]),
@@ -126,7 +89,7 @@ export function registerConfigurationEventSchemas(
     .register("retention.hold_changed.v1", retentionHoldChangedSchema)
     .register(
       "appearance.organization_defaults_initialized.v1",
-      appearanceOrganizationDefaultsSchema,
+      appearanceOrganizationDefaultsInitializedSchema,
     )
     .register(
       "appearance.organization_defaults_updated.v1",

@@ -24,6 +24,7 @@ import {
   requestLabels,
   requestRelationships,
   requests,
+  securityAuditRecords,
   stateTransitions,
   workSessions,
 } from "../schema/index.js";
@@ -695,6 +696,63 @@ export function createRequestRepository(
           "Request changed concurrently",
         );
       }
+      return requestRecord(updated);
+    },
+
+    async isActiveMember(organizationId, userId) {
+      const [membership] = await database
+        .select({ id: organizationMembers.id })
+        .from(organizationMembers)
+        .where(
+          and(
+            eq(organizationMembers.organizationId, organizationId),
+            eq(organizationMembers.userId, userId),
+            eq(organizationMembers.status, "active"),
+          ),
+        )
+        .for("share")
+        .limit(1);
+      return Boolean(membership);
+    },
+
+    async assign(input) {
+      const [updated] = await database
+        .update(requests)
+        .set({
+          assigneeType: input.assignee?.type ?? null,
+          assigneeId: input.assignee?.id ?? null,
+          version: input.expectedVersion + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(requests.id, input.requestId),
+            eq(requests.organizationId, input.organizationId),
+            eq(requests.version, input.expectedVersion),
+          ),
+        )
+        .returning();
+      if (!updated) {
+        throw new DomainError(
+          "version_conflict",
+          "Request changed concurrently",
+        );
+      }
+      // The neighbouring request commands write no security audit row (a
+      // transition records a state_transitions row, an edit only its event);
+      // a change of who a request is handed to is recorded here, beside its
+      // event, as the organisation access commands record theirs.
+      await database.insert(securityAuditRecords).values({
+        organizationId: input.organizationId,
+        actorType: input.actor.type,
+        actorId: input.actor.id,
+        action: "request.assigned",
+        targetType: "request",
+        targetId: input.requestId,
+        reason: input.assignee ? "Request assigned" : "Request unassigned",
+        fieldNames: ["assigneeType", "assigneeId"],
+        correlationId: input.correlationId,
+      });
       return requestRecord(updated);
     },
 

@@ -8554,6 +8554,103 @@
         "x-requestport-mcp-tool": null
       }
     },
+    "/api/v1/commands/resend_organization_invitation": {
+      "post": {
+        "operationId": "resend_organization_invitation",
+        "summary": "resend_organization_invitation",
+        "description": "The route writes `organizationId` (the credential's organizationId) into `input` after the caller's fields, so a value sent for one is overwritten. They are left out of the schema shown.\n\nOnly an operator credential reaches this; the route refuses an agent credential before dispatch.\n\nA scope is necessary, never sufficient: the command also checks roles, claims, project and lane bindings and actor type.",
+        "tags": [
+          "Commands"
+        ],
+        "security": [
+          {
+            "operatorBearer": [
+              "members:manage"
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "$ref": "#/components/schemas/resend_organization_invitation.input",
+                    "description": "The command's input. Defaults to {} when absent."
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 200
+                  },
+                  "expectedVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "idempotencyKey",
+                  "expectedVersion"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "`{ result }`, where `result` is the command's own output. No response schema is recorded for this operation, so none is given."
+          },
+          "401": {
+            "$ref": "#/components/responses/Status401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Status403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Status404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Status409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Status413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Status415"
+          },
+          "422": {
+            "$ref": "#/components/responses/Status422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Status429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Status500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Status503"
+          }
+        },
+        "x-requestport-scope-checked-by": "command",
+        "x-requestport-injected-fields": [
+          {
+            "field": "organizationId",
+            "from": "credential.organizationId"
+          }
+        ],
+        "x-requestport-dispatch": {
+          "to": "command-bus",
+          "commandName": "resend_organization_invitation"
+        },
+        "x-requestport-route-requires-project": false,
+        "x-requestport-rate-limit-class": "mutation",
+        "x-requestport-mcp-tool": null
+      }
+    },
     "/api/v1/commands/appearance.update_organization_defaults.v1": {
       "post": {
         "operationId": "appearance.update_organization_defaults.v1",
@@ -8649,6 +8746,105 @@
         "x-requestport-route-requires-project": false,
         "x-requestport-rate-limit-class": "mutation",
         "x-requestport-mcp-tool": null
+      }
+    },
+    "/api/v1/commands/assign_request": {
+      "post": {
+        "operationId": "assign_request",
+        "summary": "assign_request",
+        "description": "The route writes `organizationId` (the credential's organizationId) into `input` after the caller's fields, so a value sent for one is overwritten. They are left out of the schema shown.\n\nA scope is necessary, never sufficient: the command also checks roles, claims, project and lane bindings and actor type.",
+        "tags": [
+          "Commands"
+        ],
+        "security": [
+          {
+            "agentBearer": [
+              "request:triage"
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "$ref": "#/components/schemas/assign_request.input",
+                    "description": "The command's input. Defaults to {} when absent."
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 200
+                  },
+                  "expectedVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "idempotencyKey",
+                  "expectedVersion"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "`{ result }`, where `result` is the command's own output. No response schema is recorded for this operation, so none is given."
+          },
+          "401": {
+            "$ref": "#/components/responses/Status401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Status403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Status404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Status409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Status413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Status415"
+          },
+          "422": {
+            "$ref": "#/components/responses/Status422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Status429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Status500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Status503"
+          }
+        },
+        "x-requestport-scope-checked-by": "command",
+        "x-requestport-injected-fields": [
+          {
+            "field": "organizationId",
+            "from": "credential.organizationId"
+          }
+        ],
+        "x-requestport-dispatch": {
+          "to": "command-bus",
+          "commandName": "assign_request"
+        },
+        "x-requestport-route-requires-project": false,
+        "x-requestport-rate-limit-class": "mutation",
+        "x-requestport-mcp-tool": {
+          "name": "assign_request"
+        }
       }
     }
   },
@@ -12603,6 +12799,20 @@
           "invitationId"
         ]
       },
+      "resend_organization_invitation.input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "invitationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "invitationId"
+        ]
+      },
       "appearance.update_organization_defaults.v1.input": {
         "type": "object",
         "additionalProperties": false,
@@ -12618,13 +12828,24 @@
               "hivehub",
               "dusk",
               "luma",
-              "snuffle"
+              "snuffle",
+              "command",
+              "graphite",
+              "kiln",
+              "ledger",
+              "monolith",
+              "porcelain",
+              "prism",
+              "quotamate",
+              "tender",
+              "zine"
             ]
           },
           "density": {
             "type": "string",
             "enum": [
               "ultra-compact",
+              "compact",
               "normal",
               "large"
             ]
@@ -12636,12 +12857,87 @@
               "dark",
               "light"
             ]
+          },
+          "font": {
+            "type": "string",
+            "enum": [
+              "match",
+              "geist",
+              "geist-mono",
+              "inter",
+              "inter-source",
+              "plex",
+              "dm",
+              "calsans",
+              "fraunces-mono",
+              "system"
+            ]
+          },
+          "look": {
+            "type": "string",
+            "enum": [
+              "match",
+              "console",
+              "editorial",
+              "marketing",
+              "graphite",
+              "tender",
+              "zine",
+              "kiln",
+              "porcelain",
+              "ledger",
+              "command",
+              "monolith",
+              "prism"
+            ]
+          },
+          "paint": {
+            "type": "string",
+            "enum": [
+              "match",
+              "none",
+              "halo",
+              "hatch",
+              "lift",
+              "frost",
+              "bevel",
+              "grain",
+              "plume",
+              "matte",
+              "glaze"
+            ]
           }
         },
         "required": [
           "theme",
           "density",
           "mode"
+        ]
+      },
+      "assign_request.input": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "assigneeUserId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "requestId",
+          "assigneeUserId"
         ]
       }
     },

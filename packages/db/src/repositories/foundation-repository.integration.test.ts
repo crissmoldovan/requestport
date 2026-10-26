@@ -163,16 +163,19 @@ describe.sequential("live foundation repository", () => {
 
       // The compatibility trigger — not the service — owns initialization, so
       // the default and its seed envelope commit in the same transaction as the
-      // organization and its owner membership.
+      // organization and its owner membership. Its seed is 0026's (ruling 255).
       const defaults = await outerTx
         .select()
         .from(organizationAppearanceDefaults)
         .where(eq(organizationAppearanceDefaults.organizationId, result.id));
       expect(defaults).toHaveLength(1);
       expect(defaults[0]).toMatchObject({
-        theme: "requestport",
-        density: "ultra-compact",
+        theme: "cue",
+        density: "normal",
         mode: "system",
+        font: "match",
+        look: "match",
+        paint: "match",
         version: 1,
       });
 

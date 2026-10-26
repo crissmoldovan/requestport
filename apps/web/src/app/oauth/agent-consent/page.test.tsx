@@ -248,6 +248,32 @@ describe("agent consent surface", () => {
   });
 });
 
+describe("the ways-in frame (ruling 259)", () => {
+  test("draws the grant under the mark and the name, with one heading, and every scope and both decisions kept", async () => {
+    const markup = await consentMarkup();
+
+    expect(markup.match(/<h1/gu)).toHaveLength(1);
+    expect(markup).toMatch(/<h1[^>]*>Connect an agent<\/h1>/u);
+    expect(markup).toContain("RequestPort");
+    expect(markup).toContain("<svg");
+    expect(markup).not.toContain('data-slot="eyebrow"');
+    expect(markup).toContain("request:read");
+    expect(markup).toContain("request:write");
+    expect(markup).toContain('aria-label="Allow connection"');
+    expect(markup).toContain('aria-label="Deny connection"');
+  });
+
+  test("draws a lapsed request in the same frame", async () => {
+    const markup = await consentMarkup({
+      exp: String(Math.floor(Date.now() / 1_000) - 1),
+    });
+
+    expect(markup.match(/<h1/gu)).toHaveLength(1);
+    expect(markup).toMatch(/<h1[^>]*>This request has expired<\/h1>/u);
+    expect(markup).not.toContain('data-slot="eyebrow"');
+  });
+});
+
 describe("an authorization request that has lapsed", () => {
   test("says so instead of drawing a grant that cannot be approved", async () => {
     const markup = await consentMarkup({

@@ -23,7 +23,7 @@ cue-ui's packages/theme-requestport at commit ddb2c56a (its package.json
 there reads version 1.0.1), with the AA corrections of cue-ui#117, which
 were never published.
 
-Licence text, from @cueplusplus/theme-base@1.0.3 (LICENSE):
+Licence text, from @cueplusplus/theme-base@1.4.0 (LICENSE):
 
 MIT License
 

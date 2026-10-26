@@ -182,7 +182,19 @@ export function createAuthenticateAgentBearer(dependencies: {
   touchCredential?: (
     credentialId: string,
     organizationId: string,
-  ) => Promise<void>;
+  ) => Promise<unknown>;
+  /**
+   * Stamps the OAuth grant a token has just authenticated against, bound to
+   * the organisation the lookup found, as `touchCredential` stamps a key
+   * (ruling 261). Required, so a composition must supply one; the type
+   * cannot say that what it supplies records anything, and
+   * `create-auth.test.ts` pins the production wiring to the repository's
+   * `touchOAuthGrant`.
+   */
+  touchOAuthGrant: (
+    grantId: string,
+    organizationId: string,
+  ) => Promise<unknown>;
   audiences?: Readonly<Record<AgentAudience, string>>;
   /**
    * The provider's userinfo endpoint, which it appends to the audience of any
@@ -323,6 +335,11 @@ export function createAuthenticateAgentBearer(dependencies: {
     }
     const tokenScopes = new Set(
       payload.scope?.split(/\s+/u).filter(Boolean) ?? [],
+    );
+    // Only once every check above has passed: a refused token stamps nothing.
+    await dependencies.touchOAuthGrant(
+      resolved.authorizationId,
+      resolved.organizationId,
     );
     return context(resolved, tokenScopes);
   };

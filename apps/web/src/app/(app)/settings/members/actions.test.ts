@@ -50,8 +50,11 @@ vi.mock("../../../../lib/server-application-context.js", () => ({
   },
 }));
 
+import { revalidatePath } from "next/cache";
+
 import { initialMemberActionState } from "./action-state.js";
 import {
+  resendInvitationAction,
   revokeInvitationAction,
   setOrganizationMemberAction,
 } from "./actions.js";
@@ -191,6 +194,15 @@ const cases = [
     expectedVersion: 1,
     message: "Invitation revoked.",
   },
+  {
+    action: "resendInvitationAction",
+    run: resendInvitationAction,
+    command: "resend_organization_invitation",
+    form: { invitationId, expectedVersion: "1" },
+    input: { invitationId },
+    expectedVersion: 1,
+    message: "Invitation resent.",
+  },
 ] as const;
 
 function submission(fields: Record<string, string>) {
@@ -201,7 +213,7 @@ function submission(fields: Record<string, string>) {
 }
 
 describe("each access form reaches its organisation administration command", () => {
-  test("the two forms name the two access commands, and the invitation form the third", () => {
+  test("each access form names its own command, and the invitation form the one left", () => {
     expect(cases.map((entry) => entry.command).sort()).toEqual(
       Object.keys(organizationAdministrationCommandInputSchemas)
         .filter((name) => name !== "invite_organization_member")
@@ -254,6 +266,60 @@ describe("each access form reaches its organisation administration command", () 
       expect(members.execute).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("resending an invitation (ruling 260)", () => {
+  test("refreshes the members page after a resend, so the row carries its new version and fresh keys", async () => {
+    vi.mocked(revalidatePath).mockClear();
+
+    expect(
+      await resendInvitationAction(
+        initialMemberActionState,
+        submission({ invitationId, expectedVersion: "1" }),
+      ),
+    ).toEqual({ message: "Invitation resent.", status: "success" });
+    // Without the refresh the row keeps version 1 and its key, and a second
+    // press would replay the first receipt: the toast, and no email.
+    expect(revalidatePath).toHaveBeenCalledWith("/settings/members");
+  });
+
+  test("says an invitation that stopped being pending is no longer pending", async () => {
+    members.execute.mockRejectedValue(
+      new DomainError(
+        "invalid_transition",
+        "Only a pending invitation may be resent",
+      ),
+    );
+
+    expect(
+      await resendInvitationAction(
+        initialMemberActionState,
+        submission({ invitationId, expectedVersion: "1" }),
+      ),
+    ).toEqual({
+      message: "That invitation is no longer pending.",
+      status: "error",
+    });
+  });
+
+  test("refuses an owner invitation to an admin with the access sentence, not the reason", async () => {
+    members.execute.mockRejectedValue(
+      new DomainError(
+        "forbidden",
+        "Only an owner may resend an owner invitation",
+      ),
+    );
+
+    expect(
+      await resendInvitationAction(
+        initialMemberActionState,
+        submission({ invitationId, expectedVersion: "1" }),
+      ),
+    ).toEqual({
+      message: "You do not have permission to manage that access.",
+      status: "error",
+    });
+  });
 });
 
 /*

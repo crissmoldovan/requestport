@@ -10,6 +10,7 @@ import { getApplicationContext } from "../../../../lib/server-application-contex
 import { webStorage } from "../../../../lib/server-request-port.js";
 import { inviteMemberAction } from "../../actions.js";
 import {
+  resendInvitationAction,
   revokeInvitationAction,
   setOrganizationMemberAction,
 } from "./actions.js";
@@ -40,6 +41,11 @@ export default async function MembersSettingsPage() {
       invitationIdempotencyKeys={Object.fromEntries(
         invitations.map((invitation) => [invitation.id, randomUUID()]),
       )}
+      // Each form posts a key of its own, so a resend and a revocation of
+      // one row are never one key.
+      invitationResendIdempotencyKeys={Object.fromEntries(
+        invitations.map((invitation) => [invitation.id, randomUUID()]),
+      )}
       invitations={invitations}
       memberAction={setOrganizationMemberAction}
       memberIdempotencyKeys={Object.fromEntries(
@@ -47,6 +53,7 @@ export default async function MembersSettingsPage() {
       )}
       members={members}
       organization={context.currentOrganization}
+      resendInvitationAction={resendInvitationAction}
       revokeInvitationAction={revokeInvitationAction}
     />
   );

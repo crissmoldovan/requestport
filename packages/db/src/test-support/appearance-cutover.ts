@@ -9,11 +9,26 @@ const migrationUrl = new URL(
   import.meta.url,
 );
 
-export async function migrationStatements() {
-  return (await readFile(migrationUrl, "utf8"))
+/** Migration `0026`, which adds the font, look and paint axes (ruling 255). */
+const sixAxesMigrationUrl = new URL(
+  "../../migrations/0026_requestport_appearance_six_axes.sql",
+  import.meta.url,
+);
+
+function splitStatements(text: string) {
+  return text
     .split("--> statement-breakpoint")
     .map((statement) => statement.trim())
     .filter((statement) => statement.length > 0);
+}
+
+export async function migrationStatements() {
+  return splitStatements(await readFile(migrationUrl, "utf8"));
+}
+
+/** `0026`'s statements, in order. */
+export async function sixAxesMigrationStatements() {
+  return splitStatements(await readFile(sixAxesMigrationUrl, "utf8"));
 }
 
 /**
@@ -53,8 +68,8 @@ export function isIsolatedAppearanceTableStatement(statement: string) {
 }
 
 /**
- * `0014` is immutable and hash-locked, so the statements that build the two
- * appearance tables are a fixed, ordered set. Naming every one of them turns a
+ * `0014` and `0026` are hash-locked (`migration.test.ts`), so the statements
+ * that build the two appearance tables are a fixed, ordered set. Naming every one of them turns a
  * silently dropped statement into a loud failure instead of a fixture that
  * quietly degrades into a partial copy of the checked-in schema.
  */
@@ -67,19 +82,43 @@ export const isolatedAppearanceStatementNames = [
   '"organization_appearance_defaults_aggregate_id_unique"',
   '"organization_appearance_defaults_updater_idx"',
   '"user_appearance_preferences_aggregate_id_unique"',
+  // `0026`'s table statements, which follow, so the copy has all six axes.
+  'DROP CONSTRAINT "organization_appearance_defaults_theme_check"',
+  'ADD CONSTRAINT "organization_appearance_defaults_theme_check"',
+  'DROP CONSTRAINT "user_appearance_preferences_theme_check"',
+  'ADD CONSTRAINT "user_appearance_preferences_theme_check"',
+  'DROP CONSTRAINT "organization_appearance_defaults_density_check"',
+  'ADD CONSTRAINT "organization_appearance_defaults_density_check"',
+  'DROP CONSTRAINT "user_appearance_preferences_density_check"',
+  'ADD CONSTRAINT "user_appearance_preferences_density_check"',
+  '"organization_appearance_defaults" ADD COLUMN "font"',
+  '"organization_appearance_defaults" ADD COLUMN "look"',
+  '"organization_appearance_defaults" ADD COLUMN "paint"',
+  '"user_appearance_preferences" ADD COLUMN "font"',
+  '"user_appearance_preferences" ADD COLUMN "look"',
+  '"user_appearance_preferences" ADD COLUMN "paint"',
+  '"organization_appearance_defaults_font_check"',
+  '"organization_appearance_defaults_look_check"',
+  '"organization_appearance_defaults_paint_check"',
+  '"user_appearance_preferences_font_check"',
+  '"user_appearance_preferences_look_check"',
+  '"user_appearance_preferences_paint_check"',
 ] as const;
 
 /**
  * The `0014` statements that create the two appearance tables, their
- * constraints, and their indexes — and nothing else. Every one of them names
+ * constraints, and their indexes, then the `0026` statements that add the
+ * font, look and paint columns and widen the theme and density checks — and
+ * nothing else: not `0026`'s lock, trigger body or backfill. Every one of them names
  * the appearance tables unqualified, so running them under a private
  * `search_path` reproduces the exact checked-in schema inside an isolated
  * PostgreSQL schema.
  */
 export async function isolatedAppearanceTableStatements() {
-  const statements = (await migrationStatements()).filter(
-    isIsolatedAppearanceTableStatement,
-  );
+  const statements = [
+    ...(await migrationStatements()),
+    ...(await sixAxesMigrationStatements()),
+  ].filter(isIsolatedAppearanceTableStatement);
   if (statements.length !== isolatedAppearanceStatementNames.length) {
     throw new Error(
       `Isolated appearance schema expects ${isolatedAppearanceStatementNames.length} statements, found ${statements.length}`,

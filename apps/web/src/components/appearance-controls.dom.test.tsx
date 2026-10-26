@@ -41,17 +41,78 @@ const themeOptionLabels = [
   "Dusk",
   "Luma",
   "Snuffle",
+  "Command",
+  "Graphite",
+  "Kiln",
+  "Ledger",
+  "Monolith",
+  "Porcelain",
+  "Prism",
+  "QuotaMate",
+  "Tender",
+  "Zine",
 ];
-const densityOptionLabels = ["Ultra compact", "Normal", "Large"];
+const densityOptionLabels = ["Ultra compact", "Compact", "Normal", "Large"];
 const modeOptionLabels = ["Match system", "Dark", "Light"];
-const inheritLabel = "Organization default";
+const typefaceOptionLabels = [
+  "Geist",
+  "Geist Mono",
+  "Inter",
+  "Inter with Source Code Pro",
+  "IBM Plex",
+  "DM Sans",
+  "Cal Sans",
+  "Fraunces with JetBrains Mono",
+  "System",
+];
+const lookOptionLabels = [
+  "Console",
+  "Editorial",
+  "Marketing",
+  "Graphite",
+  "Tender",
+  "Zine",
+  "Kiln",
+  "Porcelain",
+  "Ledger",
+  "Command",
+  "Monolith",
+  "Prism",
+];
+const surfaceOptionLabels = [
+  "None",
+  "Halo",
+  "Hatch",
+  "Lift",
+  "Frost",
+  "Bevel",
+  "Grain",
+  "Plume",
+  "Matte",
+  "Glaze",
+];
+/** Every row's first option names the organization's value on that axis. */
+const inheritLabel = /^Organization default: /u;
 
 const organizationDefaults: AppearanceDefaults & { version: number } = {
   density: "normal",
+  font: "match",
+  look: "match",
   mode: "dark",
+  paint: "match",
   theme: "cue",
   version: 4,
 };
+
+/** No personal choice on any axis. */
+const inheriting = {
+  density: null,
+  font: null,
+  look: null,
+  mode: null,
+  paint: null,
+  theme: null,
+} as const;
 
 function buildSnapshot(
   input: {
@@ -60,17 +121,15 @@ function buildSnapshot(
   } = {},
 ): AppearanceSnapshot {
   const organization = input.organization ?? organizationDefaults;
-  const user = input.user ?? {
-    density: null,
-    mode: null,
-    theme: null,
-    version: 0,
-  };
+  const user = input.user ?? { ...inheriting, version: 0 };
   const present = organization.version > 0;
   const defaults: AppearanceDefaults = present
     ? {
         density: organization.density,
+        font: organization.font,
+        look: organization.look,
         mode: organization.mode,
+        paint: organization.paint,
         theme: organization.theme,
       }
     : appearanceFallback;
@@ -197,36 +256,109 @@ afterEach(() => {
 });
 
 describe("personal appearance form controls", () => {
-  test("gives every axis one labelled field", () => {
+  test("gives every one of the six axes one labelled row, under Just for you (ruling 255)", () => {
     render(personal());
 
-    expect(screen.getByRole("combobox", { name: "Theme" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("combobox", { name: "Density" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Mode" })).toBeInTheDocument();
+    const section = screen.getByRole("group", { name: "Just for you" });
+    for (const name of [
+      "Theme",
+      "Mode",
+      "Density",
+      "Typeface",
+      "Look",
+      "Surface",
+    ]) {
+      expect(
+        within(section).getByRole("combobox", { name }),
+        name,
+      ).toBeInTheDocument();
+    }
   });
 
-  test("offers the organization default plus every registered value", async () => {
+  test("offers the organization's value first, then every registered value", async () => {
     const user = userEvent.setup();
     render(personal());
 
     expect(optionLabels(await openOptions(user, "Theme"))).toEqual([
-      inheritLabel,
+      "Organization default: CUE++",
       ...themeOptionLabels,
     ]);
     await user.keyboard("{Escape}");
 
     expect(optionLabels(await openOptions(user, "Density"))).toEqual([
-      inheritLabel,
+      "Organization default: Normal",
       ...densityOptionLabels,
     ]);
     await user.keyboard("{Escape}");
 
     expect(optionLabels(await openOptions(user, "Mode"))).toEqual([
-      inheritLabel,
+      "Organization default: Dark",
       ...modeOptionLabels,
     ]);
+  });
+
+  test("offers match first on typeface, Look and surface, named by what the theme's Look resolves it to", async () => {
+    const user = userEvent.setup();
+    render(personal());
+
+    // The organization is on cue, whose Look is classic: Geist, Console, None.
+    expect(optionLabels(await openOptions(user, "Typeface"))).toEqual([
+      "Organization default: Match the theme (Geist)",
+      "Match the theme (Geist)",
+      ...typefaceOptionLabels,
+    ]);
+    await user.keyboard("{Escape}");
+    expect(optionLabels(await openOptions(user, "Look"))).toEqual([
+      "Organization default: Match the theme (Console)",
+      "Match the theme (Console)",
+      ...lookOptionLabels,
+    ]);
+    await user.keyboard("{Escape}");
+    expect(optionLabels(await openOptions(user, "Surface"))).toEqual([
+      "Organization default: Match the theme (None)",
+      "Match the theme (None)",
+      ...surfaceOptionLabels,
+    ]);
+    await user.keyboard("{Escape}");
+
+    // Choosing graphite moves what this person's own match resolves to.
+    await chooseTheme(user, "Graphite");
+    expect(optionLabels(await openOptions(user, "Typeface"))).toContain(
+      "Match the theme (Geist Mono)",
+    );
+  });
+
+  test("names the organization's match by what it gives this person, under the theme they see", async () => {
+    const user = userEvent.setup();
+    // The organization is cue with match on every axis; this person chose
+    // graphite and nothing else, so the page renders graphite's Look for them:
+    // Geist Mono, Graphite, Bevel. The inherited row must name that, not cue's.
+    render(
+      personal({
+        snapshot: buildSnapshot({
+          user: { ...inheriting, theme: "graphite", version: 2 },
+        }),
+      }),
+    );
+
+    expect(optionLabels(await openOptions(user, "Typeface"))[0]).toBe(
+      "Organization default: Match the theme (Geist Mono)",
+    );
+    await user.keyboard("{Escape}");
+    expect(optionLabels(await openOptions(user, "Look"))[0]).toBe(
+      "Organization default: Match the theme (Graphite)",
+    );
+    await user.keyboard("{Escape}");
+    expect(optionLabels(await openOptions(user, "Surface"))[0]).toBe(
+      "Organization default: Match the theme (Bevel)",
+    );
+    await user.keyboard("{Escape}");
+
+    // Back on the organization's theme in the draft, the row follows it.
+    await chooseTheme(user, "Organization default: CUE++");
+    expect(optionLabels(await openOptions(user, "Typeface"))[0]).toBe(
+      "Organization default: Match the theme (Geist)",
+    );
   });
 
   test("opens its options into a stamped CUE++ portal", async () => {
@@ -250,7 +382,7 @@ describe("personal appearance form controls", () => {
     render(
       personal({
         snapshot: buildSnapshot({
-          user: { density: null, mode: null, theme: "terminal", version: 2 },
+          user: { ...inheriting, theme: "terminal", version: 2 },
         }),
       }),
     );
@@ -306,12 +438,40 @@ describe("personal appearance draft preview", () => {
     expect(window.localStorage.getItem(DEFAULT_STORAGE_KEY)).toBeNull();
   });
 
+  test("previews a typeface, a Look and a surface on the document, a match as it resolves", async () => {
+    const user = userEvent.setup();
+    const { submissions, action } = recordingAction();
+    render(personal({ action }));
+
+    await user.click(
+      within(await openOptions(user, "Typeface")).getByRole("option", {
+        name: "IBM Plex",
+      }),
+    );
+    await user.click(
+      within(await openOptions(user, "Surface")).getByRole("option", {
+        name: "Frost",
+      }),
+    );
+    await chooseTheme(user, "Graphite");
+
+    await waitFor(() => {
+      expect(document.documentElement.getAttribute("data-font")).toBe("plex");
+    });
+    const root = document.querySelector("[data-cue-root]");
+    expect(root?.getAttribute("data-paint")).toBe("frost");
+    // The Look is still the organization's match, which graphite resolves to
+    // its own set.
+    expect(root?.getAttribute("data-style")).toBe("graphite");
+    expect(submissions).toEqual([]);
+  });
+
   test("previews the inherited value when an axis returns to inherit", async () => {
     const user = userEvent.setup();
     render(
       personal({
         snapshot: buildSnapshot({
-          user: { density: null, mode: null, theme: "terminal", version: 2 },
+          user: { ...inheriting, theme: "terminal", version: 2 },
         }),
       }),
     );
@@ -359,7 +519,10 @@ describe("personal appearance draft preview", () => {
         snapshot: buildSnapshot({
           user: {
             density: "large",
+            font: "dm",
+            look: "editorial",
             mode: "light",
+            paint: "grain",
             theme: "terminal",
             version: 7,
           },
@@ -368,10 +531,17 @@ describe("personal appearance draft preview", () => {
     );
 
     await user.click(
-      screen.getByRole("button", { name: "Reset to organization defaults" }),
+      screen.getByRole("button", { name: "Use organization defaults" }),
     );
 
-    for (const axis of ["Theme", "Density", "Mode"]) {
+    for (const axis of [
+      "Theme",
+      "Density",
+      "Mode",
+      "Typeface",
+      "Look",
+      "Surface",
+    ]) {
       expect(screen.getByRole("combobox", { name: axis })).toHaveTextContent(
         inheritLabel,
       );
@@ -388,7 +558,10 @@ describe("personal appearance draft preview", () => {
     expect(submissions[0]).toMatchObject({
       density: appearanceInheritValue,
       expectedVersion: "7",
+      font: appearanceInheritValue,
+      look: appearanceInheritValue,
       mode: appearanceInheritValue,
+      paint: appearanceInheritValue,
       theme: appearanceInheritValue,
     });
   });
@@ -437,7 +610,7 @@ describe("personal appearance preview state", () => {
     render(
       personal({
         snapshot: buildSnapshot({
-          user: { density: null, mode: null, theme: "terminal", version: 2 },
+          user: { ...inheriting, theme: "terminal", version: 2 },
         }),
       }),
     );
@@ -461,20 +634,21 @@ describe("personal appearance preview state", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
-  // Reset writes the draft to inherit on every axis. From a pristine inheriting
-  // form that changes nothing, and offering Apply there would be the same lie
-  // in the other direction.
-  test("stays quiet when reset changes nothing", async () => {
-    const user = userEvent.setup();
+  // Using the organization's defaults writes the draft to inherit on every
+  // axis. From a pristine inheriting form that changes nothing, so the control
+  // is not offered there, and neither is Apply.
+  test("offers no reset while nothing is your own", () => {
     render(personal());
 
-    await user.click(
-      screen.getByRole("button", { name: "Reset to organization defaults" }),
-    );
-
+    expect(
+      screen.getByRole("button", { name: "Use organization defaults" }),
+    ).toBeDisabled();
     expect(
       screen.queryByRole("button", { name: "Apply" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("You follow the organization default on every setting."),
+    ).toBeInTheDocument();
   });
 });
 
@@ -601,8 +775,15 @@ describe("personal appearance submission", () => {
     expect(submissions[0]).toEqual({
       density: appearanceInheritValue,
       expectedVersion: "0",
-      idempotencyKey: `${idempotencyNonce}:signal:${appearanceInheritValue}:${appearanceInheritValue}`,
+      font: appearanceInheritValue,
+      idempotencyKey: [
+        idempotencyNonce,
+        "signal",
+        ...Array(5).fill(appearanceInheritValue),
+      ].join(":"),
+      look: appearanceInheritValue,
       mode: appearanceInheritValue,
+      paint: appearanceInheritValue,
       renderContext: contextToken,
       returnTo: "/requests?view=inbox",
       theme: "signal",
@@ -719,11 +900,13 @@ describe("organization appearance defaults", () => {
         theme={organizationDefaults.theme}
       >
         <OrganizationAppearanceForm
-          canEdit
           contextToken={contextToken}
           defaults={{
             density: organizationDefaults.density,
+            font: organizationDefaults.font,
+            look: organizationDefaults.look,
             mode: organizationDefaults.mode,
+            paint: organizationDefaults.paint,
             theme: organizationDefaults.theme,
           }}
           idempotencyNonce={idempotencyNonce}
@@ -735,13 +918,50 @@ describe("organization appearance defaults", () => {
     );
   }
 
-  test("never offers inherit to an owner", async () => {
+  test("never offers inherit to an owner, and offers match first where a Look decides", async () => {
     const user = userEvent.setup();
     render(organization());
 
+    expect(
+      screen.getByRole("group", {
+        name: `Organization default · everyone in ${organizationName}`,
+      }),
+    ).toBeInTheDocument();
     expect(optionLabels(await openOptions(user, "Theme"))).toEqual(
       themeOptionLabels,
     );
+    await user.keyboard("{Escape}");
+    expect(optionLabels(await openOptions(user, "Typeface"))).toEqual([
+      "Match the theme (Geist)",
+      ...typefaceOptionLabels,
+    ]);
+  });
+
+  test("submits all six axes with the expected version (ruling 255)", async () => {
+    const user = userEvent.setup();
+    const { action, submissions } = recordingAction();
+    render(organization({ action }));
+
+    await chooseTheme(user, "Zine");
+    await user.click(
+      within(await openOptions(user, "Look")).getByRole("option", {
+        name: "Editorial",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+
+    await waitFor(() => {
+      expect(submissions).toHaveLength(1);
+    });
+    expect(submissions[0]).toMatchObject({
+      density: organizationDefaults.density,
+      expectedVersion: String(organizationDefaults.version),
+      font: "match",
+      look: "editorial",
+      mode: organizationDefaults.mode,
+      paint: "match",
+      theme: "zine",
+    });
   });
 
   test("submits the tenant triple with its expected version", async () => {
@@ -763,15 +983,5 @@ describe("organization appearance defaults", () => {
       renderContext: contextToken,
       theme: organizationDefaults.theme,
     });
-  });
-
-  test("shows a member the effective defaults without any control", () => {
-    render(organization({ canEdit: false, contextToken: "" }));
-
-    expect(screen.queryByRole("combobox")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Apply" })).toBeNull();
-    expect(screen.getByText("CUE++")).toBeInTheDocument();
-    expect(screen.getByText("Normal")).toBeInTheDocument();
-    expect(screen.getByText("Dark")).toBeInTheDocument();
   });
 });

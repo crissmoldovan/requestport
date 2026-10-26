@@ -10,9 +10,10 @@ import {
   Select,
 } from "@cueplusplus/ui/forms";
 import { TwoStepButton } from "@cueplusplus/ui/instruments";
-import { Disclosure, Stack } from "@cueplusplus/ui/layout";
+import { Stack } from "@cueplusplus/ui/layout";
 import { Button, Chip } from "@cueplusplus/ui/primitives";
 import type { OrganizationProject, RoutingRule } from "@requestport/domain";
+import { Plus } from "lucide-react";
 import { type ReactNode, useActionState, useRef } from "react";
 
 import {
@@ -27,6 +28,11 @@ import {
   actionBannerMessage,
   actionFieldIssues,
 } from "../lib/action-field-issues.js";
+import {
+  DialogCancel,
+  FormDialog,
+  useReportSuccess,
+} from "./administration-forms.js";
 
 /**
  * Routing policy, on native CUE++ controls.
@@ -39,6 +45,10 @@ import {
  *
  * The tester's answer is text plus a tone chip, never colour alone, and a
  * denial is announced as an alert because it is the answer the reader came for.
+ *
+ * Adding a rule and editing one each open in a dialog (ruling 259): the page's
+ * "Add rule" action and the row's "Edit". The dialog closes when the write
+ * succeeds and a toast confirms it; a refusal stays on the form.
  */
 
 type AgentOption = { id: string; displayName: string };
@@ -242,19 +252,25 @@ function RuleRoute({
 
 export function CreateRoutingRuleForm({
   agents,
+  cancel,
   idempotencyKey,
   lanes,
+  onSuccess,
   projects,
 }: {
   agents: AgentOption[];
+  /** The dialog's Cancel, when the form is opened in one. */
+  cancel?: ReactNode;
   idempotencyKey: string;
   lanes: LaneOption[];
+  onSuccess?: (message: string) => void;
   projects: OrganizationProject[];
 }) {
   const [state, action, pending] = useActionState(
     createRoutingRuleAction,
     initialRoutingActionState,
   );
+  useReportSuccess(state, onSuccess);
   return (
     <form action={action}>
       <Stack direction="column" gap={4}>
@@ -291,11 +307,40 @@ export function CreateRoutingRuleForm({
           options={agentOptions(agents)}
         />
         <Status fields={ruleFields} state={state} />
-        <Button disabled={pending} size="sm" type="submit" variant="primary">
-          {pending ? "Adding…" : "Add rule"}
-        </Button>
+        <Stack direction="row" gap={2} justify="end" wrap>
+          {cancel}
+          <Button disabled={pending} size="sm" type="submit" variant="primary">
+            {pending ? "Creating…" : "Create rule"}
+          </Button>
+        </Stack>
       </Stack>
     </form>
+  );
+}
+
+/** The routing page's one primary action: a new rule, in a dialog. */
+export function AddRoutingRuleDialog(props: {
+  agents: AgentOption[];
+  idempotencyKey: string;
+  lanes: LaneOption[];
+  projects: OrganizationProject[];
+}) {
+  return (
+    <FormDialog
+      description="Use deny rules for hard boundaries and allow rules for explicit exceptions."
+      icon={Plus}
+      title="Add a routing rule"
+      trigger="Add rule"
+      width="lg"
+    >
+      {(done) => (
+        <CreateRoutingRuleForm
+          {...props}
+          cancel={<DialogCancel />}
+          onSuccess={done}
+        />
+      )}
+    </FormDialog>
   );
 }
 
@@ -335,14 +380,19 @@ export function DisableRoutingRuleForm({
 
 export function UpdateRoutingRuleForm({
   agents,
+  cancel,
   idempotencyKey,
   lanes,
+  onSuccess,
   projects,
   rule,
 }: {
   agents: AgentOption[];
+  /** The dialog's Cancel, when the form is opened in one. */
+  cancel?: ReactNode;
   idempotencyKey: string;
   lanes: LaneOption[];
+  onSuccess?: (message: string) => void;
   projects: OrganizationProject[];
   rule: RoutingRule;
 }) {
@@ -350,62 +400,95 @@ export function UpdateRoutingRuleForm({
     updateRoutingRuleAction,
     initialRoutingActionState,
   );
+  useReportSuccess(state, onSuccess);
   return (
-    <Disclosure label="Edit">
-      <form action={action}>
-        <Stack direction="column" gap={4}>
-          <input name="ruleId" type="hidden" value={rule.id} />
-          <input name="expectedVersion" type="hidden" value={rule.version} />
-          <input name="idempotencyKey" type="hidden" value={idempotencyKey} />
-          <RuleRoute
-            decision={rule.decision}
-            projects={projects}
-            sourceProjectId={rule.sourceProjectId}
-            state={state}
-            targetProjectId={rule.targetProjectId}
-          />
-          <ConstraintGroup
-            label="Request types"
-            name="requestTypes"
-            options={constraintOptions(requestTypeOptions)}
-            selected={rule.requestTypes}
-          />
-          <ConstraintGroup
-            label="Priorities"
-            name="priorities"
-            options={constraintOptions(priorityOptions)}
-            selected={rule.priorities}
-          />
-          <ConstraintGroup
-            label="Human roles"
-            name="humanRoles"
-            options={constraintOptions(humanRoleOptions)}
-            selected={rule.humanRoles}
-          />
-          <ConstraintGroup
-            label="Lanes"
-            name="laneIds"
-            options={laneOptions(lanes)}
-            selected={rule.laneIds}
-          />
-          <ConstraintGroup
-            label="Agent principals"
-            name="agentPrincipalIds"
-            options={agentOptions(agents)}
-            selected={rule.agentPrincipalIds}
-          />
-          <Status fields={ruleFields} state={state} />
-          <Button
-            disabled={pending}
-            size="sm"
-            type="submit"
-            variant="secondary"
-          >
+    <form action={action}>
+      <Stack direction="column" gap={4}>
+        <input name="ruleId" type="hidden" value={rule.id} />
+        <input name="expectedVersion" type="hidden" value={rule.version} />
+        <input name="idempotencyKey" type="hidden" value={idempotencyKey} />
+        <RuleRoute
+          decision={rule.decision}
+          projects={projects}
+          sourceProjectId={rule.sourceProjectId}
+          state={state}
+          targetProjectId={rule.targetProjectId}
+        />
+        <ConstraintGroup
+          label="Request types"
+          name="requestTypes"
+          options={constraintOptions(requestTypeOptions)}
+          selected={rule.requestTypes}
+        />
+        <ConstraintGroup
+          label="Priorities"
+          name="priorities"
+          options={constraintOptions(priorityOptions)}
+          selected={rule.priorities}
+        />
+        <ConstraintGroup
+          label="Human roles"
+          name="humanRoles"
+          options={constraintOptions(humanRoleOptions)}
+          selected={rule.humanRoles}
+        />
+        <ConstraintGroup
+          label="Lanes"
+          name="laneIds"
+          options={laneOptions(lanes)}
+          selected={rule.laneIds}
+        />
+        <ConstraintGroup
+          label="Agent principals"
+          name="agentPrincipalIds"
+          options={agentOptions(agents)}
+          selected={rule.agentPrincipalIds}
+        />
+        <Status fields={ruleFields} state={state} />
+        <Stack direction="row" gap={2} justify="end" wrap>
+          {cancel}
+          <Button disabled={pending} size="sm" type="submit" variant="primary">
             {pending ? "Saving…" : "Save rule"}
           </Button>
         </Stack>
-      </form>
-    </Disclosure>
+      </Stack>
+    </form>
+  );
+}
+
+/**
+ * A rule's edit form, opened from its row. The trigger reads "Edit" and is
+ * named after the rule's two ends, so a table of rules is not a column of
+ * identical names.
+ */
+export function EditRoutingRuleDialog({
+  label,
+  ...props
+}: {
+  agents: AgentOption[];
+  idempotencyKey: string;
+  /** "Source to target", for the trigger's accessible name. */
+  label: string;
+  lanes: LaneOption[];
+  projects: OrganizationProject[];
+  rule: RoutingRule;
+}) {
+  return (
+    <FormDialog
+      title="Edit rule"
+      trigger="Edit"
+      triggerLabel={`Edit rule ${label}`}
+      triggerVariant="secondary"
+      width="lg"
+    >
+      {(done) => (
+        <UpdateRoutingRuleForm
+          {...props}
+          cancel={<DialogCancel />}
+          onSuccess={done}
+        />
+      )}
+    </FormDialog>
   );
 }
 

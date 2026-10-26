@@ -16,6 +16,7 @@ import {
 } from "../fixtures/auth.js";
 import { test } from "../fixtures/engine.ts";
 import {
+  accountMenuPanel,
   chooseOption,
   chooseOrganization,
   expectOrganizationChoices,
@@ -28,47 +29,64 @@ const viewports = [1440, 1024, 768, 390] as const;
 const longOrganizationName = "W".repeat(120);
 const navigationHrefs = [
   "/",
-  "/requests",
   "/requests?view=inbox",
   "/requests?view=my_work",
+  "/requests",
   "/questions",
-  "/activity",
-  "/settings/projects",
-  "/settings/organization",
-  "/settings/members",
-  "/settings/routing",
-  "/settings/operations",
-  "/settings/operators",
   "/agents",
   "/webhooks",
   "/slack",
   "/imports",
+  "/activity",
+  "/settings/organization",
 ] as const;
+
+/**
+ * The settings section navigation's links, in order (ruling 256). Every
+ * settings page draws them, from `app/(app)/settings/layout.tsx`, and the
+ * primary map's one Settings entry is current on all of them.
+ * `primary-navigation.test.tsx` holds both lists equal to the register.
+ */
+const settingsHrefs = [
+  "/settings/organization",
+  "/settings/members",
+  "/settings/projects",
+  "/settings/routing",
+  "/settings/operators",
+  "/settings/operations",
+  "/settings/appearance",
+] as const;
+
+/** The primary map's entry for every settings page. */
+const settingsHome = "/settings/organization";
 
 /**
  * The slots the migrated shell emits.
  *
- * The console is CUE++ `AppShell`, `AppBar` and `Sidebar` now, so its parts are
- * addressed by the `data-slot` attributes the package publishes and by the
- * roles they announce. The eleven recipe classes this suite used to measure —
- * `.top-bar`, `.desktop-rail`, `.mobile-navigation`, `.app-content` and the
- * rest — went with the stylesheet Task 11 replaced, and nothing had written
- * them onto an element for some time before that: every one of those locators
- * matched zero elements and auto-waited to the timeout, so the whole suite
- * reported "the page never loaded".
+ * The console is CUE++ `AppShell` (its `Bar` included) and `Sidebar` now, so
+ * its parts are addressed by the `data-slot` attributes the package publishes
+ * and by the roles they announce. The eleven recipe classes this suite used to
+ * measure — `.top-bar`, `.desktop-rail`, `.mobile-navigation`, `.app-content`
+ * and the rest — went with the stylesheet Task 11 replaced, and nothing had
+ * written them onto an element for some time before that: every one of those
+ * locators matched zero elements and auto-waited to the timeout, so the whole
+ * suite reported "the page never loaded".
  */
-const appBar = '[data-slot="app-bar"]';
+const appBar = '[data-slot="app-shell-bar"]';
 const shellSidebar = '[data-slot="app-shell-sidebar"]';
 const shellScroller = '[data-slot="app-shell-scroller"]';
 const shellNavTrigger = '[data-slot="app-shell-nav-trigger"]';
 const pageShell = '[data-slot="page-shell"]';
 /**
- * A choice control inside the page, not the organization switcher in the app
- * bar: both are the same CUE++ `Select`, and only the page's own controls are
- * what an administration measurement is about.
+ * A choice control and a text control in the form a settings page opened, not
+ * the organization switcher in the app bar: both are the same CUE++ `Select`,
+ * and only the form's own controls are what an administration measurement is
+ * about. The members page opens its invitation in a dialog from the header
+ * (ruling 259), and the dialog is portalled out of `<main>`, so the form's
+ * controls are addressed in it.
  */
-const pageSelectTrigger = 'main [data-slot="select-trigger"]';
-const pageInput = 'main [data-slot="input"]';
+const dialogSelectTrigger = '[role="dialog"] [data-slot="select-trigger"]';
+const dialogInput = '[role="dialog"] [data-slot="input"]';
 const sidebarItem = '[data-slot="sidebar-item"]';
 
 /**
@@ -97,12 +115,20 @@ const administrationMeasure = 864;
  * carries once it is applied.
  */
 const densityOptions = {
+  compact: "Compact",
   large: "Large",
   normal: "Normal",
   "ultra-compact": "Ultra compact",
 } as const;
 
-const inheritedDensityOption = "Organization default";
+/**
+ * The panel's first density option: the organization's own value, named
+ * (ruling 255), so it reads "Organization default: Normal" and not a bare
+ * "Organization default".
+ */
+function inheritedDensityOption(density: string | null) {
+  return `Organization default: ${densityOptions[density as keyof typeof densityOptions]}`;
+}
 
 async function expectNoPageOverflow(page: Page) {
   expect(
@@ -255,14 +281,16 @@ function accountMenuTrigger(page: Page) {
 
 async function openAccountMenu(page: Page) {
   await accountMenuTrigger(page).click();
-  const panel = page.getByRole("dialog");
+  // The panel by what it holds: a settings write's confirmation toast is a
+  // `dialog` too, and it can still be up when the menu opens.
+  const panel = accountMenuPanel(page);
   await expect(panel).toBeVisible();
   return panel;
 }
 
 async function closeAccountMenu(page: Page) {
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(accountMenuPanel(page)).toHaveCount(0);
 }
 
 async function expectAccountMenuDensity(page: Page, width: number) {
@@ -310,6 +338,31 @@ async function signOutFromAccountMenu(page: Page) {
   await page.getByRole("button", { name: "Sign out" }).click();
 }
 
+/**
+ * Open the members page's invitation, and hand back the dialog it opens in.
+ *
+ * Pressed until the dialog is open: between a document's markup arriving and
+ * React attaching to it the trigger swallows a click, so the press is retried
+ * exactly as the account menu's is. Only while the trigger is not expanded:
+ * the dialog is not modal, so the trigger stays pressable, and a second press
+ * closes it.
+ */
+async function openInvitation(page: Page): Promise<Locator> {
+  const dialog = page.getByRole("dialog", { name: "Invite member" });
+  const trigger = page.getByRole("button", {
+    exact: true,
+    name: "Invite member",
+  });
+  await expect(async () => {
+    if ((await trigger.getAttribute("aria-expanded")) !== "true") {
+      await trigger.click();
+    }
+    await expect(dialog).toBeVisible({ timeout: 2_000 });
+  }).toPass({ intervals: [250, 500, 1_000], timeout: 30_000 });
+
+  return dialog;
+}
+
 async function expectActionCode(page: Page, code: string) {
   await expect(page.locator(`[data-code="${code}"]`)).toBeVisible();
 }
@@ -324,10 +377,22 @@ async function expectActionCode(page: Page, code: string) {
  * above it. So the landmark resolves uniquely at every width, which is what
  * lets one set of assertions cover both.
  */
+/**
+ * The navigation drawer, found by the landmark it holds. A bare
+ * `getByRole("dialog")` also matches a toast: Base UI's `Toast.Root` has the
+ * dialog role, and its live viewport is never hidden behind a modal, so right
+ * after a write's toast the bare locator matches two elements.
+ */
+function navigationDrawer(page: Page): Locator {
+  return page
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("navigation", { name: "Primary" }) });
+}
+
 async function showNavigation(page: Page, width: number): Promise<Locator> {
   if (width < navigationDrawerBelow) {
     await page.getByRole("button", { name: "Open navigation" }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(navigationDrawer(page)).toBeVisible();
   }
 
   const navigation = page.getByRole("navigation", { name: "Primary" });
@@ -339,7 +404,72 @@ async function showNavigation(page: Page, width: number): Promise<Locator> {
 async function hideNavigation(page: Page, width: number) {
   if (width >= navigationDrawerBelow) return;
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(navigationDrawer(page)).toHaveCount(0);
+}
+
+/**
+ * The primary map's current row for a page. Settings stands for every page
+ * under `/settings` (ruling 256), so a settings page marks it rather than a
+ * row of its own.
+ */
+function primaryHref(expectedHref: string) {
+  return expectedHref.startsWith("/settings/") ? settingsHome : expectedHref;
+}
+
+/**
+ * The settings section navigation, on every settings page and on no other.
+ *
+ * Its seven links in order, the page's own one current, and where it sits:
+ * beside the page's column where the work area holds both on one line, above
+ * it where it does not. Which of the two a middle width gets depends on the
+ * density's gutters, so only the ends are pinned: 390 cannot hold both and
+ * stacks, 1440 holds both side by side. Read from the boxes rather than the
+ * viewport, because a page scrolled by an earlier step still has its
+ * navigation above it, out of view.
+ */
+async function expectSettingsNavigation(
+  page: Page,
+  width: number,
+  expectedHref: string,
+) {
+  const sections = page.getByRole("navigation", {
+    exact: true,
+    name: "Settings",
+  });
+  if (!expectedHref.startsWith("/settings/")) {
+    await expect(sections).toHaveCount(0);
+    return;
+  }
+
+  await expect(sections).toBeAttached();
+  const rows = sections.locator(sidebarItem);
+  await expect(rows).toHaveCount(settingsHrefs.length);
+  expect(
+    await rows.evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute("href")),
+    ),
+  ).toEqual(settingsHrefs);
+  const current = sections.locator('[aria-current="page"]');
+  await expect(current).toHaveCount(1);
+  await expect(current).toHaveAttribute("href", expectedHref);
+
+  const navigation = await sections.boundingBox();
+  const column = await page.locator(pageShell).first().boundingBox();
+  expect(navigation).not.toBeNull();
+  expect(column).not.toBeNull();
+  if (!navigation || !column) return;
+
+  const stacked = navigation.y + navigation.height <= column.y + 1;
+  const beside = navigation.x + navigation.width <= column.x + 1;
+  expect({ beside, stacked, width }).toEqual(
+    width === 390
+      ? { beside: false, stacked: true, width }
+      : width === 1440
+        ? { beside: true, stacked: false, width }
+        : stacked
+          ? { beside: false, stacked: true, width }
+          : { beside: true, stacked: false, width },
+  );
 }
 
 /**
@@ -359,24 +489,29 @@ async function expectShellDensity(
   const controlHeight = await cueControlHeight(page, "sm");
   const iconSize = await cueLength(page, "--cue-icon-md");
 
+  // `AppShell.Bar` is one rung of the chrome ladder tall: the title bar's.
   expect(await computedPixels(page, appBar, "height")).toBe(
-    await cueLength(page, "--cue-chrome-toolbar"),
+    await cueLength(page, "--cue-chrome-titlebar"),
   );
   await expectElementWithinViewport(page, appBar, width);
 
   // Every control the bar carries stays inside the viewport, not merely inside
   // the bar's own box. The switcher renders an organization name, a name is
   // arbitrary text, and this journey deliberately uses a 120-character one: with
-  // no measure on the control the trigger grew to fit it and pushed the search,
-  // the new-request action and the account menu off a frame that clips rather
-  // than scrolls — reachable by nothing, and visible as nothing until a click on
-  // the account menu waited out the whole test budget. Containment is asserted
-  // before anything is clicked, so a regression fails here, in ten seconds, with
-  // the numbers in the message.
+  // no measure on the control the trigger grew to fit it and pushed the search
+  // and the account menu off a frame that clips rather than scrolls — reachable
+  // by nothing, and visible as nothing until a click on the account menu waited
+  // out the whole test budget. Containment is asserted before anything is
+  // clicked, so a regression fails here, in ten seconds, with the numbers in
+  // the message.
+  //
+  // Ruling 256: New request left the bar and stays in the Requests header.
+  await expect(
+    page.getByRole("banner").getByRole("link", { name: "New request" }),
+  ).toHaveCount(0);
   for (const control of [
     organizationSwitcher(page),
     page.getByRole("link", { name: /^Search or run a command/u }),
-    page.getByRole("link", { name: "New request" }),
     accountMenuTrigger(page),
   ]) {
     await expectLocatorWithinViewport(control, width);
@@ -416,7 +551,7 @@ async function expectShellDensity(
 
   const current = navigation.locator('[aria-current="page"]');
   await expect(current).toHaveCount(1);
-  await expect(current).toHaveAttribute("href", expectedHref);
+  await expect(current).toHaveAttribute("href", primaryHref(expectedHref));
 
   const icons = navigation.locator(`${sidebarItem} svg`);
   await expect(icons).toHaveCount(navigationHrefs.length);
@@ -431,6 +566,7 @@ async function expectShellDensity(
     await expectLocatorWithinViewport(rows.nth(index), width);
   }
   await hideNavigation(page, width);
+  await expectSettingsNavigation(page, width, expectedHref);
 
   await expectAccountMenuDensity(page, width);
   await closeAccountMenu(page);
@@ -509,12 +645,13 @@ async function expectCurrentNavigation(
   const current = navigation.locator('[aria-current="page"]');
 
   await expect(current).toHaveCount(1);
-  await expect(current).toHaveAttribute("href", expectedHref);
+  await expect(current).toHaveAttribute("href", primaryHref(expectedHref));
   await expect(navigation.locator('[aria-disabled="true"]')).toHaveCount(0);
   await expect(navigation.locator(`${sidebarItem} svg`)).toHaveCount(
     navigationHrefs.length,
   );
   await hideNavigation(page, width);
+  await expectSettingsNavigation(page, width, expectedHref);
 }
 
 async function captureState(
@@ -526,6 +663,23 @@ async function captureState(
   for (const width of viewports) {
     await capture(page, testInfo, name, width);
     await expectCurrentNavigation(page, width, expectedHref);
+    await expect(organizationSwitcher(page)).toBeVisible();
+  }
+}
+
+/**
+ * A state drawn inside an open form dialog. The dialog's backdrop covers the
+ * page, so the navigation cannot be opened from here, and the captures taken
+ * with no dialog open on either side already hold it; this holds what the
+ * dialog adds: the screenshot, and no page overflow at every width.
+ */
+async function captureDialogState(
+  page: Page,
+  testInfo: TestInfo,
+  name: string,
+) {
+  for (const width of viewports) {
+    await capture(page, testInfo, name, width);
     await expect(organizationSwitcher(page)).toBeVisible();
   }
 }
@@ -655,7 +809,7 @@ async function setAccountDensity(
   option: string,
   expected: string | null,
 ) {
-  const panel = page.getByRole("dialog");
+  const panel = accountMenuPanel(page);
   // An accepted write lands a *new document*, and between the server's markup
   // arriving and React attaching to it the trigger is a button that swallows a
   // click and announces nothing about having done so. Nothing rendered on the
@@ -671,7 +825,7 @@ async function setAccountDensity(
 
   // An accepted write ends in a full-document navigation, so the panel leaves
   // with the document rather than being dismissed.
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(accountMenuPanel(page)).toHaveCount(0);
   // Exact, because the page also draws an "Active members" section heading.
   await expect(
     page.getByRole("heading", { exact: true, name: "Members" }),
@@ -801,9 +955,11 @@ test("renders compact SupBuddy density across authenticated widths", async ({
     await page.setViewportSize({ height: 900, width: 390 });
     // The migrated control wears `text-(length:--cue-text-ui)`, so the token
     // the document resolves is the number to hold it to.
+    // The header's one primary action opens the project form in a dialog
+    // (ruling 259), so it is a button now rather than a link to the form.
     expect(
       await page
-        .getByRole("link", { name: "Create project" })
+        .getByRole("button", { name: "New project" })
         .first()
         .evaluate((element) =>
           Number.parseFloat(getComputedStyle(element).fontSize),
@@ -899,18 +1055,19 @@ test("renders compact SupBuddy density across authenticated widths", async ({
       "/settings/members",
     );
 
+    let invitation = await openInvitation(page);
     for (const width of [768, 390] as const) {
       await page.setViewportSize({ height: 900, width });
       // The choice controls ride the same recessed chassis as the inputs, so
       // the rung they hold is the package's own, not a pinned pixel count.
-      expect(await computedPixels(page, pageSelectTrigger, "height")).toBe(
+      expect(await computedPixels(page, dialogSelectTrigger, "height")).toBe(
         await cueControlHeight(page, "sm"),
       );
       // "A select lines up with the Inputs beside it" is the package's own
-      // contract for the control, and the input on this page is the only thing
+      // contract for the control, and the input in this form is the only thing
       // that can answer whether it still holds at this width.
-      expect(await computedPixels(page, pageSelectTrigger, "fontSize")).toBe(
-        await computedPixels(page, pageInput, "fontSize"),
+      expect(await computedPixels(page, dialogSelectTrigger, "fontSize")).toBe(
+        await computedPixels(page, dialogInput, "fontSize"),
       );
       // Lining up with each other is not enough on its own: both readings come
       // from the same document at the same theme and density, so anything that
@@ -925,41 +1082,40 @@ test("renders compact SupBuddy density across authenticated widths", async ({
       // this trigger, so both controls inherited `--cue-text-ui` from the
       // chrome around them instead. Retiring that stylesheet handed the rung
       // back to the package, and this assertion is what says so.
-      expect(await computedPixels(page, pageSelectTrigger, "fontSize")).toBe(
+      expect(await computedPixels(page, dialogSelectTrigger, "fontSize")).toBe(
         await cueLength(page, "--cue-text-label"),
       );
     }
 
-    await onScreen(page.getByLabel("Email address")).fill("member@invalid");
-    await chooseOption(page, "Role", "Member");
-    await page.getByRole("button", { name: "Invite member" }).click();
+    await invitation.getByLabel("Email address").fill("member@invalid");
+    await chooseOption(page, "Role", "Member", invitation);
+    await invitation.getByRole("button", { name: "Send invitation" }).click();
     await expectActionCode(page, "validation_failed");
-    await captureState(
-      page,
-      testInfo,
-      "members-field-error",
-      "/settings/members",
-    );
+    await captureDialogState(page, testInfo, "members-field-error");
 
     await page.reload();
-    await onScreen(page.getByLabel("Email address")).fill(scenario.memberEmail);
-    await chooseOption(page, "Role", "Member");
+    invitation = await openInvitation(page);
+    await invitation.getByLabel("Email address").fill(scenario.memberEmail);
+    await chooseOption(page, "Role", "Member", invitation);
     const invitationGate = await holdNextPost(page);
-    await page.getByRole("button", { name: "Invite member" }).click();
+    await invitation.getByRole("button", { name: "Send invitation" }).click();
     await invitationGate.observed;
     await expect(
-      page.getByRole("button", { name: "Inviting…" }),
+      invitation.getByRole("button", { name: "Sending…" }),
     ).toBeDisabled();
-    await captureState(
-      page,
-      testInfo,
-      "members-invite-pending",
-      "/settings/members",
-    );
+    await captureDialogState(page, testInfo, "members-invite-pending");
     await invitationGate.release();
+    // A sent invitation closes the dialog and is confirmed in a toast. The
+    // dialog by its name: the toast is a Base UI `Toast.Root`, whose role is
+    // `dialog` too, and it is on screen now.
     await expect(
-      page.getByText("Invitation created and queued for email."),
+      page
+        .getByRole("region", { name: "Notifications" })
+        .getByText("Invitation created and queued for email."),
     ).toBeVisible();
+    await expect(
+      page.getByRole("dialog", { name: "Invite member" }),
+    ).toHaveCount(0);
     await captureState(
       page,
       testInfo,
@@ -974,16 +1130,18 @@ test("renders compact SupBuddy density across authenticated widths", async ({
       ).toBeLessThanOrEqual(administrationMeasure);
     }
 
-    await onScreen(page.getByLabel("Email address")).fill(scenario.memberEmail);
-    await chooseOption(page, "Role", "Admin");
-    await page.getByRole("button", { name: "Invite member" }).click();
+    invitation = await openInvitation(page);
+    await invitation.getByLabel("Email address").fill(scenario.memberEmail);
+    await chooseOption(page, "Role", "Admin", invitation);
+    await invitation.getByRole("button", { name: "Send invitation" }).click();
     await expectActionCode(page, "conflict");
-    await captureState(
-      page,
-      testInfo,
-      "members-action-error",
-      "/settings/members",
-    );
+    await captureDialogState(page, testInfo, "members-action-error");
+    // A refusal keeps the dialog open; it is closed before the account menu
+    // is opened over the page.
+    await page.keyboard.press("Escape");
+    await expect(
+      page.getByRole("dialog", { name: "Invite member" }),
+    ).toHaveCount(0);
 
     await captureUserPopover(page, testInfo);
 
@@ -1002,7 +1160,7 @@ test("renders compact SupBuddy density across authenticated widths", async ({
     await setAccountDensity(page, densityOptions[chosen], chosen);
     rhythms.push(await expectOnePageColumn(page));
 
-    await setAccountDensity(page, inheritedDensityOption, inherited);
+    await setAccountDensity(page, inheritedDensityOption(inherited), inherited);
     rhythms.push(await expectOnePageColumn(page));
 
     // Two rungs, not one measured twice.
@@ -1015,11 +1173,14 @@ test("renders compact SupBuddy density across authenticated widths", async ({
       await organizationTheme(scenario.bootstrapOrganizationSlug),
     );
     await page.goto("/settings/members");
-    await onScreen(page.getByLabel("Email address")).fill(scenario.memberEmail);
-    await chooseOption(page, "Role", "Member");
-    await page.getByRole("button", { name: "Invite member" }).click();
+    invitation = await openInvitation(page);
+    await invitation.getByLabel("Email address").fill(scenario.memberEmail);
+    await chooseOption(page, "Role", "Member", invitation);
+    await invitation.getByRole("button", { name: "Send invitation" }).click();
     await expect(
-      page.getByText("Invitation created and queued for email."),
+      page
+        .getByRole("region", { name: "Notifications" })
+        .getByText("Invitation created and queued for email."),
     ).toBeVisible();
 
     await signOutFromAccountMenu(page);
@@ -1035,9 +1196,9 @@ test("renders compact SupBuddy density across authenticated widths", async ({
     );
 
     await page.goto("/settings/projects");
-    await expect(
-      page.getByRole("link", { name: "Create project" }),
-    ).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "New project" })).toHaveCount(
+      0,
+    );
     await captureState(
       page,
       testInfo,

@@ -140,6 +140,7 @@ export function createNotificationRepository(database: Database) {
         "request.state_changed.v1",
         "request.completion_reported.v1",
         "request.verified.v1",
+        "request.assigned.v1",
       ];
       const [record] = await database
         .select({ event: domainEvents, request: requests, project: projects })
@@ -205,9 +206,35 @@ export function createNotificationRepository(database: Database) {
             eq(organizationMembers.status, "active"),
           ),
         );
-      const actor = record.event.actor as { type?: unknown; id?: unknown };
+      const actor = record.event.actor as {
+        type?: unknown;
+        id?: unknown;
+        delegatedBy?: { id?: unknown };
+      };
+      // An assignment (ruling 264) emails the person it names alone, and
+      // only while the request is still theirs: an event the worker reaches
+      // after a reassignment sends nothing, so only the latest assignee is
+      // told. The assigner is never told — the person who assigned, or the
+      // person an agent assigned for — and an unassignment names nobody.
+      const isAssignment = record.event.type === "request.assigned.v1";
+      const assigned = isAssignment
+        ? ((
+            record.event.data as {
+              assignee?: { type?: unknown; id?: unknown } | null;
+            }
+          ).assignee ?? null)
+        : null;
       const recipients = members.filter((member) => {
         if (actor.type === "user" && actor.id === member.userId) return false;
+        if (isAssignment) {
+          return (
+            assigned?.type === "user" &&
+            assigned.id === member.userId &&
+            record.request.assigneeType === "user" &&
+            record.request.assigneeId === member.userId &&
+            actor.delegatedBy?.id !== member.userId
+          );
+        }
         return (
           (record.request.reporterType === "user" &&
             record.request.reporterId === member.userId) ||
@@ -243,9 +270,13 @@ export function createNotificationRepository(database: Database) {
             "RequestPort member",
             160,
           ),
-          reason: sensitive
-            ? "Sensitive request activity was recorded. Open RequestPort to review it."
-            : `${record.event.type.replace(/\.v\d+$/u, "").replaceAll(".", " ")} was recorded.`,
+          reason: isAssignment
+            ? sensitive
+              ? "A sensitive request was assigned to you. Open RequestPort to review it."
+              : "This request was assigned to you."
+            : sensitive
+              ? "Sensitive request activity was recorded. Open RequestPort to review it."
+              : `${record.event.type.replace(/\.v\d+$/u, "").replaceAll(".", " ")} was recorded.`,
         });
         const [intent] = await database
           .insert(notificationIntents)
@@ -292,6 +323,12 @@ export function createNotificationRepository(database: Database) {
           and(
             eq(domainEvents.id, eventId),
             eq(domainEvents.type, "organization.invitation_created.v1"),
+            // Only the invitation's current issue sends. Every emitter stamps
+            // the event with the invitation's version at the time, and a
+            // renewal or a resend raises the version, so an earlier issue's
+            // event that reaches the worker late, after a resend, sends
+            // nothing rather than a second email beside the resend's.
+            eq(domainEvents.aggregateVersion, invitations.version),
             isNull(invitations.acceptedAt),
             isNull(invitations.revokedAt),
             sql`${invitations.expiresAt} > clock_timestamp()`,

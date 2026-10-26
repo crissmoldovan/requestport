@@ -605,29 +605,53 @@ describe("organization appearance defaults", () => {
     expect(row).toBeGreaterThan(membership);
   });
 
-  test.each(["admin", "member"] as const)(
-    "denies a %s who is not an owner",
-    async (role) => {
-      const scoped = new InMemoryAppearanceEnvironment({
-        activeSessions: [{ userId, credentialId: sessionId }],
-        organizations: [{ id: organizationId }],
-        memberships: [{ organizationId, userId, role }],
-      });
+  // Ruling 255, item 7: "If I am the org administrator, that will apply to
+  // that organisation." An admin changes the defaults as an owner does.
+  test("lets an admin change the defaults, recorded as the admin who did (ruling 255)", async () => {
+    const scoped = new InMemoryAppearanceEnvironment({
+      activeSessions: [{ userId, credentialId: sessionId }],
+      organizations: [{ id: organizationId }],
+      memberships: [{ organizationId, userId, role: "admin" }],
+    });
 
-      await expect(
-        tenantBus(scoped).execute({
-          name: appearanceOrganizationCommandName,
-          input: organizationInput(),
-          context: tenantContext(),
-          meta: { idempotencyKey: key(`org-role-${role}`), expectedVersion: 1 },
-        }),
-      ).rejects.toMatchObject({
-        code: "forbidden",
-        message: "Organization appearance ownership is required",
-      });
-      expect(scoped.organizationRow(organizationId)?.version).toBe(1);
-    },
-  );
+    await expect(
+      tenantBus(scoped).execute({
+        name: appearanceOrganizationCommandName,
+        input: organizationInput(),
+        context: tenantContext(),
+        meta: { idempotencyKey: key("org-role-admin"), expectedVersion: 1 },
+      }),
+    ).resolves.toMatchObject({ version: 2, theme: "cue", mode: "dark" });
+    expect(scoped.organizationRow(organizationId)).toMatchObject({
+      version: 2,
+      lastUpdatedByUserId: userId,
+    });
+    expect(scoped.events).toHaveLength(1);
+    expect(scoped.events[0]?.actor).toEqual({ type: "user", id: userId });
+  });
+
+  test("denies a member, who is neither an owner nor an admin", async () => {
+    const scoped = new InMemoryAppearanceEnvironment({
+      activeSessions: [{ userId, credentialId: sessionId }],
+      organizations: [{ id: organizationId }],
+      memberships: [{ organizationId, userId, role: "member" }],
+    });
+
+    await expect(
+      tenantBus(scoped).execute({
+        name: appearanceOrganizationCommandName,
+        input: organizationInput(),
+        context: tenantContext(),
+        meta: { idempotencyKey: key("org-role-member"), expectedVersion: 1 },
+      }),
+    ).rejects.toMatchObject({
+      code: "forbidden",
+      message:
+        "An owner or admin is required to change the organization's appearance",
+    });
+    expect(scoped.organizationRow(organizationId)?.version).toBe(1);
+    expect(scoped.events).toEqual([]);
+  });
 
   test.each([
     ["suspended organization", "suspend"],

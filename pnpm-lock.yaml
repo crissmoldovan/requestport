@@ -101,36 +101,96 @@ importers:
       '@base-ui/react':
         specifier: 1.7.0
         version: 1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@cueplusplus/theme-command':
+        specifier: 1.0.2
+        version: 1.0.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
       '@cueplusplus/theme-cue':
-        specifier: 1.0.3
-        version: 1.0.3(@cueplusplus/theme-base@1.0.3(@cueplusplus/tokens@0.14.1))
+        specifier: 1.1.2
+        version: 1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
       '@cueplusplus/theme-dusk':
-        specifier: 1.0.3
-        version: 1.0.3(@cueplusplus/theme-base@1.0.3(@cueplusplus/tokens@0.14.1))
+        specifier: 1.1.2
+        version: 1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
+      '@cueplusplus/theme-graphite':
+        specifier: 1.0.2
+        version: 1.0.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
       '@cueplusplus/theme-hivehub':
-        specifier: 1.0.3
-        version: 1.0.3(@cueplusplus/theme-base@1.0.3(@cueplusplus/tokens@0.14.1))
+        specifier: 1.1.2
+        version: 1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
+      '@cueplusplus/theme-kiln':
+        specifier: 1.0.2
+        version: 1.0.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
+      '@cueplusplus/theme-ledger':
+        specifier: 1.0.2
+        version: 1.0.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
       '@cueplusplus/theme-luma':
-        specifier: 1.0.3
-        version: 1.0.3(@cueplusplus/theme-base@1.0.3(@cueplusplus/tokens@0.14.1))
+        specifier: 1.1.2
+        version: 1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
+      '@cueplusplus/theme-monolith':
+        specifier: 1.0.1
+        version: 1.0.1(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
+      '@cueplusplus/theme-porcelain':
+        specifier: 1.0.2
+        version: 1.0.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
+      '@cueplusplus/theme-prism':
+        specifier: 1.0.1
+        version: 1.0.1(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
+      '@cueplusplus/theme-quotamate':
+        specifier: 1.1.2
+        version: 1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
       '@cueplusplus/theme-signal':
-        specifier: 1.0.3
-        version: 1.0.3(@cueplusplus/theme-base@1.0.3(@cueplusplus/tokens@0.14.1))
+        specifier: 1.1.2
+        version: 1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
       '@cueplusplus/theme-snuffle':
-        specifier: 1.0.3
-        version: 1.0.3(@cueplusplus/theme-base@1.0.3(@cueplusplus/tokens@0.14.1))
+        specifier: 1.1.2
+        version: 1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
+      '@cueplusplus/theme-tender':
+        specifier: 1.0.2
+        version: 1.0.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
       '@cueplusplus/theme-terminal':
-        specifier: 1.0.3
-        version: 1.0.3(@cueplusplus/theme-base@1.0.3(@cueplusplus/tokens@0.14.1))
+        specifier: 1.1.2
+        version: 1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
       '@cueplusplus/theme-venu':
-        specifier: 1.0.3
-        version: 1.0.3(@cueplusplus/theme-base@1.0.3(@cueplusplus/tokens@0.14.1))
+        specifier: 1.1.2
+        version: 1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
+      '@cueplusplus/theme-zine':
+        specifier: 1.0.2
+        version: 1.0.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))
       '@cueplusplus/tokens':
-        specifier: 0.14.1
-        version: 0.14.1
+        specifier: 0.29.0
+        version: 0.29.0
       '@cueplusplus/ui':
-        specifier: 0.14.1
-        version: 0.14.1(@base-ui/react@1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@internationalized/date@3.12.3)(@tanstack/react-virtual@3.14.9(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(lucide-react@1.33.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react-markdown@10.1.0(@types/react@19.2.18)(react@19.2.8)(supports-color@10.2.2))(react-resizable-panels@4.12.3(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)(rehype-sanitize@6.0.0)(tailwindcss@4.3.3)
+        specifier: 0.29.0
+        version: 0.29.0(@base-ui/react@1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@internationalized/date@3.12.3)(@tanstack/react-virtual@3.14.9(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(lucide-react@1.33.0(react@19.2.8))(mdast-util-gfm-table@2.0.0(supports-color@10.2.2))(micromark-extension-gfm-table@2.1.1)(react-dom@19.2.8(react@19.2.8))(react-markdown@10.1.0(@types/react@19.2.18)(react@19.2.8)(supports-color@10.2.2))(react@19.2.8)(rehype-sanitize@6.0.0)(tailwindcss@4.3.3)
+      '@fontsource-variable/anybody':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource-variable/dm-sans':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource-variable/fraunces':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource-variable/ibm-plex-sans':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource-variable/inter':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource-variable/jetbrains-mono':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource-variable/source-code-pro':
+        specifier: 5.3.1
+        version: 5.3.1
+      '@fontsource/cal-sans':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/ibm-plex-mono':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/space-mono':
+        specifier: 5.3.0
+        version: 5.3.0
       '@requestport/auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -200,9 +260,6 @@ importers:
       react-markdown:
         specifier: 10.1.0
         version: 10.1.0(@types/react@19.2.18)(react@19.2.8)(supports-color@10.2.2)
-      react-resizable-panels:
-        specifier: 4.12.3
-        version: 4.12.3(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       rehype-sanitize:
         specifier: 6.0.0
         version: 6.0.0
@@ -537,14 +594,14 @@ importers:
   packages/theme:
     devDependencies:
       '@cueplusplus/theme-base':
-        specifier: ^1.0.3
-        version: 1.0.3(@cueplusplus/tokens@0.14.1)
+        specifier: ^1.4.0
+        version: 1.4.0(@cueplusplus/tokens@0.29.0)
       '@cueplusplus/theme-tools':
-        specifier: 1.0.4
-        version: 1.0.4(@cueplusplus/tokens@0.14.1)
+        specifier: 1.3.0
+        version: 1.3.0(@cueplusplus/tokens@0.29.0)
       '@cueplusplus/tokens':
-        specifier: 0.14.1
-        version: 0.14.1
+        specifier: 0.29.0
+        version: 0.29.0
 
   packages/webhooks:
     dependencies:
@@ -1071,73 +1128,133 @@ packages:
     resolution: {integrity: sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA==}
     engines: {node: '>=20.19.0'}
 
-  '@cueplusplus/theme-base@1.0.3':
-    resolution: {integrity: sha512-kzqYFGuFXIhrlmHwkASjItgS9JhgoL/V9XGIdZdmH1lACv0yw1xq7day1YEmxc3h8zus3SHsFoJbyAFtPZmewg==}
+  '@cueplusplus/theme-base@1.4.0':
+    resolution: {integrity: sha512-3+A2WM7+JrefcmYAfot3bvtX2vR1+3aL9tDXQnz9IIxeMbfdsnvYPtEO6mwqKGknEa5cvF1ayX7eZA/K7gMh3A==}
     engines: {node: '>=22'}
     peerDependencies:
       '@cueplusplus/tokens': '>=0.9.0 <1'
 
-  '@cueplusplus/theme-cue@1.0.3':
-    resolution: {integrity: sha512-CySU2lmrVTJAqJT9ncqj9KT0uDdGNITuU3w9JKixE8JjSihUPkGRsRarwvo+XFtaBuVbMV6Swv0RQJsyBWJYZQ==}
+  '@cueplusplus/theme-command@1.0.2':
+    resolution: {integrity: sha512-MmFMLaBNSJRm4Y0onfIXIwSC5sjXLFQk4F79HqcrLQKmccfcwtIyLmdh84S+Nt+t4ttJbePzvSPxDtwon1vErg==}
     engines: {node: '>=22'}
     peerDependencies:
       '@cueplusplus/theme-base': ^1
 
-  '@cueplusplus/theme-dusk@1.0.3':
-    resolution: {integrity: sha512-wo5LQK8I/4l5B+Rpp0M3XA9B/vfcpHBtHFJfQ0BPjb4HnYzbSQXRp/mtO54P6u1vmEujOqJbQItdROds7MExvA==}
+  '@cueplusplus/theme-cue@1.1.2':
+    resolution: {integrity: sha512-g16fR3QpHx0B9Z2R1qVWJpjHy8/ivB/CdyMy5zWmnZbojy3QC2FoFfjnN92EnDL5Cts6/Uapg3I7ONeIoV463w==}
     engines: {node: '>=22'}
     peerDependencies:
       '@cueplusplus/theme-base': ^1
 
-  '@cueplusplus/theme-hivehub@1.0.3':
-    resolution: {integrity: sha512-yOCRGHAjz9omjihuaX8XHFxsk0qNk2DaspzYd/vEt0hAcpg7Bpn7cBffvPvLFseKup6epDr80Ohc1d29gGf9Hw==}
+  '@cueplusplus/theme-dusk@1.1.2':
+    resolution: {integrity: sha512-mBMwr7hlWtyi+xA+TBTEwgNMfP/J7SRY7LcRcc4ZOQE9vSyJdiBJP+6VMNVuYFW//8Sox/LxTHlqoXsmAqlJYw==}
     engines: {node: '>=22'}
     peerDependencies:
       '@cueplusplus/theme-base': ^1
 
-  '@cueplusplus/theme-luma@1.0.3':
-    resolution: {integrity: sha512-Hg1o9Sa9ZEHSOLPUpCBTfe82A5qF8zH+qQE189hvD232pmirqp8KOf6enuqlwN6vZdTCZiovXhN+BZCbB3eyUg==}
+  '@cueplusplus/theme-graphite@1.0.2':
+    resolution: {integrity: sha512-8GQ2ISh6RXXqgpmbXnWDZXosKa6M0nUZ7Fh0XJUdXgvq6HcKFpTrppNwvkZI7tzBGJq7MZRKG9wCh2/pyEOvrA==}
     engines: {node: '>=22'}
     peerDependencies:
       '@cueplusplus/theme-base': ^1
 
-  '@cueplusplus/theme-signal@1.0.3':
-    resolution: {integrity: sha512-hJ6yJ7OHJS24hD+GQRDjzVtIsGFa/z27VebIC09QOvdjpHsqy2mMwGve3Bgs/bvMi9kPlcVorFEPM6X4FVz+TQ==}
+  '@cueplusplus/theme-hivehub@1.1.2':
+    resolution: {integrity: sha512-kcNc+qGNUiKS5Y3qz3ycyNhZn7KDNHd928o7exssTQWhpnFQ6YLqrRV/5M8vGPno4I2zL03Zy2G2zVhj81Q0rw==}
     engines: {node: '>=22'}
     peerDependencies:
       '@cueplusplus/theme-base': ^1
 
-  '@cueplusplus/theme-snuffle@1.0.3':
-    resolution: {integrity: sha512-fcKii40WXtmg0uyc1IgHUfTEQ9eLSFrj2hcG0guJQ4xU3XYBc+a7w8AGu1bdTa9G63nar26yhFl7slhbfztR5g==}
+  '@cueplusplus/theme-kiln@1.0.2':
+    resolution: {integrity: sha512-UpKm/l78tBeT0g2VoC4dbiKaz7Xt5q6o8c/MRuTYFvvTm3yJO8OZ9uDPoxM9uin0Ztd9W4rvYnv/bDzCZmXHGQ==}
     engines: {node: '>=22'}
     peerDependencies:
       '@cueplusplus/theme-base': ^1
 
-  '@cueplusplus/theme-terminal@1.0.3':
-    resolution: {integrity: sha512-uPO7QKMag+EkpFvwotrAL/o+erESLJm52k2gAGLQHLmWlC+P/iCXHg4RdTv6NDi+MXa/rkaAiKAA9jbb+ku9Rg==}
+  '@cueplusplus/theme-ledger@1.0.2':
+    resolution: {integrity: sha512-fxjbhXRL/8QPzSLcQ5axc5W10N1DtZYkavYjvVISSA9fZ5K+I0+EweMesKzBouQ1J8vd+3RAvioN+Bs5i3IYdA==}
     engines: {node: '>=22'}
     peerDependencies:
       '@cueplusplus/theme-base': ^1
 
-  '@cueplusplus/theme-tools@1.0.4':
-    resolution: {integrity: sha512-GMDRvNUjvCS7FL4gnf5PP7ylweok+4zyC6NFqr98qUB+lxfig0eUMtHO6NMFqPxxaAJX8QdBwCPiCfacvmRPkQ==}
+  '@cueplusplus/theme-luma@1.1.2':
+    resolution: {integrity: sha512-8B7ooJdPKG469cemRWLHNeueKJ6v4DeyFNRRP7uOytux+vD/pfduAox/c2XPQOVqAT+3lAb9hRdwYa56ZlUG9Q==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@cueplusplus/theme-base': ^1
+
+  '@cueplusplus/theme-monolith@1.0.1':
+    resolution: {integrity: sha512-LyLBLWf2CmeWgw8j0q1R6g9zQXHustWFNksgZRoNmY7GUYKoZlC6q5fssHrSvEIkpUMKYL0sXI0o6Lwe/DDe/Q==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@cueplusplus/theme-base': ^1
+
+  '@cueplusplus/theme-porcelain@1.0.2':
+    resolution: {integrity: sha512-DTcc+WrVzV+IPQzM/qrtqvZUtkk2KWF3/AufJKRbbzmEcCv5Zf4a8IQchok0RlZ03Wwo1BznGtmcW3X074HaYA==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@cueplusplus/theme-base': ^1
+
+  '@cueplusplus/theme-prism@1.0.1':
+    resolution: {integrity: sha512-iKwh5U4xY4JZMbDbLUsbWaD0HWFmUrfNrX84DSg1JsL/tneHZPJ8Wd6WTIwJTsluJ+FJiK8gqHDYI/2eg8sRJg==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@cueplusplus/theme-base': ^1
+
+  '@cueplusplus/theme-quotamate@1.1.2':
+    resolution: {integrity: sha512-TK8Bglrfm688nWjhXx80JFl45s0R82BqRc98kOizsfbyNvPVNJEv8EiBOdJLwhNwvEga54fPjBerecrA2OykiA==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@cueplusplus/theme-base': ^1
+
+  '@cueplusplus/theme-signal@1.1.2':
+    resolution: {integrity: sha512-QnMuyJAKC0G1XFyS8rHa4Gtmm1+LNecVpB+Ds7fR7Ntn9FDwfIcFiFTNVJ3UyfHGlkQwz55wcBoIajckhJkpAg==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@cueplusplus/theme-base': ^1
+
+  '@cueplusplus/theme-snuffle@1.1.2':
+    resolution: {integrity: sha512-7yA6QQKXJ4bkZ3v6jd3rG2cOel+DHT2ugCYitnnl86/cMh4oGe6yRj4Iby6g81EJiHrzjOruOgYDc9ufI5OVtQ==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@cueplusplus/theme-base': ^1
+
+  '@cueplusplus/theme-tender@1.0.2':
+    resolution: {integrity: sha512-NcyxYcclehzxzbNkUrAtkVVDKNBfNbD4T4Mo6Po9CTu9FRMdCUqaG26zHoRdippv97ZwE40OvnWEPNJ06JSlag==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@cueplusplus/theme-base': ^1
+
+  '@cueplusplus/theme-terminal@1.1.2':
+    resolution: {integrity: sha512-KpTRBpneSblwaJ2p/CLAQP1WRfcACKs0kYsi1AHX6NZchz5k+htAKFHZVlRYeAYs6+GK9YWt6Uq3dz8q8/2Qww==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@cueplusplus/theme-base': ^1
+
+  '@cueplusplus/theme-tools@1.3.0':
+    resolution: {integrity: sha512-ysSVIm54XDlQ12gVj8Hrhz7/F65IBaYw/oq4v9ZcVlqwTslj/PLhSqsWLQK8kKclu9MzJUI1dPius3cH03NbMA==}
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
       '@cueplusplus/tokens': '>=0.9.0 <1'
 
-  '@cueplusplus/theme-venu@1.0.3':
-    resolution: {integrity: sha512-g/wYtc5NfMNbqnzlC82Jq3i16E/abTySvnzf8UiZKdvZ16Np66eV9nnukCkTAMpoIENlgdqbEKqxSvI0SOpD7Q==}
+  '@cueplusplus/theme-venu@1.1.2':
+    resolution: {integrity: sha512-LUgK1pNEqAV8VZe5HSg2rUKK/dloPRSXMqteJjeJJ/wFCf1AT/btbCEvKyQk8fato0um9q8GbtZwmocr4/HWiA==}
     engines: {node: '>=22'}
     peerDependencies:
       '@cueplusplus/theme-base': ^1
 
-  '@cueplusplus/tokens@0.14.1':
-    resolution: {integrity: sha512-//FfyrT1eDqTNd68mWS+aeJLQ2rAaMPjBSevQe/tdpcW+DDAFWGa3PjZCWAMXSdRb+E+kxeC6IXhdrY8+XiMsg==}
+  '@cueplusplus/theme-zine@1.0.2':
+    resolution: {integrity: sha512-K/dmFvGVzbH13v9mQsMOh/I/wE0epG3T9OupoI0GRSP3Vy+1ImmaOr8wl1twzyFFjsDkhelMf8U5AmX4FWpsKw==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@cueplusplus/theme-base': ^1
+
+  '@cueplusplus/tokens@0.29.0':
+    resolution: {integrity: sha512-iIINSkV7jT0h/BjiDODilk/2HDCi6gKkazv46qUBwd42T3T1rloPqyxa/541O2ucN5SR9m6cEpqfUrpKQ8LwEg==}
     engines: {node: '>=22'}
 
-  '@cueplusplus/ui@0.14.1':
-    resolution: {integrity: sha512-cOiRTD23GCc9RRuSY3rBsE23MaA7pMdmzoFZT5hmuzfPTQ9rRwLufXgJtOjrgxA0Au1VaPTuzJYB2Br0oRvVWA==}
+  '@cueplusplus/ui@0.29.0':
+    resolution: {integrity: sha512-8ZZSQQILXR2PQU4Tz8G8atAgnirYqjqzrK3G9kB1HnRUbfBqX4B79Nr+xlOqX74e5GHWI/QNrycOyk/EHL2AdQ==}
     engines: {node: '>=22'}
     peerDependencies:
       '@assistant-ui/react': ^0.15.16
@@ -1151,6 +1268,8 @@ packages:
       embla-carousel-react: ^8.6.0
       heat-graph: ^0.0.15
       lucide-react: ^1.31.0
+      mdast-util-gfm-table: ^2.0.0
+      micromark-extension-gfm-table: ^2.1.1
       react: ^19.0.0
       react-aria-components: ^1.20.0
       react-day-picker: ^10.0.1
@@ -1180,6 +1299,10 @@ packages:
       heat-graph:
         optional: true
       lucide-react:
+        optional: true
+      mdast-util-gfm-table:
+        optional: true
+      micromark-extension-gfm-table:
         optional: true
       react-aria-components:
         optional: true
@@ -1766,6 +1889,36 @@ packages:
 
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
+
+  '@fontsource-variable/anybody@5.3.0':
+    resolution: {integrity: sha512-3u/FSV3mGv9xW3x+CdK9lAZYT1Y3NaRA1bexeoIuk9s5QE8sD8OOTcofvpPx0Z6M0Fq1WAJ06ZAw8hivdRQWHQ==}
+
+  '@fontsource-variable/dm-sans@5.3.0':
+    resolution: {integrity: sha512-BpUG5bqePiDFMBM4ZtLSlPdAIOM990uB1dlXzIf4aw21yQR7BmykedLXXXMqGWsR18aMLOsbWccwJNh3ztTQaA==}
+
+  '@fontsource-variable/fraunces@5.3.0':
+    resolution: {integrity: sha512-9BYGySn4AHEJdgp9Z28tQ3X+laJMEOITXkQarZXeloWQZDq5oOvXJ3kDA8c7MGIfpogIaZfjrQBqmda8POOCKA==}
+
+  '@fontsource-variable/ibm-plex-sans@5.3.0':
+    resolution: {integrity: sha512-agG8tXFEo0hD9+J7npa4vbbWult52eMLVaQ6WQRlhs/iCAojrMAoejru85W9HTVXHfyUj96KM7gp/KGAS87XaQ==}
+
+  '@fontsource-variable/inter@5.3.0':
+    resolution: {integrity: sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA==}
+
+  '@fontsource-variable/jetbrains-mono@5.3.0':
+    resolution: {integrity: sha512-F32xpS2NsGYoQi2ADSkKTgpJj7ozajsGgDJ8woTnqjmIB+dxDIqImjl4pXZVEExu8UFZ2ndhmX18EBS/hdz3Lw==}
+
+  '@fontsource-variable/source-code-pro@5.3.1':
+    resolution: {integrity: sha512-N0nZDizh8CQ19+AHHA8Ssb1i/aQf4N2lpRl3qZVH4/9f1yNgWzTkBFpc26v+QQr2hm4By4aiv597BCoEg2SDQg==}
+
+  '@fontsource/cal-sans@5.3.0':
+    resolution: {integrity: sha512-XKLenekRFhBqlHyWfGu/5Lz4hmFGIJUvINKW2UgEnmYMj1YL5Vg9PsMGJpGyo0fmUvvewEnZfgPHJEcweNeR5g==}
+
+  '@fontsource/ibm-plex-mono@5.3.0':
+    resolution: {integrity: sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMVfdZu7Q==}
+
+  '@fontsource/space-mono@5.3.0':
+    resolution: {integrity: sha512-FrpBMOVWn3PRdRHlrZWC55X3kZG/2BTH7SM5ZyS/bky3iKya2BturI5lk+t0RoDQL2JyHzURsVq/EisCsxpI5A==}
 
   '@fortawesome/fontawesome-free@7.3.1':
     resolution: {integrity: sha512-wmglKKPDIkgV3aWlZzWECCPoGIkYCulzBwxG9+w7rc5BGapZ6cPMpoPOT8k36J0Ni7PPX6c/rsoMWfS4d1MUMg==}
@@ -5726,12 +5879,6 @@ packages:
       '@types/react': '>=18'
       react: '>=18'
 
-  react-resizable-panels@4.12.3:
-    resolution: {integrity: sha512-GHMJWnDXui/3RX4bT+cgBP+N3N2nkwcoZATr/2xLFpqQQe7TlBrE0cGM0dUa9ceT7A90tUrSRsiqgRG+g0/2AA==}
-    peerDependencies:
-      react: ^18.0.0 || ^19.0.0
-      react-dom: ^18.0.0 || ^19.0.0
-
   react-stately@3.49.0:
     resolution: {integrity: sha512-13iNq2KzBrRAzxRc+n53hgROfIistiYY/sPtIhCw1qUB7/kmo+X1xEU2uiS5zcCIrc55AUPwoHqOIIpKWSwB9A==}
     peerDependencies:
@@ -7001,57 +7148,97 @@ snapshots:
 
   '@csstools/css-tokenizer@4.0.0': {}
 
-  '@cueplusplus/theme-base@1.0.3(@cueplusplus/tokens@0.14.1)':
+  '@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0)':
     dependencies:
-      '@cueplusplus/tokens': 0.14.1
+      '@cueplusplus/tokens': 0.29.0
       culori: 4.0.2
 
-  '@cueplusplus/theme-cue@1.0.3(@cueplusplus/theme-base@1.0.3(@cueplusplus/tokens@0.14.1))':
+  '@cueplusplus/theme-command@1.0.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
     dependencies:
-      '@cueplusplus/theme-base': 1.0.3(@cueplusplus/tokens@0.14.1)
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
 
-  '@cueplusplus/theme-dusk@1.0.3(@cueplusplus/theme-base@1.0.3(@cueplusplus/tokens@0.14.1))':
+  '@cueplusplus/theme-cue@1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
     dependencies:
-      '@cueplusplus/theme-base': 1.0.3(@cueplusplus/tokens@0.14.1)
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
 
-  '@cueplusplus/theme-hivehub@1.0.3(@cueplusplus/theme-base@1.0.3(@cueplusplus/tokens@0.14.1))':
+  '@cueplusplus/theme-dusk@1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
     dependencies:
-      '@cueplusplus/theme-base': 1.0.3(@cueplusplus/tokens@0.14.1)
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
 
-  '@cueplusplus/theme-luma@1.0.3(@cueplusplus/theme-base@1.0.3(@cueplusplus/tokens@0.14.1))':
+  '@cueplusplus/theme-graphite@1.0.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
     dependencies:
-      '@cueplusplus/theme-base': 1.0.3(@cueplusplus/tokens@0.14.1)
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
 
-  '@cueplusplus/theme-signal@1.0.3(@cueplusplus/theme-base@1.0.3(@cueplusplus/tokens@0.14.1))':
+  '@cueplusplus/theme-hivehub@1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
     dependencies:
-      '@cueplusplus/theme-base': 1.0.3(@cueplusplus/tokens@0.14.1)
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
 
-  '@cueplusplus/theme-snuffle@1.0.3(@cueplusplus/theme-base@1.0.3(@cueplusplus/tokens@0.14.1))':
+  '@cueplusplus/theme-kiln@1.0.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
     dependencies:
-      '@cueplusplus/theme-base': 1.0.3(@cueplusplus/tokens@0.14.1)
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
 
-  '@cueplusplus/theme-terminal@1.0.3(@cueplusplus/theme-base@1.0.3(@cueplusplus/tokens@0.14.1))':
+  '@cueplusplus/theme-ledger@1.0.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
     dependencies:
-      '@cueplusplus/theme-base': 1.0.3(@cueplusplus/tokens@0.14.1)
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
 
-  '@cueplusplus/theme-tools@1.0.4(@cueplusplus/tokens@0.14.1)':
+  '@cueplusplus/theme-luma@1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
     dependencies:
-      '@cueplusplus/theme-base': 1.0.3(@cueplusplus/tokens@0.14.1)
-      '@cueplusplus/tokens': 0.14.1
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
+
+  '@cueplusplus/theme-monolith@1.0.1(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
+    dependencies:
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
+
+  '@cueplusplus/theme-porcelain@1.0.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
+    dependencies:
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
+
+  '@cueplusplus/theme-prism@1.0.1(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
+    dependencies:
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
+
+  '@cueplusplus/theme-quotamate@1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
+    dependencies:
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
+
+  '@cueplusplus/theme-signal@1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
+    dependencies:
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
+
+  '@cueplusplus/theme-snuffle@1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
+    dependencies:
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
+
+  '@cueplusplus/theme-tender@1.0.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
+    dependencies:
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
+
+  '@cueplusplus/theme-terminal@1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
+    dependencies:
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
+
+  '@cueplusplus/theme-tools@1.3.0(@cueplusplus/tokens@0.29.0)':
+    dependencies:
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
+      '@cueplusplus/tokens': 0.29.0
       semver: 7.8.5
       style-dictionary: 5.5.3
 
-  '@cueplusplus/theme-venu@1.0.3(@cueplusplus/theme-base@1.0.3(@cueplusplus/tokens@0.14.1))':
+  '@cueplusplus/theme-venu@1.1.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
     dependencies:
-      '@cueplusplus/theme-base': 1.0.3(@cueplusplus/tokens@0.14.1)
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
 
-  '@cueplusplus/tokens@0.14.1': {}
+  '@cueplusplus/theme-zine@1.0.2(@cueplusplus/theme-base@1.4.0(@cueplusplus/tokens@0.29.0))':
+    dependencies:
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
 
-  '@cueplusplus/ui@0.14.1(@base-ui/react@1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@internationalized/date@3.12.3)(@tanstack/react-virtual@3.14.9(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(lucide-react@1.33.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react-markdown@10.1.0(@types/react@19.2.18)(react@19.2.8)(supports-color@10.2.2))(react-resizable-panels@4.12.3(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)(rehype-sanitize@6.0.0)(tailwindcss@4.3.3)':
+  '@cueplusplus/tokens@0.29.0': {}
+
+  '@cueplusplus/ui@0.29.0(@base-ui/react@1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@internationalized/date@3.12.3)(@tanstack/react-virtual@3.14.9(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(lucide-react@1.33.0(react@19.2.8))(mdast-util-gfm-table@2.0.0(supports-color@10.2.2))(micromark-extension-gfm-table@2.1.1)(react-dom@19.2.8(react@19.2.8))(react-markdown@10.1.0(@types/react@19.2.18)(react@19.2.8)(supports-color@10.2.2))(react@19.2.8)(rehype-sanitize@6.0.0)(tailwindcss@4.3.3)':
     dependencies:
       '@base-ui/react': 1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@cueplusplus/theme-base': 1.0.3(@cueplusplus/tokens@0.14.1)
-      '@cueplusplus/tokens': 0.14.1
+      '@cueplusplus/theme-base': 1.4.0(@cueplusplus/tokens@0.29.0)
+      '@cueplusplus/tokens': 0.29.0
       clsx: 2.1.1
       culori: 4.0.2
       react: 19.2.8
@@ -7061,8 +7248,9 @@ snapshots:
       '@internationalized/date': 3.12.3
       '@tanstack/react-virtual': 3.14.9(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       lucide-react: 1.33.0(react@19.2.8)
+      mdast-util-gfm-table: 2.0.0(supports-color@10.2.2)
+      micromark-extension-gfm-table: 2.1.1
       react-markdown: 10.1.0(@types/react@19.2.18)(react@19.2.8)(supports-color@10.2.2)
-      react-resizable-panels: 4.12.3(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       rehype-sanitize: 6.0.0
       tailwindcss: 4.3.3
 
@@ -7394,6 +7582,26 @@ snapshots:
       tabbable: 6.5.0
 
   '@floating-ui/utils@0.2.12': {}
+
+  '@fontsource-variable/anybody@5.3.0': {}
+
+  '@fontsource-variable/dm-sans@5.3.0': {}
+
+  '@fontsource-variable/fraunces@5.3.0': {}
+
+  '@fontsource-variable/ibm-plex-sans@5.3.0': {}
+
+  '@fontsource-variable/inter@5.3.0': {}
+
+  '@fontsource-variable/jetbrains-mono@5.3.0': {}
+
+  '@fontsource-variable/source-code-pro@5.3.1': {}
+
+  '@fontsource/cal-sans@5.3.0': {}
+
+  '@fontsource/ibm-plex-mono@5.3.0': {}
+
+  '@fontsource/space-mono@5.3.0': {}
 
   '@fortawesome/fontawesome-free@7.3.1': {}
 
@@ -11343,11 +11551,6 @@ snapshots:
       vfile: 6.0.3
     transitivePeerDependencies:
       - supports-color
-
-  react-resizable-panels@4.12.3(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
-    dependencies:
-      react: 19.2.8
-      react-dom: 19.2.8(react@19.2.8)
 
   react-stately@3.49.0(react@19.2.8):
     dependencies:

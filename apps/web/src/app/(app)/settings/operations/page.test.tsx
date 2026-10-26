@@ -52,6 +52,7 @@ vi.mock("./actions.js", () => {
   };
 });
 
+import { ConsoleToasts } from "../../../../components/console-toasts.js";
 import OperationsPage from "./page.js";
 
 /** A retired recipe class, assembled so the audit reads bookkeeping, not a class. */
@@ -143,7 +144,11 @@ const details = {
 };
 
 async function markup() {
-  return renderToStaticMarkup((await OperationsPage()) as ReactElement);
+  // Inside the console's toast provider, which the shell mounts around every
+  // page (ruling 260): the page's dialogs raise their confirmations there.
+  return renderToStaticMarkup(
+    <ConsoleToasts>{(await OperationsPage()) as ReactElement}</ConsoleToasts>,
+  );
 }
 
 beforeEach(() => {
@@ -206,6 +211,15 @@ describe("the operations page", () => {
 
     expect(html).toContain('data-slot="empty-state"');
     expect(html).toContain("No retention holds");
+  });
+
+  test("opens a new retention hold in a dialog from its panel's Add hold (ruling 259)", async () => {
+    const html = await markup();
+
+    expect(html).toContain('data-slot="dialog-trigger"');
+    expect(html).toContain(">Add hold<");
+    expect(html).not.toContain('name="reason"');
+    expect(html).not.toContain("Create hold");
   });
 
   test("lists an active hold with its own release control", async () => {

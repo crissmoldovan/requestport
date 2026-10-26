@@ -116,12 +116,19 @@ afterEach(() => {
 });
 
 describe("provider-as-body hydration", () => {
-  test("stamps the real document body and ignores the stale mirror", async () => {
+  test("stamps the real document body with all six axes, and ignores the stale mirror", async () => {
     const { AppearanceRoot } = await import("./appearance-root.js");
 
     render(
       <AppearanceRoot
-        appearance={{ theme: "terminal", density: "normal", mode: "light" }}
+        appearance={{
+          theme: "terminal",
+          density: "normal",
+          mode: "light",
+          font: "match",
+          look: "editorial",
+          paint: "match",
+        }}
         nonce={undefined}
       >
         <p>Overview</p>
@@ -135,12 +142,14 @@ describe("provider-as-body hydration", () => {
     expect(body.getAttribute("data-theme")).toBe("terminal");
     expect(body.getAttribute("data-density")).toBe("normal");
     expect(body.getAttribute("data-mode")).toBe("light");
-    expect(body.style.getPropertyValue("--cue-font-sans")).toBe(
-      generated.sansFamily,
-    );
-    expect(body.style.getPropertyValue("--cue-font-mono")).toBe(
-      generated.monoFamily,
-    );
+    // terminal has no Look of its own: its match follows classic (geist,
+    // console, none), and an explicit Look is kept.
+    expect(document.documentElement.getAttribute("data-font")).toBe("geist");
+    expect(body.getAttribute("data-style")).toBe("editorial");
+    expect(body.getAttribute("data-paint")).toBe("none");
+    // The typeface is the pairing `<html>` carries: no inline family shadows it.
+    expect(body.style.getPropertyValue("--cue-font-sans")).toBe("");
+    expect(body.style.getPropertyValue("--cue-font-mono")).toBe("");
     expect(body.style.colorScheme).toBe("light");
     expect(body.textContent).toContain("Overview");
     // The mirror is never read back: the stale triple survives untouched.
@@ -323,9 +332,10 @@ describe("global error boundary in the browser", () => {
   });
 });
 
-/** The three segment error boundaries that render inside the root document. */
+/** The segment error boundaries that render inside the root document. */
 const segmentErrorBoundaries = [
   ["(app)", () => import("./(app)/error.js")],
+  ["(app)/settings", () => import("./(app)/settings/error.js")],
   ["(auth)", () => import("./(auth)/error.js")],
   ["root", () => import("./error.js")],
 ] as const;
@@ -389,7 +399,14 @@ describe("the nonce Base UI's own style elements need", () => {
 
     render(
       <AppearanceRoot
-        appearance={{ theme: "terminal", density: "normal", mode: "light" }}
+        appearance={{
+          theme: "terminal",
+          density: "normal",
+          mode: "light",
+          font: "match",
+          look: "editorial",
+          paint: "match",
+        }}
         nonce="nonce-under-test"
       >
         <ScrollArea.Root>

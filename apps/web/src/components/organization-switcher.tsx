@@ -99,11 +99,11 @@ export function OrganizationSwitcher({
 
   // A tenant name is arbitrary text and the bar is one row, so the control
   // needs a measure of its own: without one the trigger grows to fit the name
-  // and pushes the search, the new-request action and the account menu out of
-  // the viewport — off a frame that clips rather than scrolls, so nothing looks
-  // wrong and nothing is reachable. `Select` already truncates its value; this
-  // is the width it truncates within, and the retired `.organization-select`
-  // recipe capped itself for the same reason.
+  // and pushes the search and the account menu out of the viewport — off a
+  // frame that clips rather than scrolls, so nothing looks wrong and nothing is
+  // reachable. `Select` already truncates its value; this is the width it
+  // truncates within, and the retired `.organization-select` recipe capped
+  // itself for the same reason.
   return (
     <Stack align="center" className="min-w-0" direction="row" gap={2}>
       <Select

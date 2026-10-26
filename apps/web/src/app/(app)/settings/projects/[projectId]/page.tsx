@@ -10,17 +10,14 @@ import { notFound } from "next/navigation";
 
 import { Page } from "../../../../../components/page-layout.js";
 import {
-  AliasForm,
   DefaultLaneForm,
   DefaultRepositoryForm,
-  LaneForm,
   LaneStatusForm,
-  ProjectMemberForm,
+  ProjectAddDialog,
   ProjectMembersTable,
   ProjectMetadataForm,
   ProjectStatusForm,
   ProjectWorkPolicyForm,
-  RepositoryForm,
   RepositoryStatusForm,
 } from "../../../../../components/project-settings.js";
 import { SettingsSection } from "../../../../../components/settings-section.js";
@@ -62,6 +59,8 @@ export default async function ProjectSettingsDetailPage({
     expectedVersion: detail.project.version,
     idempotencyKey: randomUUID(),
   });
+  // Panels of rows (ruling 259): each list's "Add" opens its form in a dialog
+  // from the panel's header; the forms that edit what is there stay inline.
   return (
     <Page
       description={`${detail.project.keyPrefix} · ${detail.project.slug} · ${detail.project.status}`}
@@ -92,6 +91,17 @@ export default async function ProjectSettingsDetailPage({
         )}
       </SettingsSection>
       <SettingsSection
+        action={
+          detail.canManage ? (
+            <ProjectAddDialog
+              action={addRepositoryAction}
+              kind="repository"
+              meta={mutationMeta()}
+              projectId={projectId}
+            />
+          ) : undefined
+        }
+        bleed={detail.repositories.length > 0}
         headingId="project-repositories"
         note="Canonical code locations used by connected agents and legacy-import provenance."
         title="Repositories"
@@ -174,15 +184,18 @@ export default async function ProjectSettingsDetailPage({
             title="No repositories"
           />
         )}
-        {detail.canManage ? (
-          <RepositoryForm
-            action={addRepositoryAction}
-            meta={mutationMeta()}
-            projectId={projectId}
-          />
-        ) : null}
       </SettingsSection>
       <SettingsSection
+        action={
+          detail.canManage ? (
+            <ProjectAddDialog
+              action={addAliasAction}
+              kind="alias"
+              meta={mutationMeta()}
+              projectId={projectId}
+            />
+          ) : undefined
+        }
         headingId="project-aliases"
         note="Historical names accepted during routing and legacy import."
         title="Aliases"
@@ -216,15 +229,19 @@ export default async function ProjectSettingsDetailPage({
             title="No aliases registered"
           />
         )}
-        {detail.canManage ? (
-          <AliasForm
-            action={addAliasAction}
-            meta={mutationMeta()}
-            projectId={projectId}
-          />
-        ) : null}
       </SettingsSection>
       <SettingsSection
+        action={
+          detail.canManage ? (
+            <ProjectAddDialog
+              action={addLaneAction}
+              kind="lane"
+              meta={mutationMeta()}
+              projectId={projectId}
+            />
+          ) : undefined
+        }
+        bleed={detail.lanes.length > 0}
         headingId="project-lanes"
         note="Optional work streams used for routing and request defaults."
         title="Lanes"
@@ -298,15 +315,19 @@ export default async function ProjectSettingsDetailPage({
             title="No lanes registered"
           />
         )}
-        {detail.canManage ? (
-          <LaneForm
-            action={addLaneAction}
-            meta={mutationMeta()}
-            projectId={projectId}
-          />
-        ) : null}
       </SettingsSection>
       <SettingsSection
+        action={
+          detail.canManage ? (
+            <ProjectAddDialog
+              action={setProjectMemberAction}
+              kind="member"
+              members={detail.availableMembers}
+              meta={mutationMeta()}
+              projectId={projectId}
+            />
+          ) : undefined
+        }
         headingId="project-members"
         note="Maintainers manage lifecycle; contributors work requests; viewers observe."
         title="Project access"
@@ -326,14 +347,6 @@ export default async function ProjectSettingsDetailPage({
             administration access.
           </p>
         )}
-        {detail.canManage ? (
-          <ProjectMemberForm
-            action={setProjectMemberAction}
-            members={detail.availableMembers}
-            meta={mutationMeta()}
-            projectId={projectId}
-          />
-        ) : null}
       </SettingsSection>
       <SettingsSection
         headingId="project-work-policy"

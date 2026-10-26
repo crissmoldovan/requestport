@@ -42,9 +42,9 @@ export default async function ApplicationLayout({
         ),
         canEditOrganizationDefaults,
         idempotencyNonce: randomUUID(),
-        // Offered to an owner only, and with the organization's own render
-        // context rather than the personal one: the panel edits two layers and
-        // each must carry the authority of the layer it writes.
+        // Offered to an owner or an admin only, and with the organization's
+        // own render context rather than the personal one: the panel edits two
+        // layers and each must carry the authority of the layer it writes.
         organizationDefault:
           canEditOrganizationDefaults && context.currentOrganization
             ? {

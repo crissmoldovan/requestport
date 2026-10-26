@@ -41,6 +41,7 @@ import {
   organizationAdministrationCommandInputSchemas,
   organizationFoundationPortName,
   organizationManagementPortName,
+  resendOrganizationInvitationCommandName,
   revokeOrganizationInvitationCommandName,
   setOrganizationMemberCommandName,
 } from "./organization-administration-commands.js";
@@ -86,8 +87,12 @@ const inputs: Record<string, Record<string, unknown>> = {
     status: "active",
   },
   [revokeOrganizationInvitationCommandName]: { organizationId, invitationId },
+  [resendOrganizationInvitationCommandName]: { organizationId, invitationId },
 };
 const names = Object.keys(inputs);
+
+/** The expiry the fake port answers a resend with. */
+const resentExpiry = new Date("2026-11-01T12:00:00.000Z");
 
 function fakeManagement(): OrganizationManagementPort & {
   calls: Array<[string, unknown[]]>;
@@ -114,6 +119,13 @@ function fakeManagement(): OrganizationManagementPort & {
     }),
     revokeInvitation: record("revokeInvitation", {
       id: invitationId,
+      version: 2,
+    }),
+    authorizeInvitationResend: record("authorizeInvitationResend", undefined),
+    resendInvitation: record("resendInvitation", {
+      id: invitationId,
+      role: "member" as const,
+      expiresAt: resentExpiry,
       version: 2,
     }),
   };
@@ -452,6 +464,110 @@ describe("set_organization_member and revoke_organization_invitation", () => {
     ).rejects.toMatchObject({ code: "forbidden" });
     expect(management.calls).toEqual([]);
     expect(receipts.size).toBe(0);
+  });
+});
+
+describe("resend_organization_invitation", () => {
+  test("asks the port about the person, authorises before the write, hands it a fresh token hash and a new invitation's lifetime, and the bus records the invitation's own event at the new version", async () => {
+    const management = fakeManagement();
+    const { bus: commands, events } = bus({
+      [organizationManagementPortName]: management,
+    });
+    const target = { organizationId, userId: person };
+
+    for (const _press of [1, 2]) {
+      await expect(
+        commands.execute<unknown, JsonValue>({
+          name: resendOrganizationInvitationCommandName,
+          context: context(),
+          input: inputs[resendOrganizationInvitationCommandName],
+          meta: meta({ expectedVersion: 1 }),
+        }),
+      ).resolves.toEqual({
+        id: invitationId,
+        role: "member",
+        expiresAt: resentExpiry.toISOString(),
+        version: 2,
+      });
+    }
+
+    const mutation = {
+      ...target,
+      correlationId: context().correlationId,
+      expectedVersion: 1,
+      actor: { type: "user", id: person },
+    };
+    expect(management.calls).toEqual([
+      ["authorizeInvitationResend", [target, invitationId]],
+      [
+        "resendInvitation",
+        [
+          mutation,
+          invitationId,
+          {
+            tokenHash: expect.stringMatching(/^[0-9a-f]{64}$/u),
+            // Seven days: what an invitation from the members page gets.
+            expiresInSeconds: 604_800,
+          },
+        ],
+      ],
+      ["authorizeInvitationResend", [target, invitationId]],
+      [
+        "resendInvitation",
+        [mutation, invitationId, expect.objectContaining({})],
+      ],
+    ]);
+    // Each resend is a new token, never one the earlier issue held.
+    const hashes = management.calls
+      .filter(([name]) => name === "resendInvitation")
+      .map(([, args]) => (args[2] as { tokenHash: string }).tokenHash);
+    expect(new Set(hashes).size).toBe(2);
+    // The event a new invitation's email is sent for, at the invitation's
+    // new version, with exactly a new invitation's payload: every worker
+    // already deployed sends for it, and it carries no token.
+    expect(events).toHaveLength(2);
+    for (const event of events) {
+      expect(event).toMatchObject({
+        type: "organization.invitation_created.v1",
+        schemaVersion: 1,
+        aggregateType: "invitation",
+        aggregateId: invitationId,
+        aggregateVersion: 2,
+      });
+      expect(event.data).toEqual({
+        invitationId,
+        role: "member",
+        expiresAt: resentExpiry.toISOString(),
+      });
+    }
+  });
+
+  test("a refusal from the port's authorisation writes nothing", async () => {
+    const management = fakeManagement();
+    management.authorizeInvitationResend = async () => {
+      throw new DomainError(
+        "forbidden",
+        "Only an owner may resend an owner invitation",
+      );
+    };
+    const {
+      bus: commands,
+      receipts,
+      events,
+    } = bus({
+      [organizationManagementPortName]: management,
+    });
+    await expect(
+      commands.execute({
+        name: resendOrganizationInvitationCommandName,
+        context: context(),
+        input: inputs[resendOrganizationInvitationCommandName],
+        meta: meta({ expectedVersion: 1 }),
+      }),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    expect(management.calls).toEqual([]);
+    expect(receipts.size).toBe(0);
+    expect(events).toEqual([]);
   });
 });
 
@@ -1047,18 +1163,20 @@ describe("an operator credential", () => {
 
 /*
   The registry entries (Plan 13, F.2.7's registry half, as the port half's log
-  lists them): the three commands and the organisation appearance command are
-  REST commands an operator alone reaches, with no MCP tool (ruling 2), bound
-  to the credential's organisation by the route, and checking
-  `members:manage`, which an operator may carry and no agent grant can. The
-  two reads that supply their identifiers and versions are REST only, under
-  the administration prefix, operator only, and bound to the organisation.
+  lists them, and ruling 263's resend beside revoke): the four commands and
+  the organisation appearance command are REST commands an operator alone
+  reaches, with no MCP tool (ruling 2), bound to the credential's
+  organisation by the route, and checking `members:manage`, which an operator
+  may carry and no agent grant can. The two reads that supply their
+  identifiers and versions are REST only, under the administration prefix,
+  operator only, and bound to the organisation.
 */
 describe("the registry entries", () => {
   const commandNames = [
     inviteOrganizationMemberCommandName,
     setOrganizationMemberCommandName,
     revokeOrganizationInvitationCommandName,
+    resendOrganizationInvitationCommandName,
     appearanceOrganizationCommandName,
   ] as const;
   const schemas: Record<string, unknown> = {

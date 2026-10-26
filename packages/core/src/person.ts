@@ -88,9 +88,11 @@ export const inProcessPersonCommands: readonly string[] = Object.freeze([
   "ask_question",
   "answer_question",
   "attach_artifact",
+  "assign_request",
   // `settings/members/actions.ts`
   "set_organization_member",
   "revoke_organization_invitation",
+  "resend_organization_invitation",
   // `settings/operations/actions.ts`
   "requeue_outbox",
   "requeue_notification",

@@ -19,6 +19,9 @@ import {
   The golden is compared twice: as values, and as serialised text, so a
   reordered key inside a schema fails as surely as a changed value. A
   deliberate change to a tool re-records the golden and says so in the commit.
+  One tool has been added since: `assign_request` (ruling 264), registered
+  after `update_request` and gated by `request:triage`; both goldens were
+  re-recorded for it, and the recording changed no tool already held.
 
   Four hosts cover every registration gate the server has: the scopes, a
   project on the credential, private telemetry, and the optional host

@@ -934,7 +934,7 @@ describe(`the largest input a tool can legitimately carry is ${LARGEST} elements
     );
     const listed = (await listedTools()).map((tool) => tool.name);
     expect(new Set(listed)).toEqual(everyHost);
-    expect(listed).toHaveLength(52);
+    expect(listed).toHaveLength(53);
   });
 
   test("each tool's largest input runs it; the largest is post_work_update's, and its message fits the limit, rounded up", async () => {

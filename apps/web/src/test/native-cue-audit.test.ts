@@ -11,11 +11,14 @@ import {
   type CueAuditViolation,
   classTokenForms,
   cueAuditRules,
+  cueFocusRingComposition,
   documentedCueComponents,
+  focusRingCompositionOf,
   formatViolation,
   governedScaleFamilies,
   inertClassTokenForms,
   isApplicationModule,
+  outlineTransitionClasses,
   parseClassToken,
   productionAuditTargets,
   shadowedTokenProperties,
@@ -946,10 +949,11 @@ describe("the raw-length allowlist", () => {
     ]);
   });
 
-  test("reviews only RequestPort's mark: four inline style tuples and one local svg (ruling 192)", () => {
+  test("reviews RequestPort's mark and the account menu's height cap: five inline style tuples and one local svg (rulings 192, 255)", () => {
     // Task 7 retired the workbench seam's custom property, which left the list
     // empty. Ruling 192 records the mark's: the app bar's wrapper and the
     // mark's own fill, stroke and flex, each a literal, and the mark's svg.
+    // Ruling 255 adds the account menu's cap at Base UI's available height.
     // Anything more is a new review, and this pin makes it a visible one.
     expect(reviewedInlineStyleProps).toEqual({
       "apps/web/src/components/app-shell.tsx": [
@@ -959,6 +963,9 @@ describe("the raw-length allowlist", () => {
         "{ fill: accent }",
         "{ flexShrink: 0 }",
         "{ stroke: accent }",
+      ],
+      "apps/web/src/components/user-control.tsx": [
+        '{ maxHeight: "var(--available-height)" }',
       ],
     });
     expect([...reviewedLocalSvgModules]).toEqual([
@@ -1517,6 +1524,140 @@ describe("scanner fixtures", () => {
     const reached = new Set(violations.map((violation) => violation.rule));
 
     expect([...reached].sort()).toEqual([...cueAuditRules]);
+  });
+});
+
+describe("the focus ring the package composes", () => {
+  // Synthetic packages, each module a compiled `.js` as the package ships it.
+  // The bridge publishes two colour keys, so a bare-key ring is readable too.
+  const bridge = {
+    colourKeys: new Set(["accent", "focus"]),
+    tokenNameByUtility: new Map([
+      ["--color-accent", "--cue-accent"],
+      ["--color-focus", "--cue-focus"],
+    ]),
+    transitionClasses: new Set<string>(),
+  };
+  const ringModule = [
+    'const FOCUS_RING = "focus-visible:outline-solid focus-visible:outline-(--cue-focus)";',
+    "export { FOCUS_RING };",
+  ].join("\n");
+  const composition = (
+    modules: Record<string, string>,
+    transitionClasses: ReadonlySet<string> = bridge.transitionClasses,
+  ) =>
+    focusRingCompositionOf({
+      ...bridge,
+      modules: new Map(Object.entries(modules)),
+      transitionClasses,
+    });
+
+  test("reads a ring written through a custom property and composed through an import", () => {
+    expect(
+      composition({
+        "/pkg/dist/system/_focus-ring.js": ringModule,
+        "/pkg/dist/primitives/tabs.js": [
+          'import { FOCUS_RING as RING } from "../system/_focus-ring.js";',
+          "const trigger = `inline-flex transition-colors ${RING}`;",
+          "export { trigger };",
+        ].join("\n"),
+      }),
+    ).toEqual({ animated: true, colour: "var(--cue-focus)" });
+  });
+
+  test("does not read a ring quoted in a comment", () => {
+    expect(
+      composition({
+        "/pkg/dist/primitives/link.js": [
+          "/**",
+          " * Spelt `transition-colors focus-visible:outline-accent` by hand once.",
+          " */",
+          'const link = "transition-colors focus-visible:outline-focus";',
+          "// `transition-colors focus-visible:outline-accent` again, in a line comment.",
+          "export { link };",
+        ].join("\n"),
+      }),
+    ).toEqual({ animated: true, colour: "var(--cue-focus)" });
+  });
+
+  test("does not open a string at a quote inside a regular expression", () => {
+    expect(
+      composition({
+        "/pkg/dist/lib/quote.js": [
+          'const quoted = (value) => /"/u.test(value), ring = "transition-colors focus-visible:outline-(--cue-focus)";',
+          "export { quoted, ring };",
+        ].join("\n"),
+      }),
+    ).toEqual({ animated: true, colour: "var(--cue-focus)" });
+  });
+
+  test("leaves a ring nothing animates out of the choice", () => {
+    // 0.29.0's shape: a field's faint ring has no colour transition, and every
+    // keyboard ring that has one is drawn in `--cue-focus`.
+    expect(
+      composition({
+        "/pkg/dist/system/_focus-ring.js": ringModule,
+        "/pkg/dist/forms/_chassis.js": [
+          'const field = "outline-none focus-visible:outline-[color:color-mix(in_oklab,var(--cue-focus)_15%,transparent)]";',
+          "export { field };",
+        ].join("\n"),
+        "/pkg/dist/primitives/button.js": [
+          'import { FOCUS_RING } from "../system/_focus-ring.js";',
+          "const chassis = `inline-flex transition ${FOCUS_RING}`;",
+          "export { chassis };",
+        ].join("\n"),
+      }),
+    ).toEqual({ animated: true, colour: "var(--cue-focus)" });
+  });
+
+  test("refuses rings animated in two colours", () => {
+    expect(() =>
+      composition({
+        "/pkg/dist/a.js":
+          'const a = "transition-colors focus-visible:outline-(--cue-focus)";',
+        "/pkg/dist/b.js":
+          'const b = "transition-[color,outline-color] focus-visible:outline-accent";',
+      }),
+    ).toThrow(
+      "cue-focus-ring-colour-is-not-one:var(--cue-accent),var(--cue-focus)",
+    );
+  });
+
+  test("counts a stylesheet class that transitions the outline's colour", () => {
+    const transitioned = outlineTransitionClasses(
+      [
+        "@layer components {",
+        "  .cue-press { transition-property: color, outline-color, scale; }",
+        "}",
+        ".cue-fade { transition-property: opacity; }",
+      ].join("\n"),
+    );
+
+    expect([...transitioned]).toEqual(["cue-press"]);
+    expect(
+      composition(
+        {
+          "/pkg/dist/system/_focus-ring.js": ringModule,
+          "/pkg/dist/primitives/button.js": [
+            'import { FOCUS_RING } from "../system/_focus-ring.js";',
+            "const chassis = `cue-press duration-fast outline-none ${FOCUS_RING}`;",
+            "export { chassis };",
+          ].join("\n"),
+        },
+        transitioned,
+      ),
+    ).toEqual({ animated: true, colour: "var(--cue-focus)" });
+  });
+
+  test("reads the installed package's animated rings as --cue-focus", () => {
+    // `@cueplusplus/ui@0.29.0`. 0.14.1 drew every ring `outline-accent` but
+    // the recessed field chassis's and the grouped field's, which were
+    // `outline-(--cue-focus)` with no colour transition; the reader before
+    // this one never read that spelling, so it saw only the accent.
+    expect(cueFocusRingComposition()).toEqual({
+      animated: true,
+      colour: "var(--cue-focus)",
+    });
   });
 });
 

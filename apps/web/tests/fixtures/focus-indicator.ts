@@ -16,9 +16,11 @@
  */
 
 /**
- * The two token names a focused element is asked to resolve. Every focus ring
- * the installed package draws is `outline-accent`; `--cue-focus` is the axis
- * the token layer publishes for the same purpose, and either satisfies §13.
+ * The two token names a focused element is asked to resolve, and either
+ * satisfies §13. Since `@cueplusplus/ui` 0.17.0 every keyboard ring the
+ * installed package draws is `--cue-focus`. At 0.14.1 every ring but two was
+ * `outline-accent`, which is why `--cue-accent` is here; the two, the recessed
+ * field chassis's and the grouped field's, were `outline-(--cue-focus)`.
  */
 export const focusTokenNames = ["--cue-accent", "--cue-focus"] as const;
 
@@ -27,9 +29,33 @@ export const focusTokenNames = ["--cue-accent", "--cue-focus"] as const;
  *
  * Fully transparent, which no focus ring can be — so an unresolved token reads
  * as "this page has no focus colour" rather than silently matching whatever
- * colour the probe inherited.
+ * colour the probe inherited. Through the mix in `focusTokenExpressions` the
+ * same fallback reads `oklab(0 0 0 / 0)`, and is just as unresolved.
  */
 export const unresolvedFocusToken = "rgba(0, 0, 0, 0)";
+
+/**
+ * The CSS the browser lane resolves for one token name: the token as written,
+ * and the token mixed in oklab at 100% with transparent.
+ *
+ * `getComputedStyle` reports a colour in the notation it was computed in, not
+ * in one canonical form. A ring painted `var(--cue-focus)` reads as the token
+ * does: `rgb(230, 106, 69)` for `#e66a45`. A recessed field's ring has been
+ * painted `color-mix(in oklab, var(--cue-focus) var(--cue-style-field-focus-mix, 15%), transparent)`
+ * since `@cueplusplus/ui` 0.24.0, and at a 100% share, the share every field
+ * inside `data-field-edge="contrast"` takes, it reads
+ * `oklab(0.668073 0.129787 0.0987645)`: the same colour, another string
+ * (headless Chrome 155, 2026-10-25). The second expression is that mix with
+ * the token in it, so the lane has that string to compare with. At the
+ * library's default 15% share the ring reads `oklab(… / 0.15)`, which matches
+ * neither expression, so a faint field ring still fails.
+ */
+export function focusTokenExpressions(name: string): readonly string[] {
+  return [
+    `var(${name}, ${unresolvedFocusToken})`,
+    `color-mix(in oklab, var(${name}, ${unresolvedFocusToken}) 100%, transparent)`,
+  ];
+}
 
 /** What one focused element reported about how it shows focus. */
 export type FocusIndicatorSample = {
@@ -38,9 +64,20 @@ export type FocusIndicatorSample = {
   readonly outlineStyle: string;
   readonly outlineWidth: string;
   readonly tag: string;
-  /** `focusTokenNames`, resolved in that element's own cascade. */
+  /**
+   * Each of `focusTokenNames` through `focusTokenExpressions`, resolved where
+   * the focused element sits (in its parent's cascade).
+   */
   readonly tokenColors: readonly string[];
 };
+
+/**
+ * Whether a resolved token colour is fully transparent: the fallback as
+ * written, or with an alpha of zero after a slash, as the mix reports it.
+ */
+function transparent(color: string): boolean {
+  return color === unresolvedFocusToken || /\/\s*0\)$/u.test(color);
+}
 
 /** The narrowest ring a reader can be expected to see, in CSS pixels. */
 const minimumRingWidth = 1;
@@ -73,7 +110,7 @@ export function focusIndicatorFailure(
 ): string | undefined {
   const colors = sample.tokenColors
     .map((color) => color.trim())
-    .filter((color) => color.length > 0 && color !== unresolvedFocusToken);
+    .filter((color) => color.length > 0 && !transparent(color));
   if (colors.length === 0) return `${sample.tag}|no-focus-token`;
 
   const drawn = drawnFrom(sample, colors);

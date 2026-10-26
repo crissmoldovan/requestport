@@ -314,7 +314,7 @@ afterAll(async () => {
 });
 
 describe.sequential("live appearance repository", () => {
-  test("commits version two with a contiguous safe event and a value-free audit", {
+  test("commits version two of all six axes with a contiguous safe event and a value-free audit", {
     timeout: lockChoreographyTimeoutMs,
   }, async () => {
     await inRollbackTransaction(async (tx) => {
@@ -323,14 +323,18 @@ describe.sequential("live appearance repository", () => {
       const organizationId = await seedOrganization(tx);
       await seedMembership(tx, organizationId, userId);
 
+      // The owner-activation trigger's seed, as migration 0026 left it.
       const seeded =
         await createAppearanceRepository(tx).lockOrganizationDefaults(
           organizationId,
         );
       expect(seeded).toMatchObject({
-        theme: "requestport",
-        density: "ultra-compact",
+        theme: "cue",
+        density: "normal",
         mode: "system",
+        font: "match",
+        look: "match",
+        paint: "match",
         version: 1,
       });
 
@@ -339,9 +343,12 @@ describe.sequential("live appearance repository", () => {
         name: appearanceOrganizationCommandName,
         input: {
           organizationId,
-          theme: "cue",
-          density: "normal",
+          theme: "graphite",
+          density: "large",
           mode: "dark",
+          font: "plex",
+          look: "match",
+          paint: "frost",
         },
         context,
         meta: {
@@ -352,10 +359,26 @@ describe.sequential("live appearance repository", () => {
 
       expect(result).toMatchObject({
         version: 2,
-        theme: "cue",
-        changedFields: ["density", "mode", "theme"],
+        theme: "graphite",
+        font: "plex",
+        look: "match",
+        paint: "frost",
+        changedFields: ["density", "font", "mode", "paint", "theme"],
       });
       expect(result.aggregateId).toBe(seeded?.aggregateId);
+      expect(
+        await createAppearanceRepository(tx).lockOrganizationDefaults(
+          organizationId,
+        ),
+      ).toMatchObject({
+        theme: "graphite",
+        density: "large",
+        mode: "dark",
+        font: "plex",
+        look: "match",
+        paint: "frost",
+        version: 2,
+      });
 
       const events = await appearanceEvents(tx, organizationId);
       expect(events.map((event) => event.aggregateVersion)).toEqual([1, 2]);
@@ -372,13 +395,23 @@ describe.sequential("live appearance repository", () => {
         actor: { type: "user", id: userId },
         data: {
           organizationId,
-          changedFields: ["density", "mode", "theme"],
+          changedFields: ["density", "font", "mode", "paint", "theme"],
           before: {
-            theme: "requestport",
-            density: "ultra-compact",
+            theme: "cue",
+            density: "normal",
             mode: "system",
+            font: "match",
+            look: "match",
+            paint: "match",
           },
-          after: { theme: "cue", density: "normal", mode: "dark" },
+          after: {
+            theme: "graphite",
+            density: "large",
+            mode: "dark",
+            font: "plex",
+            look: "match",
+            paint: "frost",
+          },
         },
       });
       expect(await outboxStates(tx, organizationId)).toEqual([
@@ -398,9 +431,9 @@ describe.sequential("live appearance repository", () => {
         targetType: "organization_appearance",
         targetId: seeded?.aggregateId,
         reason: "Organization appearance defaults were updated",
-        fieldNames: ["density", "mode", "theme"],
+        fieldNames: ["density", "font", "mode", "paint", "theme"],
       });
-      expect(JSON.stringify(audits[0])).not.toContain("cue");
+      expect(JSON.stringify(audits[0])).not.toContain("graphite");
     });
   });
 
@@ -520,7 +553,7 @@ describe.sequential("live appearance repository", () => {
     });
   });
 
-  test("denies revoked membership, suspended tenant, and non-owner roles", {
+  test("denies revoked membership, suspended tenant, and the member role", {
     timeout: lockChoreographyTimeoutMs,
   }, async () => {
     await inRollbackTransaction(async (tx) => {
@@ -548,7 +581,11 @@ describe.sequential("live appearance repository", () => {
             expectedVersion: 1,
           },
         }),
-      ).rejects.toMatchObject({ code: "forbidden" });
+      ).rejects.toMatchObject({
+        code: "forbidden",
+        message:
+          "An owner or admin is required to change the organization's appearance",
+      });
 
       await tx.execute(sql`
         update "organization_members" set "status" = 'revoked'
@@ -675,6 +712,99 @@ describe.sequential("live appearance repository", () => {
     });
   });
 
+  test("creates and updates a person's typeface, Look and surface, and an older three-axis writer keeps them (ruling 255)", {
+    timeout: lockChoreographyTimeoutMs,
+  }, async () => {
+    await inRollbackTransaction(async (tx) => {
+      await ensureAppearanceCutover(tx);
+      const { userId, sessionId } = await seedUser(tx);
+      const bus = personalBus(tx);
+      const context = () => userContext({ userId, sessionId });
+      // The row as the live repository left it, read past the command's result.
+      const stored = async () =>
+        (
+          await tx.execute(sql`
+            select "theme", "density", "mode", "font", "look", "paint", "version"
+            from "user_appearance_preferences" where "user_id" = ${userId}
+          `)
+        ).rows[0];
+
+      // The insert writes all three new columns.
+      await bus.execute({
+        name: appearancePersonalCommandName,
+        input: {
+          theme: "zine",
+          density: null,
+          mode: null,
+          font: "dm",
+          look: "editorial",
+          paint: "grain",
+        },
+        context: context(),
+        meta: {
+          idempotencyKey: `appearance-six-a-${crypto.randomUUID()}`,
+          expectedVersion: 0,
+        },
+      });
+      expect(await stored()).toEqual({
+        theme: "zine",
+        density: null,
+        mode: null,
+        font: "dm",
+        look: "editorial",
+        paint: "grain",
+        version: 1,
+      });
+
+      // The update writes each of them, a null included.
+      await bus.execute({
+        name: appearancePersonalCommandName,
+        input: {
+          theme: "zine",
+          density: null,
+          mode: null,
+          font: "plex",
+          look: "ledger",
+          paint: null,
+        },
+        context: context(),
+        meta: {
+          idempotencyKey: `appearance-six-b-${crypto.randomUUID()}`,
+          expectedVersion: 1,
+        },
+      });
+      expect(await stored()).toEqual({
+        theme: "zine",
+        density: null,
+        mode: null,
+        font: "plex",
+        look: "ledger",
+        paint: null,
+        version: 2,
+      });
+
+      // A writer that names only the first three axes leaves the other three.
+      await bus.execute({
+        name: appearancePersonalCommandName,
+        input: { theme: null, density: "large", mode: null },
+        context: context(),
+        meta: {
+          idempotencyKey: `appearance-six-c-${crypto.randomUUID()}`,
+          expectedVersion: 2,
+        },
+      });
+      expect(await stored()).toEqual({
+        theme: null,
+        density: "large",
+        mode: null,
+        font: "plex",
+        look: "ledger",
+        paint: null,
+        version: 3,
+      });
+    });
+  });
+
   test("refuses a personal write on a revoked session and an expired one", {
     timeout: lockChoreographyTimeoutMs,
   }, async () => {
@@ -719,7 +849,7 @@ describe.sequential("live appearance repository", () => {
     });
   });
 
-  test("resolves an appearance snapshot with and without an organization", {
+  test("resolves a six-axis appearance snapshot with and without an organization (ruling 255)", {
     timeout: lockChoreographyTimeoutMs,
   }, async () => {
     await inRollbackTransaction(async (tx) => {
@@ -729,21 +859,36 @@ describe.sequential("live appearance repository", () => {
       await seedMembership(tx, organizationId, userId);
       const repository = createAppearanceRepository(tx);
 
+      // No organization named: the fallback, which is 0026's seed.
       expect(await repository.readAppearanceSnapshot({ userId })).toMatchObject(
         {
-          user: { theme: null, density: null, mode: null, version: 0 },
+          user: {
+            theme: null,
+            density: null,
+            mode: null,
+            font: null,
+            look: null,
+            paint: null,
+            version: 0,
+          },
           organization: {
-            theme: "requestport",
-            density: "ultra-compact",
+            theme: "cue",
+            density: "normal",
             mode: "system",
+            font: "match",
+            look: "match",
+            paint: "match",
             version: 0,
           },
           effective: {
-            theme: "requestport",
+            theme: "cue",
             source: {
               theme: "fallback",
               density: "fallback",
               mode: "fallback",
+              font: "fallback",
+              look: "fallback",
+              paint: "fallback",
             },
           },
         },
@@ -751,27 +896,50 @@ describe.sequential("live appearance repository", () => {
 
       await tx.execute(sql`
         update "organization_appearance_defaults"
-        set "theme" = 'cue', "density" = 'normal', "mode" = 'dark'
+        set "theme" = 'kiln', "density" = 'normal', "mode" = 'dark',
+          "look" = 'editorial'
         where "organization_id" = ${organizationId}
       `);
       await tx.execute(sql`
-        insert into "user_appearance_preferences" ("user_id", "density")
-        values (${userId}, 'large')
+        insert into "user_appearance_preferences"
+          ("user_id", "density", "font", "paint")
+        values (${userId}, 'large', 'plex', 'match')
       `);
 
       expect(
         await repository.readAppearanceSnapshot({ userId, organizationId }),
       ).toMatchObject({
-        user: { theme: null, density: "large", mode: null, version: 1 },
-        organization: { theme: "cue", density: "normal", mode: "dark" },
+        user: {
+          theme: null,
+          density: "large",
+          mode: null,
+          font: "plex",
+          look: null,
+          paint: "match",
+          version: 1,
+        },
+        organization: {
+          theme: "kiln",
+          density: "normal",
+          mode: "dark",
+          font: "match",
+          look: "editorial",
+          paint: "match",
+        },
         effective: {
-          theme: "cue",
+          theme: "kiln",
           density: "large",
           mode: "dark",
+          font: "plex",
+          look: "editorial",
+          paint: "match",
           source: {
             theme: "organization",
             density: "user",
             mode: "organization",
+            font: "user",
+            look: "organization",
+            paint: "user",
           },
         },
       });
@@ -785,9 +953,12 @@ describe.sequential("live appearance repository", () => {
         }),
       ).toMatchObject({
         organization: {
-          theme: "requestport",
-          density: "ultra-compact",
+          theme: "cue",
+          density: "normal",
           mode: "system",
+          font: "match",
+          look: "match",
+          paint: "match",
           version: 0,
         },
       });
@@ -1196,6 +1367,9 @@ describe.sequential("live appearance lock choreography", () => {
           theme: "cue",
           density: "normal",
           mode: "dark",
+          font: "match",
+          look: "match",
+          paint: "match",
           lastUpdatedByUserId: seeded.first,
         }),
       ).toMatchObject({ version: 2 });
@@ -1211,6 +1385,9 @@ describe.sequential("live appearance lock choreography", () => {
           theme: "dusk",
           density: "large",
           mode: "light",
+          font: "match",
+          look: "match",
+          paint: "match",
           lastUpdatedByUserId: seeded.second,
         }),
       ).toBeNull();
@@ -1259,6 +1436,9 @@ describe.sequential("live appearance lock choreography", () => {
           theme: "cue",
           density: null,
           mode: null,
+          font: null,
+          look: null,
+          paint: null,
         }),
       ).toMatchObject({ version: 1, theme: "cue" });
       await firstClient.query("COMMIT");
@@ -1270,6 +1450,9 @@ describe.sequential("live appearance lock choreography", () => {
           theme: "venu",
           density: null,
           mode: null,
+          font: null,
+          look: null,
+          paint: null,
         }),
       ).toBeNull();
       await secondClient.query("ROLLBACK");

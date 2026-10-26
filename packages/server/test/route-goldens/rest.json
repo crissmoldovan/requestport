@@ -9939,6 +9939,138 @@
       }
     },
     {
+      "name": "POST commands/resend_organization_invitation as an operator",
+      "request": {
+        "method": "POST",
+        "url": "https://requestport.test/api/v1/commands/resend_organization_invitation",
+        "headers": [
+          ["authorization", "Bearer golden-fake-credential"],
+          ["content-type", "application/json"]
+        ],
+        "params": {
+          "path": ["commands", "resend_organization_invitation"]
+        },
+        "body": "{\"input\":{},\"idempotencyKey\":\"golden-idempotency-key-0001\",\"expectedVersion\":1}"
+      },
+      "response": {
+        "status": 422,
+        "headers": [
+          ["cache-control", "private, no-store"],
+          [
+            "content-security-policy",
+            "default-src 'self'; script-src 'self' 'nonce-<nonce>' 'strict-dynamic' 'unsafe-eval'; style-src 'self'; style-src-elem 'self' 'nonce-<nonce>'; style-src-attr 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://github.com https://slack.com"
+          ],
+          ["content-type", "application/json"],
+          [
+            "permissions-policy",
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()"
+          ],
+          ["referrer-policy", "strict-origin-when-cross-origin"],
+          ["x-content-type-options", "nosniff"],
+          ["x-frame-options", "DENY"]
+        ],
+        "body": "{\"error\":\"validation_failed\",\"message\":\"The request input is invalid.\",\"details\":{\"field\":\"invitationId\"}}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "authenticate",
+            "args": ["api"]
+          },
+          {
+            "call": "rateLimit.consume",
+            "args": [
+              {
+                "environment": "test",
+                "endpointClass": "mutation",
+                "principalFingerprint": "hmac(018f0000-0000-7000-8000-00000000c102 | operator:018f0000-0000-7000-8000-00000000c101)",
+                "limit": 120,
+                "windowSeconds": 60,
+                "cost": "$undefined"
+              }
+            ]
+          },
+          {
+            "call": "requestPort.execute",
+            "args": [
+              "resend_organization_invitation",
+              {
+                "organizationId": "018f0000-0000-7000-8000-00000000b101"
+              },
+              {
+                "context": {
+                  "actor": {
+                    "type": "service",
+                    "id": "operator:018f0000-0000-7000-8000-00000000c101",
+                    "originatingActor": {
+                      "type": "user",
+                      "id": "user_golden_member"
+                    }
+                  },
+                  "credentialKind": "operator",
+                  "organizationId": "018f0000-0000-7000-8000-00000000b101",
+                  "projectId": null,
+                  "laneIds": {
+                    "$set": []
+                  },
+                  "scopes": {
+                    "$set": [
+                      "operator:revoke",
+                      "project:read",
+                      "org:read",
+                      "project:manage",
+                      "routing:manage",
+                      "request:create",
+                      "agent:revoke",
+                      "operations:manage",
+                      "slack:manage",
+                      "import:write",
+                      "members:manage"
+                    ]
+                  },
+                  "credentialId": "018f0000-0000-7000-8000-00000000c102",
+                  "credentialFingerprint": "golden-operator-fingerprint",
+                  "correlationId": "018f0000-0000-7000-8000-00000000c103",
+                  "authorizationId": "018f0000-0000-7000-8000-00000000c102"
+                },
+                "credentialKind": "operator",
+                "meta": {
+                  "idempotencyKey": "golden-idempotency-key-0001",
+                  "expectedVersion": 1
+                }
+              }
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "kind": "count",
+            "name": "rate_limit.decision_total",
+            "labels": {
+              "endpointClass": "mutation",
+              "status": "allowed"
+            }
+          },
+          {
+            "kind": "count",
+            "name": "command.error_total",
+            "labels": {
+              "commandName": "resend_organization_invitation",
+              "errorCode": "validation_failed"
+            }
+          },
+          {
+            "kind": "observe",
+            "name": "command.duration_ms",
+            "labels": {
+              "commandName": "resend_organization_invitation",
+              "status": "validation_failed"
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "POST commands/appearance.update_organization_defaults.v1 as an operator",
       "request": {
         "method": "POST",
@@ -10065,6 +10197,157 @@
             "labels": {
               "commandName": "appearance.update_organization_defaults.v1",
               "status": "validation_failed"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "POST commands/assign_request as an agent",
+      "request": {
+        "method": "POST",
+        "url": "https://requestport.test/api/v1/commands/assign_request",
+        "headers": [
+          ["authorization", "Bearer golden-fake-credential"],
+          ["content-type", "application/json"]
+        ],
+        "params": {
+          "path": ["commands", "assign_request"]
+        },
+        "body": "{\"input\":{\"requestId\":\"018f0000-0000-7000-8000-00000000b105\",\"assigneeUserId\":\"b1-delegating-user\"},\"idempotencyKey\":\"golden-idempotency-key-0001\",\"expectedVersion\":1}"
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          ["cache-control", "private, no-store"],
+          [
+            "content-security-policy",
+            "default-src 'self'; script-src 'self' 'nonce-<nonce>' 'strict-dynamic' 'unsafe-eval'; style-src 'self'; style-src-elem 'self' 'nonce-<nonce>'; style-src-attr 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://github.com https://slack.com"
+          ],
+          ["content-type", "application/json"],
+          [
+            "permissions-policy",
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()"
+          ],
+          ["referrer-policy", "strict-origin-when-cross-origin"],
+          ["x-content-type-options", "nosniff"],
+          ["x-frame-options", "DENY"]
+        ],
+        "body": "{\"result\":{\"characterised\":\"assign_request\"}}"
+      },
+      "admission": {
+        "calls": [
+          {
+            "call": "authenticate",
+            "args": ["api"]
+          },
+          {
+            "call": "rateLimit.consume",
+            "args": [
+              {
+                "environment": "test",
+                "endpointClass": "mutation",
+                "principalFingerprint": "hmac(018f0000-0000-7000-8000-00000000b104 | 018f0000-0000-7000-8000-00000000b103)",
+                "limit": 120,
+                "windowSeconds": 60,
+                "cost": "$undefined"
+              }
+            ]
+          },
+          {
+            "call": "requestPort.execute",
+            "args": [
+              "assign_request",
+              {
+                "requestId": "018f0000-0000-7000-8000-00000000b105",
+                "assigneeUserId": "b1-delegating-user",
+                "organizationId": "018f0000-0000-7000-8000-00000000b101"
+              },
+              {
+                "context": {
+                  "actor": {
+                    "type": "agent",
+                    "id": "018f0000-0000-7000-8000-00000000b103",
+                    "delegatedBy": {
+                      "type": "user",
+                      "id": "b1-delegating-user"
+                    }
+                  },
+                  "organizationId": "018f0000-0000-7000-8000-00000000b101",
+                  "projectId": "018f0000-0000-7000-8000-00000000b102",
+                  "laneIds": {
+                    "$set": []
+                  },
+                  "credentialId": "018f0000-0000-7000-8000-00000000b104",
+                  "credentialFingerprint": "b1-credential-fingerprint",
+                  "correlationId": "018f0000-0000-7000-8000-00000000b1cc",
+                  "audience": "api",
+                  "authorizationId": "018f0000-0000-7000-8000-00000000b104",
+                  "scopes": {
+                    "$set": [
+                      "org:read",
+                      "project:read",
+                      "request:create",
+                      "request:read",
+                      "request:write",
+                      "request:triage",
+                      "request:complete",
+                      "request:verify",
+                      "question:answer",
+                      "work:claim",
+                      "work:update",
+                      "agent:register",
+                      "webhook:manage",
+                      "import:write"
+                    ]
+                  }
+                },
+                "credentialKind": "agent",
+                "meta": {
+                  "idempotencyKey": "golden-idempotency-key-0001",
+                  "expectedVersion": 1
+                }
+              }
+            ]
+          },
+          {
+            "call": "receipts.lock",
+            "args": [
+              {
+                "actorFingerprint": "agent:018f0000-0000-7000-8000-00000000b103:delegated-by:user:b1-delegating-user",
+                "commandName": "assign_request",
+                "idempotencyFingerprint": "1cc4d0882a5516edfbb1b778c27f557c70e053038010f027d624becf19306b49"
+              }
+            ]
+          },
+          {
+            "call": "receipts.find",
+            "args": [
+              {
+                "actorFingerprint": "agent:018f0000-0000-7000-8000-00000000b103:delegated-by:user:b1-delegating-user",
+                "commandName": "assign_request",
+                "idempotencyFingerprint": "1cc4d0882a5516edfbb1b778c27f557c70e053038010f027d624becf19306b49"
+              }
+            ]
+          }
+        ],
+        "ports": ["commandAuthorization.assertCurrent"],
+        "transactions": 1,
+        "metrics": [
+          {
+            "kind": "count",
+            "name": "rate_limit.decision_total",
+            "labels": {
+              "endpointClass": "mutation",
+              "status": "allowed"
+            }
+          },
+          {
+            "kind": "observe",
+            "name": "command.duration_ms",
+            "labels": {
+              "commandName": "assign_request",
+              "status": "ok"
             }
           }
         ]

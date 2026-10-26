@@ -38,6 +38,32 @@ describe("isolated appearance table statements", () => {
     }
   });
 
+  test("follows 0014 with 0026's table statements, so the copy has all six axes and the compact density (ruling 255)", async () => {
+    const statements = await isolatedAppearanceTableStatements();
+    const added = statements.slice(8).join("\n");
+
+    for (const axis of ["font", "look", "paint"]) {
+      expect(added).toContain(
+        `"organization_appearance_defaults" ADD COLUMN "${axis}" text DEFAULT 'match' NOT NULL`,
+      );
+      expect(added).toContain(
+        `"user_appearance_preferences" ADD COLUMN "${axis}" text;`,
+      );
+    }
+    expect(added).toContain("'quotamate'");
+    expect(added).toContain(
+      'ADD CONSTRAINT "organization_appearance_defaults_density_check"',
+    );
+    expect(added).toContain(
+      'ADD CONSTRAINT "user_appearance_preferences_density_check"',
+    );
+    expect(added).toContain("'compact'");
+    expect(added).not.toMatch(
+      /requestport_initialize_organization_appearance/u,
+    );
+    expect(added).not.toMatch(/"reseeded"/u);
+  });
+
   test("excludes everything the shared schema owns", async () => {
     for (const statement of await isolatedAppearanceTableStatements()) {
       expect(statement).not.toMatch(/CREATE\s+(?:TRIGGER|FUNCTION)/iu);

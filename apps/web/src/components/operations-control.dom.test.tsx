@@ -5,12 +5,14 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { OperationsActionState } from "../app/(app)/settings/operations/action-state.js";
+import { ConsoleToasts } from "./console-toasts.js";
 import {
   ReleaseRetentionHoldForm,
   RequeueImportDispatchForm,
   RequeueNotificationForm,
   RequeueOutboxForm,
   RequeueSlackOperationForm,
+  RetentionHoldDialog,
   RetentionHoldForm,
 } from "./operations-control.js";
 
@@ -35,9 +37,19 @@ function mount(node: ReactNode) {
       persistPreferences={false}
       theme="requestport"
     >
-      {node}
+      <ConsoleToasts>{node}</ConsoleToasts>
     </ThemeProvider>,
   );
+}
+
+/**
+ * A confirmation, found in the toast viewport rather than in the form's own
+ * result line, which is drawn in the dialog until it closes.
+ */
+async function toastSaying(text: string) {
+  return within(
+    screen.getByRole("region", { name: "Notifications" }),
+  ).findByText(text);
 }
 
 function submitted(action: { mock: { calls: unknown[][] } }) {
@@ -225,5 +237,42 @@ describe("retention holds", () => {
       holdId: "00000000-0000-4000-8000-000000000205",
       idempotencyKey: key,
     });
+  });
+});
+
+describe("a new retention hold, from its panel (ruling 259)", () => {
+  test("opens in a dialog from Add hold, and closes on success with a toast", async () => {
+    const user = userEvent.setup();
+    const action = vi.fn().mockResolvedValue({
+      message: "Retention hold created.",
+      status: "success",
+    } satisfies OperationsActionState);
+    mount(
+      <RetentionHoldDialog
+        action={action}
+        idempotencyKey="web:retention:create:fixture-0001"
+      />,
+    );
+
+    expect(screen.queryByLabelText("Preservation reason")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Add hold" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Add a retention hold",
+    });
+    await user.type(
+      within(dialog).getByLabelText("Preservation reason"),
+      "Pending legal review",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Create hold" }),
+    );
+
+    await waitFor(() => expect(action).toHaveBeenCalled());
+    expect(await toastSaying("Retention hold created.")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Add a retention hold" }),
+      ).toBeNull(),
+    );
   });
 });

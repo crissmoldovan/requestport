@@ -7,13 +7,14 @@ import {
   type OrganizationRole,
   sanitizeEventActor,
 } from "@requestport/domain";
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
 
 import type { Database } from "../client.js";
 import {
   domainEvents,
   invitations,
+  notificationIntents,
   organizationMembers,
   organizations,
   outbox,
@@ -23,15 +24,17 @@ import { inTenantTransaction } from "../tenant-context.js";
 import type { Tx } from "../transaction.js";
 
 /*
-  Organisation access: changing a member's role or access, and revoking a
-  pending invitation (Plan 13, F.2.7). This is the `organizationManagement`
-  port of the tenant bus, opened on the bus's transaction; the
-  `set_organization_member` and `revoke_organization_invitation` commands
-  (`@requestport/domain`, `organization-administration-commands.ts`) are its
-  only callers, for the members page's forms and for an operator credential
-  on `/api/v1`. Each method's role rules run for `userId`, the member whose
-  authority the command runs with; the records name `actor`, who acted. The
-  bus keeps the one receipt, so nothing here keys, locks or saves one.
+  Organisation access: changing a member's role or access, revoking a
+  pending invitation (Plan 13, F.2.7), and resending one (ruling 260). This is
+  the `organizationManagement` port of the tenant bus, opened on the bus's
+  transaction; the `set_organization_member`,
+  `revoke_organization_invitation` and `resend_organization_invitation`
+  commands (`@requestport/domain`, `organization-administration-commands.ts`)
+  are its only callers: the first two for the members page's forms and for an
+  operator credential on `/api/v1`, the third for the members page alone.
+  Each method's role rules run for `userId`, the member whose authority the
+  command runs with; the records name `actor`, who acted. The bus keeps the
+  one receipt, so nothing here keys, locks or saves one.
 */
 
 /**
@@ -175,17 +178,42 @@ function requireOwnerAuthority(
   }
 }
 
-/** Only an owner revokes an owner invitation. */
+/** Only an owner revokes, or resends, an owner invitation. */
 function requireInvitationOwnerAuthority(
   actorRole: "owner" | "admin",
   invitationRole: string,
+  verb: "revoke" | "resend" = "revoke",
 ) {
   if (invitationRole === "owner" && actorRole !== "owner") {
     throw new DomainError(
       "forbidden",
-      "Only an owner may revoke an owner invitation",
+      `Only an owner may ${verb} an owner invitation`,
     );
   }
+}
+
+/**
+ * A resend's audit row, naming the mutation's actor as `appendChange` does.
+ * It writes no event: the command returns the invitation's own to the bus,
+ * which writes it and its outbox row and dispatches it after commit.
+ */
+async function appendResendAudit(
+  transaction: Tx,
+  context: OrganizationManagementMutation,
+  invitationId: string,
+) {
+  const { actorType, actorId } = auditActor(context);
+  await transaction.insert(securityAuditRecords).values({
+    organizationId: context.organizationId,
+    actorType,
+    actorId,
+    action: "organization.invitation_resent",
+    targetType: "invitation",
+    targetId: invitationId,
+    reason: "Organization invitation resent",
+    fieldNames: ["tokenHash", "createdAt", "expiresAt"],
+    correlationId: context.correlationId,
+  });
 }
 
 /**
@@ -247,9 +275,10 @@ async function appendChange(
  * before the bus answers a replay; each write runs them again, then its
  * version check and its own rules, before it writes. A member change takes
  * `lockOrganizationAccessChanges` before anything else, in `authorize` and
- * again in the write. Revoking an invitation does not: it changes no
- * membership, and nothing earlier in the bus's transaction has locked the
- * invitation row it takes `FOR UPDATE`, so it has no lock to upgrade.
+ * again in the write. Revoking or resending an invitation does not: neither
+ * changes a membership, and nothing earlier in the bus's transaction has
+ * locked the invitation row each takes `FOR UPDATE`, so neither has a lock to
+ * upgrade.
  */
 export function createOrganizationManagementRepository(
   database: Database | Tx,
@@ -479,6 +508,147 @@ export function createOrganizationManagementRepository(
             data: { invitationId: updated.id },
           });
           return updated;
+        },
+      );
+    },
+
+    async authorizeInvitationResend(
+      target: OrganizationManagementTarget,
+      invitationId,
+    ) {
+      await inTenantTransaction(
+        database,
+        target.organizationId,
+        async (transaction) => {
+          const actorRole = await requireOrganizationAdministrator(
+            transaction,
+            target,
+          );
+          const invitation = await lockInvitation(
+            transaction,
+            target.organizationId,
+            invitationId,
+          );
+          requireInvitationOwnerAuthority(actorRole, invitation.role, "resend");
+        },
+      );
+    },
+
+    /*
+      Ruling 260: a pending invitation, issued again. Its token hash is
+      replaced, so the earlier token matches no row; `created_at` becomes the
+      new token's issue time and `expires_at` that time plus the lifetime the
+      command hands over, as a renewal sets them (foundation-repository.ts,
+      `renewInvitation`); the role and the person who created it stay. An
+      email the earlier issue still has scheduled is suppressed here, and an
+      earlier issue's event that the worker has not yet routed schedules
+      nothing when it is, because notification-repository.ts sends only for
+      the invitation's current version. So only the resend's email goes out,
+      except one already being delivered, which holds a lease and is left to
+      finish. A row that is accepted, revoked or expired is
+      `invalid_transition`: an expired one is renewed by inviting the address
+      again.
+    */
+    async resendInvitation(
+      context: OrganizationManagementMutation,
+      invitationId,
+      reissue,
+    ) {
+      return inTenantTransaction(
+        database,
+        context.organizationId,
+        async (transaction) => {
+          const actorRole = await requireOrganizationAdministrator(
+            transaction,
+            context,
+          );
+          const invitation = await lockInvitation(
+            transaction,
+            context.organizationId,
+            invitationId,
+          );
+          if (invitation.version !== context.expectedVersion) {
+            throw new DomainError(
+              "version_conflict",
+              "Invitation version changed",
+              {
+                currentVersion: invitation.version,
+                expectedVersion: context.expectedVersion,
+              },
+            );
+          }
+          requireInvitationOwnerAuthority(actorRole, invitation.role, "resend");
+          const clock = await transaction.execute<{ now: string | Date }>(
+            sql`select clock_timestamp() as now`,
+          );
+          const issuedAt = new Date(clock.rows[0]?.now ?? Number.NaN);
+          if (Number.isNaN(issuedAt.getTime())) {
+            throw new Error("Organization management persistence failed");
+          }
+          if (
+            invitation.acceptedAt ||
+            invitation.revokedAt ||
+            invitation.expiresAt.getTime() <= issuedAt.getTime()
+          ) {
+            throw new DomainError(
+              "invalid_transition",
+              "Only a pending invitation may be resent",
+            );
+          }
+          const [updated] = await transaction
+            .update(invitations)
+            .set({
+              tokenHash: reissue.tokenHash,
+              createdAt: issuedAt,
+              expiresAt: new Date(
+                issuedAt.getTime() + reissue.expiresInSeconds * 1_000,
+              ),
+              version: sql`${invitations.version} + 1`,
+            })
+            .where(
+              and(
+                eq(invitations.id, invitation.id),
+                eq(invitations.organizationId, context.organizationId),
+                eq(invitations.version, context.expectedVersion),
+                isNull(invitations.acceptedAt),
+                isNull(invitations.revokedAt),
+                gt(invitations.expiresAt, issuedAt),
+              ),
+            )
+            .returning({
+              id: invitations.id,
+              role: invitations.role,
+              expiresAt: invitations.expiresAt,
+              version: invitations.version,
+            });
+          if (!updated) {
+            throw new DomainError(
+              "version_conflict",
+              "Invitation version changed",
+            );
+          }
+          await transaction
+            .update(notificationIntents)
+            .set({
+              status: "suppressed",
+              nextAttemptAt: null,
+              updatedAt: sql`clock_timestamp()`,
+            })
+            .where(
+              and(
+                eq(notificationIntents.organizationId, context.organizationId),
+                eq(notificationIntents.invitationId, updated.id),
+                inArray(notificationIntents.status, ["pending", "failed"]),
+                isNotNull(notificationIntents.nextAttemptAt),
+              ),
+            );
+          await appendResendAudit(transaction, context, updated.id);
+          return {
+            id: updated.id,
+            role: updated.role as OrganizationRole,
+            expiresAt: updated.expiresAt,
+            version: updated.version,
+          };
         },
       );
     },

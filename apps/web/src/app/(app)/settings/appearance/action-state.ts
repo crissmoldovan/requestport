@@ -16,8 +16,15 @@ export const appearanceActionStatuses = [
 ] as const;
 export type AppearanceActionStatus = (typeof appearanceActionStatuses)[number];
 
-/** The three axes are the only fields a failure can be attributed to. */
-export const appearanceFieldNames = ["theme", "density", "mode"] as const;
+/** The six axes are the only fields a failure can be attributed to. */
+export const appearanceFieldNames = [
+  "theme",
+  "density",
+  "mode",
+  "font",
+  "look",
+  "paint",
+] as const;
 export type AppearanceFieldName = (typeof appearanceFieldNames)[number];
 
 export const appearanceGlobalErrorCodes = [

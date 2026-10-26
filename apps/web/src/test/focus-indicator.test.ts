@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   type FocusIndicatorSample,
   focusIndicatorFailures,
+  focusTokenExpressions,
   focusTokenNames,
   unresolvedFocusToken,
 } from "../../tests/fixtures/focus-indicator.js";
@@ -37,6 +38,52 @@ function sample(
     tokenColors: [cueAccent, cueFocus],
     ...overrides,
   };
+}
+
+/**
+ * What headless Chrome 155 reported on 2026-10-25 for a page whose
+ * `--cue-accent` and `--cue-focus` are both `#e66a45`, keyed by the CSS it was
+ * asked to resolve (`notation-probe2.html` in the track's record). A key the
+ * expressions no longer produce resolves to nothing, so a change to
+ * `focusTokenExpressions` shows up here as a failure rather than a pass.
+ */
+const chromeResolvedFocus: ReadonlyMap<string, string> = new Map([
+  ["var(--cue-accent, rgba(0, 0, 0, 0))", "rgb(230, 106, 69)"],
+  [
+    "color-mix(in oklab, var(--cue-accent, rgba(0, 0, 0, 0)) 100%, transparent)",
+    "oklab(0.668073 0.129787 0.0987645)",
+  ],
+  ["var(--cue-focus, rgba(0, 0, 0, 0))", "rgb(230, 106, 69)"],
+  [
+    "color-mix(in oklab, var(--cue-focus, rgba(0, 0, 0, 0)) 100%, transparent)",
+    "oklab(0.668073 0.129787 0.0987645)",
+  ],
+]);
+
+/** The same page with both tokens set to `initial`. */
+const chromeResolvedNothing: ReadonlyMap<string, string> = new Map([
+  ["var(--cue-accent, rgba(0, 0, 0, 0))", "rgba(0, 0, 0, 0)"],
+  [
+    "color-mix(in oklab, var(--cue-accent, rgba(0, 0, 0, 0)) 100%, transparent)",
+    "oklab(0 0 0 / 0)",
+  ],
+  ["var(--cue-focus, rgba(0, 0, 0, 0))", "rgba(0, 0, 0, 0)"],
+  [
+    "color-mix(in oklab, var(--cue-focus, rgba(0, 0, 0, 0)) 100%, transparent)",
+    "oklab(0 0 0 / 0)",
+  ],
+]);
+
+/** A field's ring, `color-mix(in oklab, var(--cue-focus) <share>, transparent)`. */
+const chromeFieldRingAtFullShare = "oklab(0.668073 0.129787 0.0987645)";
+const chromeFieldRingAtDefaultShare =
+  "oklab(0.668073 0.129787 0.0987645 / 0.15)";
+
+/** `tokenColors` as the browser lane assembles it, from one measured page. */
+function resolvedByChrome(page: ReadonlyMap<string, string>): string[] {
+  return focusTokenNames
+    .flatMap((name) => [...focusTokenExpressions(name)])
+    .map((expression) => page.get(expression) ?? "");
 }
 
 describe("the focus indicator rule", () => {
@@ -120,6 +167,51 @@ describe("the focus indicator rule", () => {
         }),
       ]),
     ).toHaveLength(1);
+  });
+
+  test("resolves each token as written and mixed in oklab at full strength", () => {
+    expect(focusTokenExpressions("--cue-focus")).toEqual([
+      "var(--cue-focus, rgba(0, 0, 0, 0))",
+      "color-mix(in oklab, var(--cue-focus, rgba(0, 0, 0, 0)) 100%, transparent)",
+    ]);
+  });
+
+  test("accepts a field's ring drawn from the focus token at full strength", () => {
+    // `@cueplusplus/ui` 0.29.0 paints a recessed field's ring as the focus
+    // token mixed in oklab with transparent; at a 100% share it is the token's
+    // colour in another notation, and the lane resolves that notation too.
+    expect(
+      focusIndicatorFailures([
+        sample({
+          outlineColor: chromeFieldRingAtFullShare,
+          tag: "button",
+          tokenColors: resolvedByChrome(chromeResolvedFocus),
+        }),
+      ]),
+    ).toEqual([]);
+  });
+
+  test("refuses a field's ring at the library's default 15% share", () => {
+    expect(
+      focusIndicatorFailures([
+        sample({
+          outlineColor: chromeFieldRingAtDefaultShare,
+          tag: "button",
+          tokenColors: resolvedByChrome(chromeResolvedFocus),
+        }),
+      ]),
+    ).toEqual([`button|untokenized:${chromeFieldRingAtDefaultShare}`]);
+  });
+
+  test("refuses a sample whose tokens resolved in neither notation", () => {
+    expect(
+      focusIndicatorFailures([
+        sample({
+          outlineColor: "rgb(0, 0, 0)",
+          tokenColors: resolvedByChrome(chromeResolvedNothing),
+        }),
+      ]),
+    ).toEqual(["button|no-focus-token"]);
   });
 
   test("reports every failing control and no passing one", () => {

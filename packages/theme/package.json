@@ -28,8 +28,8 @@
     "@cueplusplus/theme-base": "^1"
   },
   "devDependencies": {
-    "@cueplusplus/theme-base": "^1.0.3",
-    "@cueplusplus/theme-tools": "1.0.4",
-    "@cueplusplus/tokens": "0.14.1"
+    "@cueplusplus/theme-base": "^1.4.0",
+    "@cueplusplus/theme-tools": "1.3.0",
+    "@cueplusplus/tokens": "0.29.0"
   }
 }

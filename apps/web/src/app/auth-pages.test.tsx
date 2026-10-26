@@ -97,7 +97,10 @@ describe("authentication pages", () => {
     expect(markup).toContain('data-slot="field"');
     expect(markup.match(/data-slot="field"/gu)).toHaveLength(1);
     expect(markup).toContain("Work email");
-    expect(markup).toContain('data-slot="page-shell-title"');
+    // The ways in draw their one heading themselves, under the product's
+    // mark, rather than in PageShell's title slot (ruling 259).
+    expect(markup.match(/<h1[\s>]/gu)).toHaveLength(1);
+    expect(markup).toMatch(/<h1[^>]*>Sign in<\/h1>/u);
     expect(markup).toContain("<main");
     expect(markup).not.toContain("htmlFor");
     for (const retired of retiredAuthClasses) {

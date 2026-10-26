@@ -51,6 +51,7 @@ vi.mock("./actions.js", () => {
   };
 });
 
+import { ConsoleToasts } from "../../../../../components/console-toasts.js";
 import ProjectSettingsDetailPage from "./page.js";
 
 /** A retired recipe class, assembled so the audit reads bookkeeping, not a class. */
@@ -122,7 +123,9 @@ async function markup() {
     params: Promise.resolve({ projectId }),
   })) as ReactElement;
 
-  return renderToStaticMarkup(page);
+  // Inside the console's toast provider, which the shell mounts around every
+  // page (ruling 260): the page's dialogs raise their confirmations there.
+  return renderToStaticMarkup(<ConsoleToasts>{page}</ConsoleToasts>);
 }
 
 beforeEach(() => {
@@ -181,10 +184,38 @@ describe("the project settings detail", () => {
       "Only a project maintainer can change project details.",
     );
     expect(html).toContain("Only a project maintainer can change work policy.");
+    // The four panel actions, by the labels their triggers print. Their
+    // dialogs' submits never reach this markup (a dialog's content renders
+    // only once it is open), so the trigger is what a non-maintainer must
+    // not be handed.
     expect(html).not.toContain("Add repository");
     expect(html).not.toContain("Add alias");
     expect(html).not.toContain("Add lane");
+    expect(html).not.toContain("Set project role");
+    expect(html).not.toContain('data-slot="dialog-trigger"');
+  });
+
+  test("opens each list's add form in a dialog from its panel, and keeps the edit forms on the page (ruling 259)", async () => {
+    const html = await markup();
+
+    for (const trigger of [
+      "Add repository",
+      "Add alias",
+      "Add lane",
+      "Set project role",
+    ]) {
+      expect({ present: html.includes(`>${trigger}<`), trigger }).toEqual({
+        present: true,
+        trigger,
+      });
+    }
+    expect(html.match(/data-slot="dialog-trigger"/gu)).toHaveLength(4);
+    // Their fields are in the dialogs, not under the lists.
+    expect(html).not.toContain('name="repositoryUrl"');
+    expect(html).not.toContain('name="alias"');
     expect(html).not.toContain("Save project role");
+    // The details form edits what is there, so it stays inline.
+    expect(html).toContain('name="description"');
   });
 
   test("reports absence rather than an empty page", async () => {

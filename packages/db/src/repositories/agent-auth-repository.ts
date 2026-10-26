@@ -11,6 +11,7 @@ import {
   validateCommandMeta,
 } from "@requestport/domain";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { v7 as uuidv7 } from "uuid";
 
 import type { Database } from "../client.js";
@@ -337,6 +338,41 @@ function revocationAuditActor(input: {
   return auditActor({
     actor: input.actor ?? { type: "user", id: input.actorUserId },
   });
+}
+
+/**
+ * How often the bearer path stamps one key's or one grant's last use, at
+ * most (ruling 261): every authenticated request asks, and a stamp younger
+ * than this is left as it is, so a busy agent writes once per key or grant in
+ * each five minutes rather than once per request. "Last signed in" is
+ * therefore up to five minutes behind the newest request.
+ *
+ * The bound is per key or grant, not per agent: an agent using two keys, or
+ * an OAuth agent using both its MCP and its REST grant, writes once for each
+ * in five minutes. That is deliberate. The agent's page shows each key's own
+ * "Last used" (`agents/[agentId]/page.tsx`), which is how an owner rotating a
+ * key sees whether the old one is still in use during its overlap; a stamp
+ * skipped because another of the agent's keys was fresh would leave that
+ * column saying an old key is idle while it is not.
+ */
+export const agentLastUseStampSeconds = 300;
+
+/**
+ * Whether a last-use stamp is due: never stamped, or stamped at least
+ * `agentLastUseStampSeconds` ago, both by the database's clock.
+ *
+ * It is a condition of the `UPDATE` itself, which is what makes two
+ * concurrent authentications write once: under READ COMMITTED the second
+ * update waits for the first one's row lock and then evaluates this against
+ * the row the first committed, which is fresh, so it updates nothing
+ * (`agent-auth-repository.integration.test.ts`). A stamp that is not due
+ * takes no row lock at all.
+ */
+function lastUseStampDue(column: AnyPgColumn) {
+  return or(
+    isNull(column),
+    sql`${column} <= clock_timestamp() - make_interval(secs => ${agentLastUseStampSeconds})`,
+  );
 }
 
 export function createAgentAuthRepository(database: AgentAuthDatabase) {
@@ -1818,21 +1854,59 @@ export function createAgentAuthRepository(database: AgentAuthDatabase) {
      * to the organisation that lookup found (D15), which the caller hands
      * on: on the pool it wraps as every pool read does (`withTenant`), and
      * the update names the organisation too, so a credential outside it is
-     * not stamped.
+     * not stamped. It writes only when the stamp is due (`lastUseStampDue`),
+     * and answers whether it wrote.
      */
-    async touchCredential(credentialId: string, organizationId: string) {
-      await withTenant(
+    async touchCredential(
+      credentialId: string,
+      organizationId: string,
+    ): Promise<boolean> {
+      return withTenant(
         organizationId,
-        (database) =>
-          database
+        async (database) => {
+          const stamped = await database
             .update(agentCredentials)
-            .set({ lastUsedAt: new Date() })
+            .set({ lastUsedAt: sql`clock_timestamp()` })
             .where(
               and(
                 eq(agentCredentials.id, credentialId),
                 eq(agentCredentials.organizationId, organizationId),
+                lastUseStampDue(agentCredentials.lastUsedAt),
               ),
-            ),
+            )
+            .returning({ id: agentCredentials.id });
+          return stamped.length > 0;
+        },
+        { database },
+      );
+    },
+
+    /**
+     * Stamps the OAuth grant `resolveOAuthGrant` has just resolved, as
+     * `touchCredential` stamps a key (ruling 261): bound to the organisation
+     * that lookup found, named in the update too, only when the stamp is due,
+     * and answering whether it wrote.
+     */
+    async touchOAuthGrant(
+      grantId: string,
+      organizationId: string,
+    ): Promise<boolean> {
+      return withTenant(
+        organizationId,
+        async (database) => {
+          const stamped = await database
+            .update(agentOauthGrants)
+            .set({ lastUsedAt: sql`clock_timestamp()` })
+            .where(
+              and(
+                eq(agentOauthGrants.id, grantId),
+                eq(agentOauthGrants.organizationId, organizationId),
+                lastUseStampDue(agentOauthGrants.lastUsedAt),
+              ),
+            )
+            .returning({ id: agentOauthGrants.id });
+          return stamped.length > 0;
+        },
         { database },
       );
     },

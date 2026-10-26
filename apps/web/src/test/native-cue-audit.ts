@@ -2073,11 +2073,13 @@ const anchorElement = "a";
  *
  * So the claim has to add up to a ring: a **width** that is not `0`, a **colour** that
  * resolves through a CUE++ token, and no suppressing spelling anywhere in the
- * `focus-visible:` outline utilities. That is exactly what the installed
- * package's own chassis writes — `focus-visible:outline-2`,
- * `focus-visible:outline-solid`, `focus-visible:outline-accent` — which is what
- * keeps the fix "route through the package's `Link`" rather than "copy four
- * utilities".
+ * `focus-visible:` outline utilities. That is what the package's chassis wrote
+ * at 0.14.1 — `focus-visible:outline-2`, `focus-visible:outline-solid`,
+ * `focus-visible:outline-accent`. Since 0.17.0 it writes the colour as
+ * `focus-visible:outline-(--cue-focus)`, which this rule reads as a token
+ * colour, and the width as an arbitrary length, which it does not read as a
+ * width; either way the fix stays "route through the package's `Link`" rather
+ * than "copy four utilities".
  *
  * The width is deliberately not required to name `--cue-focus-ring`. The token
  * layer declares it, but the bridge publishes no theme key for it, so there is
@@ -2148,13 +2150,6 @@ const colourNamespace = "color";
 const focusVisibleVariant = "focus-visible";
 
 /**
- * The prefix a focus ring's colour utility is written with, assembled rather
- * than spelled, because the class rules read every string literal this module
- * writes and a governed utility written out here would be one.
- */
-const focusRingColourPrefix = `${focusVisibleVariant}:${outlineUtility}-`;
-
-/**
  * The transition utilities whose property list covers the outline's colour.
  *
  * Tailwind v4 added `outline-color` to the list `transition` and its two
@@ -2169,14 +2164,359 @@ const colourTransitionUtilities = new Set([
   `${transitionUtility}-colors`,
 ]);
 
-/** Every quoted literal in one compiled module, unquoted. */
-const quotedLiteral =
-  /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/gu;
+/**
+ * One string or template literal in a compiled module.
+ *
+ * A template keeps each `${…}` substitution as the expression's source text,
+ * so a class string the package assembles from shared constants can be read
+ * whole once those constants are resolved.
+ */
+type ModuleLiteral = Readonly<{
+  /**
+   * The name a `const`, `let` or `var` binds the literal to, when the literal
+   * is that binding's whole initialiser.
+   */
+  boundTo: string | undefined;
+  parts: readonly (string | Readonly<{ expression: string }>)[];
+}>;
 
-function quotedLiteralsIn(source: string): string[] {
-  return [...source.matchAll(quotedLiteral)].map((match) =>
-    match[0].slice(1, -1),
-  );
+type ScannedModule = Readonly<{
+  /**
+   * The module without its comments or its templates' text: a template is
+   * written as its substitutions' code, each in parentheses, then "``".
+   */
+  code: string;
+  literals: readonly ModuleLiteral[];
+}>;
+
+const identifierCharacter = /[\w$]/u;
+
+/** The words after which a `/` opens a regular expression. */
+const regexAfterWords = new Set([
+  "await",
+  "case",
+  "delete",
+  "do",
+  "else",
+  "in",
+  "instanceof",
+  "new",
+  "of",
+  "return",
+  "throw",
+  "typeof",
+  "void",
+  "yield",
+]);
+
+/** The punctuation after which a `/` opens a regular expression. */
+const regexAfterPunctuation = new Set([..."(,=:[!&|?{};+-*%<>~^"]);
+
+/**
+ * Every string and template literal in one compiled module, read by a lexer.
+ *
+ * A pattern run over the whole file reads the module's comments too, and the
+ * package's comments quote class strings in backticks: `system/_focus-ring.js`
+ * at 0.29.0 describes the rings it replaced as `focus-visible:outline-2 …
+ * focus-visible:outline-accent`, and a pattern reads that as a ring the
+ * package draws. The lexer skips both kinds of comment and steps over a
+ * regular-expression literal, so a quote inside one does not open a string.
+ * Whether a `/` opens one is judged from the token in front of it alone.
+ * Where a parser needs more than that — a regular expression straight after a
+ * `)` or a `}`, a division after a property named like a keyword — this lexer
+ * can judge wrongly: a regular expression read as a division has its body
+ * read as code, where a quote opens a string.
+ */
+function scanModule(source: string): ScannedModule {
+  const literals: ModuleLiteral[] = [];
+  const code: string[] = [];
+  let tail = "";
+  let last = "";
+  let word = "";
+  let previous = "";
+  let position = 0;
+
+  const write = (text: string): void => {
+    code.push(text);
+    tail = (tail + text).slice(-160);
+    for (const character of text) {
+      if (/\s/u.test(character)) {
+        previous = character;
+        continue;
+      }
+      if (identifierCharacter.test(character)) {
+        word = identifierCharacter.test(previous)
+          ? word + character
+          : character;
+      } else {
+        word = "";
+      }
+      last = character;
+      previous = character;
+    }
+  };
+
+  const bindingBefore = (): string | undefined =>
+    /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*$/u.exec(tail)?.[1];
+  const endsInitialiser = (): boolean =>
+    /^[ \t]*(?:[;,\n]|$)/u.test(source.slice(position, position + 40));
+  const regexMayStart = (): boolean =>
+    last === "" ||
+    regexAfterPunctuation.has(last) ||
+    (identifierCharacter.test(last) && regexAfterWords.has(word));
+
+  const scanString = (quote: string): void => {
+    const start = position;
+    const boundTo = bindingBefore();
+    position += 1;
+    while (position < source.length) {
+      const character = source[position];
+      if (character === "\\") position += 2;
+      else if (character === quote) {
+        position += 1;
+        break;
+      } else if (character === "\n") break;
+      else position += 1;
+    }
+    const closed = position - 1 > start && source[position - 1] === quote;
+    literals.push({
+      boundTo: boundTo !== undefined && endsInitialiser() ? boundTo : undefined,
+      parts: [source.slice(start + 1, closed ? position - 1 : position)],
+    });
+    write(source.slice(start, position));
+  };
+
+  const scanRegex = (): void => {
+    let inClass = false;
+    position += 1;
+    while (position < source.length) {
+      const character = source[position];
+      if (character === "\\") {
+        position += 2;
+        continue;
+      }
+      if (character === "\n") break;
+      position += 1;
+      if (character === "[") inClass = true;
+      else if (character === "]") inClass = false;
+      else if (character === "/" && !inClass) break;
+    }
+    while (identifierCharacter.test(source[position] ?? "")) position += 1;
+    write("/r/");
+  };
+
+  const scanTemplate = (): void => {
+    const boundTo = bindingBefore();
+    const parts: (string | { expression: string })[] = [];
+    let text = "";
+    position += 1;
+    while (position < source.length) {
+      const character = source[position] ?? "";
+      if (character === "\\") {
+        text += source.slice(position, position + 2);
+        position += 2;
+        continue;
+      }
+      if (character === "`") {
+        position += 1;
+        break;
+      }
+      if (character === "$" && source[position + 1] === "{") {
+        parts.push(text);
+        text = "";
+        position += 2;
+        const start = position;
+        // An expression opens where a regular expression may start.
+        write("(");
+        scanCode(true);
+        parts.push({ expression: source.slice(start, position).trim() });
+        write(")");
+        position += 1;
+        continue;
+      }
+      text += character;
+      position += 1;
+    }
+    parts.push(text);
+    literals.push({
+      boundTo: boundTo !== undefined && endsInitialiser() ? boundTo : undefined,
+      parts,
+    });
+    write("``");
+  };
+
+  /** Code up to the end, or up to the `}` that closes a substitution. */
+  const scanCode = (toClosingBrace: boolean): void => {
+    let depth = 0;
+    while (position < source.length) {
+      const character = source[position] ?? "";
+      const next = source[position + 1] ?? "";
+      if (character === "/" && next === "/") {
+        const end = source.indexOf("\n", position);
+        position = end < 0 ? source.length : end;
+        continue;
+      }
+      if (character === "/" && next === "*") {
+        const end = source.indexOf("*/", position + 2);
+        position = end < 0 ? source.length : end + 2;
+        write(" ");
+        continue;
+      }
+      if (character === '"' || character === "'") {
+        scanString(character);
+        continue;
+      }
+      if (character === "`") {
+        scanTemplate();
+        continue;
+      }
+      if (character === "/" && regexMayStart()) {
+        scanRegex();
+        continue;
+      }
+      if (toClosingBrace && character === "{") depth += 1;
+      if (toClosingBrace && character === "}") {
+        if (depth === 0) return;
+        depth -= 1;
+      }
+      write(character);
+      position += 1;
+    }
+  };
+
+  scanCode(false);
+  return { code: code.join(""), literals };
+}
+
+type ModuleReference = Readonly<{ from: string; name: string }>;
+
+/** What one module binds, imports and exports, as the resolver needs it. */
+type ModuleShape = Readonly<{
+  constants: ReadonlyMap<string, ModuleLiteral>;
+  exports: ReadonlyMap<string, ModuleReference | Readonly<{ local: string }>>;
+  imports: ReadonlyMap<string, ModuleReference>;
+  literals: readonly ModuleLiteral[];
+}>;
+
+const namedImport =
+  /\bimport\s*(?:[A-Za-z_$][\w$]*\s*,\s*)?\{([^}]*)\}\s*from\s*(["'])([^"']+)\2/gu;
+const namedExport = /\bexport\s*\{([^}]*)\}(?:\s*from\s*(["'])([^"']+)\2)?/gu;
+
+/** `a, b as c` → `[["a", "a"], ["b", "c"]]`: each name and what it is called. */
+function namedBindings(list: string): [string, string][] {
+  return list
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+    .map((item) => {
+      const [name = "", alias] = item.split(/\s+as\s+/u);
+      return [name.trim(), (alias ?? name).trim()];
+    });
+}
+
+/**
+ * Class strings with their `${NAME}` substitutions put back.
+ *
+ * The package composes its classes: `system/_focus-ring.ts` holds the ring,
+ * and a chassis writes `` `… transition-colors ${FOCUS_RING}` ``. Read as
+ * written, the literal that draws a ring and the literal that animates it are
+ * different literals, so nothing ever sees the two together. A substitution
+ * that is one identifier is resolved through the module's own literal-valued
+ * bindings and its relative named imports, recursively; any other expression
+ * stands for no classes. A name bound twice in one module resolves to its
+ * first binding, and a binding initialised by anything but one literal (a
+ * `cn(…)` call, a concatenation) is not resolved at all, so a ring and a
+ * transition joined only by a call are not seen together.
+ */
+function classStringResolver(modules: ReadonlyMap<string, string>) {
+  const shapes = new Map<string, ModuleShape | undefined>();
+
+  const shapeOf = (path: string): ModuleShape | undefined => {
+    if (shapes.has(path)) return shapes.get(path);
+    const source = modules.get(path);
+    let shape: ModuleShape | undefined;
+    if (source !== undefined) {
+      const scanned = scanModule(source);
+      const constants = new Map<string, ModuleLiteral>();
+      for (const literal of scanned.literals) {
+        if (literal.boundTo !== undefined && !constants.has(literal.boundTo)) {
+          constants.set(literal.boundTo, literal);
+        }
+      }
+      const target = (specifier: string): string | undefined =>
+        specifier.startsWith(".") ? join(dirname(path), specifier) : undefined;
+      const imports = new Map<string, ModuleReference>();
+      for (const match of scanned.code.matchAll(namedImport)) {
+        const from = target(match[3] ?? "");
+        if (from === undefined) continue;
+        for (const [name, local] of namedBindings(match[1] ?? "")) {
+          imports.set(local, { from, name });
+        }
+      }
+      const exports = new Map<
+        string,
+        ModuleReference | Readonly<{ local: string }>
+      >();
+      for (const match of scanned.code.matchAll(namedExport)) {
+        const specifier = match[3];
+        const from = specifier === undefined ? undefined : target(specifier);
+        if (specifier !== undefined && from === undefined) continue;
+        for (const [name, exported] of namedBindings(match[1] ?? "")) {
+          exports.set(
+            exported,
+            from === undefined ? { local: name } : { from, name },
+          );
+        }
+      }
+      shape = { constants, exports, imports, literals: scanned.literals };
+    }
+    shapes.set(path, shape);
+    return shape;
+  };
+
+  const exported = (
+    path: string,
+    name: string,
+    seen: ReadonlySet<string>,
+  ): string | undefined => {
+    const entry = shapeOf(path)?.exports.get(name);
+    if (entry === undefined) return bound(path, name, seen);
+    return "local" in entry
+      ? bound(path, entry.local, seen)
+      : exported(entry.from, entry.name, seen);
+  };
+
+  const bound = (
+    path: string,
+    name: string,
+    seen: ReadonlySet<string>,
+  ): string | undefined => {
+    const key = `${path}#${name}`;
+    if (seen.has(key)) return undefined;
+    const within = new Set(seen).add(key);
+    const shape = shapeOf(path);
+    const constant = shape?.constants.get(name);
+    if (constant !== undefined) return text(path, constant, within);
+    const imported = shape?.imports.get(name);
+    return imported === undefined
+      ? undefined
+      : exported(imported.from, imported.name, within);
+  };
+
+  const text = (
+    path: string,
+    literal: ModuleLiteral,
+    seen: ReadonlySet<string> = new Set(),
+  ): string =>
+    literal.parts
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (!/^[A-Za-z_$][\w$]*$/u.test(part.expression)) return " ";
+        return ` ${bound(path, part.expression, seen) ?? ""} `;
+      })
+      .join("");
+
+  return { shapeOf, text };
 }
 
 /** Every compiled module the installed package ships, at any depth. */
@@ -2190,19 +2530,206 @@ function compiledPackageModules(root: string): string[] {
 }
 
 export type CueFocusRingComposition = Readonly<{
-  /** Whether a chassis that draws the ring also animates the ring's colour. */
+  /**
+   * Whether a class string that draws a ring also animates `outline-color`,
+   * so the ring fades in from whatever colour the outline had at rest.
+   */
   animated: boolean;
-  /** The `var(--cue-*)` reference the drawn ring resolves its colour through. */
+  /**
+   * The colour those animated rings are drawn in — or, when none is animated,
+   * the one colour every ring is drawn in: a `var(--…)` reference for a bridge
+   * key or a custom property, or the colour an arbitrary value writes.
+   */
   colour: string;
 }>;
+
+/** What `focusRingCompositionOf` reads: a package's modules and its bridge. */
+export type FocusRingSources = Readonly<{
+  /** Each compiled module's source, by its path. */
+  modules: ReadonlyMap<string, string>;
+  /** The colour keys the bridge publishes: `accent` for `outline-accent`. */
+  colourKeys: ReadonlySet<string>;
+  /** The bridge's `--color-<key>` names, each mapped to the token it reads. */
+  tokenNameByUtility: ReadonlyMap<string, string>;
+  /** The classes the package's stylesheet transitions `outline-color` on. */
+  transitionClasses: ReadonlySet<string>;
+}>;
+
+/**
+ * The colour one class token paints a `:focus-visible` ring in, or nothing.
+ *
+ * Three spellings draw one: a bridge key (`focus-visible:outline-accent`, how
+ * 0.14.1 wrote every ring but two), a custom property
+ * (`focus-visible:outline-(--cue-focus)`, how 0.14.1 wrote those two — the
+ * recessed field chassis's and, under `has-focus-visible:`, the grouped
+ * field's — and how every ring but a field's is written since 0.17.0), and an arbitrary value
+ * hinted or shaped as a colour (`focus-visible:outline-[color:color-mix(…)]`,
+ * a recessed field's faint ring since 0.24.0). The variant chain must be
+ * `focus-visible` alone, as the prefix this replaced required.
+ */
+function ringColourOf(
+  token: string,
+  sources: FocusRingSources,
+): string | undefined {
+  const parsed = parseClassToken(token);
+  if (
+    parsed.negated ||
+    parsed.variants.length !== 1 ||
+    parsed.variants[0] !== focusVisibleVariant
+  ) {
+    return undefined;
+  }
+  if (parsed.form === "named") {
+    if (!parsed.utility.startsWith(`${outlineUtility}-`)) return undefined;
+    const key = parsed.utility.slice(outlineUtility.length + 1);
+    if (!sources.colourKeys.has(key)) return undefined;
+    const property = sources.tokenNameByUtility.get(
+      `--${colourNamespace}-${key}`,
+    );
+    if (property === undefined) {
+      throw new Error(`cue-focus-ring-colour-is-unbridged:${key}`);
+    }
+    return `var(${property})`;
+  }
+  if (parsed.name !== outlineUtility) return undefined;
+  if (parsed.form === "custom-property") {
+    return parsed.hint === undefined || parsed.hint === "color"
+      ? `var(${parsed.value})`
+      : undefined;
+  }
+  if (parsed.form !== "arbitrary-value") return undefined;
+  const value = parsed.value ?? "";
+  const hinted = /^([a-z-]+):(.+)$/su.exec(value);
+  if (hinted)
+    return hinted[1] === "color" ? (hinted[2] ?? "").trim() : undefined;
+  // Unhinted, Tailwind reads a length as the width and anything else as the
+  // colour.
+  return /^(?:-?[\d.]|calc\(|min\(|max\(|clamp\()/u.test(value)
+    ? undefined
+    : value;
+}
+
+/**
+ * The CSS properties these readers look for, assembled from the names above
+ * rather than spelled, because the class rules read every string literal this
+ * module writes and a utility-shaped one written out here would be read.
+ */
+const outlineColourProperty = `${outlineUtility}-${colourNamespace}`;
+const transitionProperty = `${transitionUtility}-property`;
+
+/** Whether one class token gives its element a transition on `outline-color`. */
+function animatesOutlineColour(
+  token: string,
+  transitionClasses: ReadonlySet<string>,
+): boolean {
+  if (colourTransitionUtilities.has(token) || transitionClasses.has(token)) {
+    return true;
+  }
+  const parsed = parseClassToken(token);
+  if (
+    parsed.variants.length > 0 ||
+    parsed.form !== "arbitrary-value" ||
+    parsed.name !== transitionUtility
+  ) {
+    return false;
+  }
+  return (parsed.value ?? "")
+    .split(",")
+    .map((property) => property.trim())
+    .some(
+      (property) => property === outlineColourProperty || property === "all",
+    );
+}
+
+/**
+ * The single-class selectors a stylesheet gives a transition on
+ * `outline-color`: `.cue-press`, the button's press since 0.25.0, carries the
+ * colours `transition-colors` did beside `scale`.
+ */
+export function outlineTransitionClasses(css: string): Set<string> {
+  const classes = new Set<string>();
+  for (const { property, selector, value } of declarationsIn(css)) {
+    if (property !== transitionProperty && property !== transitionUtility) {
+      continue;
+    }
+    const listed = value.split(/[\s,]+/u);
+    if (!listed.includes(outlineColourProperty) && !listed.includes("all")) {
+      continue;
+    }
+    for (const one of selector.split(",")) {
+      const named = /^\.([A-Za-z][\w-]*)$/u.exec(one.trim());
+      if (named?.[1]) classes.add(named[1]);
+    }
+  }
+  return classes;
+}
+
+/**
+ * How a package draws its focus rings, from its compiled modules.
+ *
+ * Each string and template literal is read with its `${NAME}` substitutions
+ * resolved (`classStringResolver`), and a ring counts as animated when the
+ * class string that draws it also animates `outline-color`. The resting colour
+ * matters only for those: a ring drawn with no colour transition appears in
+ * its own colour in the frame focus lands, whatever the outline held at rest.
+ * That is what lets 0.29.0's two colours stand — every keyboard ring in
+ * `--cue-focus`, animated, and a recessed field's ring in that token mixed
+ * to 15%, which no field chassis animates.
+ *
+ * Animated rings in more than one colour would need more than one resting
+ * declaration and a decision about which, so that is refused rather than
+ * silently answered; so are rings in more than one colour of which none is
+ * animated.
+ */
+export function focusRingCompositionOf(
+  sources: FocusRingSources,
+): CueFocusRingComposition {
+  const resolver = classStringResolver(sources.modules);
+  const drawn = new Set<string>();
+  const animated = new Set<string>();
+
+  for (const path of sources.modules.keys()) {
+    for (const literal of resolver.shapeOf(path)?.literals ?? []) {
+      const written = resolver
+        .text(path, literal)
+        .split(/\s+/u)
+        .filter((token) => token.length > 0);
+      const painted = written.flatMap((token) => {
+        const colour = ringColourOf(token, sources);
+        return colour === undefined ? [] : [colour];
+      });
+      if (painted.length === 0) continue;
+
+      for (const colour of painted) drawn.add(colour);
+      if (
+        written.some((token) =>
+          animatesOutlineColour(token, sources.transitionClasses),
+        )
+      ) {
+        for (const colour of painted) animated.add(colour);
+      }
+    }
+  }
+
+  const chosen = animated.size > 0 ? animated : drawn;
+  if (chosen.size !== 1) {
+    throw new Error(
+      `cue-focus-ring-colour-is-not-one:${[...chosen].toSorted().join(",")}`,
+    );
+  }
+
+  const [colour = ""] = [...chosen];
+  return Object.freeze({ animated: animated.size > 0, colour });
+}
 
 /**
  * How the installed package draws a focus ring, read from the package.
  *
  * The ring is painted on `:focus-visible` and suppressed at rest, so the colour
  * an element's outline resolves to *changes* the moment focus lands — and the
- * same chassis carries a transition that covers exactly that property. Nothing
- * declares what the outline's colour is before the change, so it is
+ * class string that draws it carries a transition that covers exactly that
+ * property (`transition-colors`, or since 0.25.0 a button's `cue-press`).
+ * Nothing declares what the outline's colour is before the change, so it is
  * `currentColor`: the control's own ink. The ring is therefore drawn, at full
  * width and solid, in the control's text colour for the whole of the
  * transition, which on the primary action is its light-on-accent ink — a ring
@@ -2212,52 +2739,29 @@ export type CueFocusRingComposition = Readonly<{
  * declaring the ring's own colour as the resting outline colour leaves the
  * change with nothing to animate, and the ring is its token colour in the frame
  * it appears. This function is what tells the stylesheet which colour that is,
- * so the rule follows the package rather than a memory of it.
- *
- * A package that drew its rings in more than one colour would need more than
- * one resting declaration and a decision about which, so that is refused here
- * rather than silently answered.
+ * so the rule follows the package rather than a memory of it. It reads every
+ * compiled module under `dist`, and the stylesheet `@cueplusplus/ui/styles.css`
+ * resolves to (that file alone, not what it imports) for the classes it
+ * transitions.
  */
 export function cueFocusRingComposition(): CueFocusRingComposition {
   const surface = loadCueSurface();
-  const colours =
-    surface.themeKeysByNamespace.get(colourNamespace) ?? new Set<string>();
-  const drawn = new Set<string>();
-  let animated = false;
-
+  const modules = new Map<string, string>();
   for (const module of compiledPackageModules(
     join(surface.packageRoot, "dist"),
   )) {
-    for (const literal of quotedLiteralsIn(readFileSync(module, "utf8"))) {
-      const written = literal.split(/\s+/u);
-      const painted = written
-        .filter((token) => token.startsWith(focusRingColourPrefix))
-        .map((token) => token.slice(focusRingColourPrefix.length))
-        .filter((value) => colours.has(value));
-      if (painted.length === 0) continue;
-
-      for (const value of painted) drawn.add(value);
-      if (written.some((token) => colourTransitionUtilities.has(token))) {
-        animated = true;
-      }
-    }
+    modules.set(module, readFileSync(module, "utf8"));
   }
 
-  if (drawn.size !== 1) {
-    throw new Error(
-      `cue-focus-ring-colour-is-not-one:${[...drawn].toSorted().join(",")}`,
-    );
-  }
-
-  const [value] = [...drawn];
-  const property = surface.tokenNameByUtility.get(
-    `--${colourNamespace}-${value}`,
-  );
-  if (property === undefined) {
-    throw new Error(`cue-focus-ring-colour-is-unbridged:${value}`);
-  }
-
-  return Object.freeze({ animated, colour: `var(${property})` });
+  return focusRingCompositionOf({
+    colourKeys:
+      surface.themeKeysByNamespace.get(colourNamespace) ?? new Set<string>(),
+    modules,
+    tokenNameByUtility: surface.tokenNameByUtility,
+    transitionClasses: outlineTransitionClasses(
+      readFileSync(require.resolve("@cueplusplus/ui/styles.css"), "utf8"),
+    ),
+  });
 }
 
 /**
@@ -2335,7 +2839,9 @@ const scrollFamilies = ["m", "p"].flatMap((box) =>
  *   not lengths the density ladder scales, and `--cue-tracking-label` likewise
  *   has no bridge key.
  * - **translate, basis and indent.** These take fractions and percentages far
- *   more often than rungs, and no reviewer found one in this codebase.
+ *   more often than rungs. The one written in this codebase is the settings
+ *   layout's `basis-lg` (Tailwind's `--container-lg`, 32rem; ruling 256): a
+ *   page measure, for which CUE++ publishes no token.
  *
  * Every one of those is still reached by `arbitrary-class-value` the moment it
  * is written with a bracket, which is the form a raw measurement takes.

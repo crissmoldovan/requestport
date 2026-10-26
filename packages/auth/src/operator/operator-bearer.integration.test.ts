@@ -191,6 +191,8 @@ function apiBearer(
     verifyJwt: async () => null,
     resolveApiKey: (input) => agents.resolveApiKeyCredential(input),
     resolveOAuth: async () => null,
+    // No OAuth token reaches this composition (`verifyJwt` verifies none).
+    touchOAuthGrant: async () => {},
   });
   return createAuthenticateApiBearer({
     authenticateAgentBearer,

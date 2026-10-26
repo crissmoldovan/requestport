@@ -33,16 +33,21 @@ export const acceptancePathTokens = [
 export type AcceptancePathToken = (typeof acceptancePathTokens)[number];
 
 /**
- * The four segments that own a set of framework boundaries.
+ * The segments that own a set of framework boundaries.
  *
  * A boundary is not a URL — it is what a segment shows when the surface inside
  * it suspends, throws, or answers not-found — so a case in a boundary state
  * asserts the sentence *that segment's* boundary prints. Reading the segment
  * off the surface is what lets one driver per state cover every surface.
+ *
+ * `app-settings` is every settings page but appearance (ruling 260): its error
+ * and not-found boundaries render inside `settings/layout.tsx`, beside the
+ * section navigation, and it writes no loading file of its own.
  */
 export const acceptanceSegments = [
   "app",
   "app-appearance",
+  "app-settings",
   "auth",
   "root",
 ] as const;
@@ -75,11 +80,27 @@ export const acceptanceBoundaryText: Readonly<
     loading: "Loading this page…",
     "not-found": "That record is not available in the current organization.",
   },
+  /**
+   * The appearance page writes an error and a loading boundary of its own and
+   * no not-found file, so its not-found is the settings segment's.
+   */
   "app-appearance": {
     error: "Appearance settings are unavailable",
     "global-error": "This page could not be rendered",
     loading: "Loading appearance settings…",
-    "not-found": "That record is not available in the current organization.",
+    "not-found": "That setting is not available in the current organization.",
+  },
+  /**
+   * Every other settings page. Its loading is the authenticated segment's,
+   * which streams above `settings/layout.tsx`: no `loading.tsx` sits under
+   * `settings/` but appearance's.
+   */
+  "app-settings": {
+    error:
+      "RequestPort could not load this settings page. Nothing was changed, and the other settings pages are still reachable beside it.",
+    "global-error": "This page could not be rendered",
+    loading: "Loading this page…",
+    "not-found": "That setting is not available in the current organization.",
   },
   auth: {
     error:
@@ -136,17 +157,29 @@ export type AcceptanceSurfaceEntry = Readonly<{
   /**
    * The accessible name of the submit control the conflicting-write case drives.
    *
-   * The generic chooser takes the first form in the work area carrying a
-   * visible submit, which is the right definition for a surface that draws one.
-   * The members surface draws several, and the first is the per-member "Save
-   * role" form: the generic option chooser then picks the first role and
-   * demotes the tenant's own owner, which the repository refuses with a
-   * *genuine* conflict carrying the very sentence the injected one draws. The
-   * case therefore passed with the injection disabled, and demoted the owner
-   * every time it ran. Where the form the case is about is not the first one on
-   * the page, the case names it.
+   * The generic chooser takes the first form carrying a visible submit, which
+   * is the right definition for a surface that draws one. The members surface
+   * once drew several, the first a per-member "Save role" form: the generic
+   * option chooser then picked the first role and demoted the tenant's own
+   * owner, which the repository refused with a *genuine* conflict carrying the
+   * very sentence the injected one draws. The case passed with the injection
+   * disabled, and demoted the owner every time it ran. A role is now changed
+   * by choosing it, with no submit of its own, but the case still names the
+   * form it is about rather than trusting the order of the page.
    */
   conflictSubmit?: string;
+  /**
+   * The accessible name of the work-area button that opens the surface's form.
+   *
+   * A settings page opens a form that used to sit under its list in a dialog,
+   * from the page's or the panel's action (ruling 259). The dialog is
+   * portalled out of `<main>` and is not in the document until it is opened,
+   * so a driver that fills "the first form carrying a visible submit" finds
+   * none on these surfaces. Naming the opener is what lets the pending and
+   * conflicting-write drivers press it first and then look for the form in
+   * the dialog it opened.
+   */
+  formOpener?: string;
   /**
    * The query that brings this surface to its empty state.
    *
@@ -180,8 +213,15 @@ export type AcceptanceSurfaceEntry = Readonly<{
    * Naming the sentence is what makes that shape checkable: the member must see
    * it and the owner must not, so a surface that always showed it, or never
    * did, fails here rather than passing quietly.
+   *
+   * A pattern when the sentence quotes the tenant. Since ruling 255 the member's
+   * statement on `/settings/appearance` is the page's own line, "The owners and
+   * admins of <organization> set its defaults. Choose differently here, just
+   * for you.", and the organization's name is the scenario's, so the entry
+   * matches the whole line with the name left open. The owner's line there
+   * begins "As an owner", which the pattern cannot match.
    */
-  ownerOnlyNotice?: string;
+  ownerOnlyNotice?: string | RegExp;
   /**
    * The affordance only an owner is offered on this surface.
    *
@@ -200,6 +240,18 @@ export type AcceptanceSurfaceEntry = Readonly<{
    * or to neither, fails here.
    */
   ownerOnlyControl?: string;
+  /**
+   * The control that reveals {@link ownerOnlyControl}, when the page keeps it
+   * behind one.
+   *
+   * `/agents` moved its create form into a sheet that "Connect an agent" opens
+   * (ruling 258), and a closed sheet is not in the document at all: its popup
+   * is portalled outside `<main>` and mounted only while open. So the
+   * `member_denied` driver presses this control in each reading, when the
+   * reading offers it, and reads the open dialog's controls beside `<main>`'s.
+   * A member offered no such control is offered nothing inside it either.
+   */
+  ownerOnlyControlOpener?: string;
   /**
    * The link that reaches this surface without loading a document.
    *
@@ -274,6 +326,15 @@ function boundaryEntry(
  */
 const boundaries: readonly AcceptanceSurfaceEntry[] = [
   boundaryEntry("boundary:error:(app)", "app", "error", "/"),
+  // Driven at the organization page, which every member may open and which
+  // reads through the same page context every settings page does, so the
+  // run's fault reaches the settings boundary (ruling 260).
+  boundaryEntry(
+    "boundary:error:(app)/settings",
+    "app-settings",
+    "error",
+    "/settings/organization",
+  ),
   boundaryEntry(
     "boundary:error:(app)/settings/appearance",
     "app-appearance",
@@ -299,6 +360,12 @@ const boundaries: readonly AcceptanceSurfaceEntry[] = [
     "/oauth/agent-consent",
   ),
   boundaryEntry("boundary:not-found:(app)", "app", "not-found", "/"),
+  boundaryEntry(
+    "boundary:not-found:(app)/settings",
+    "app-settings",
+    "not-found",
+    "/settings/organization",
+  ),
   boundaryEntry(
     "boundary:not-found:(auth)",
     "auth",
@@ -329,6 +396,7 @@ const routes: readonly AcceptanceSurfaceEntry[] = [
   },
   {
     ownerOnlyControl: "Organization-wide",
+    ownerOnlyControlOpener: "Connect an agent",
     id: "route:/agents",
     landmark: heading("Agents"),
     path: "/agents",
@@ -422,7 +490,8 @@ const routes: readonly AcceptanceSurfaceEntry[] = [
     segment: "app",
   },
   {
-    ownerOnlyNotice: "Only an owner can change these defaults.",
+    ownerOnlyNotice:
+      /^The owners and admins of .+ set its defaults\. Choose differently here, just for you\.$/u,
     id: "route:/settings/appearance",
     landmark: heading("Appearance"),
     path: "/settings/appearance",
@@ -433,57 +502,63 @@ const routes: readonly AcceptanceSurfaceEntry[] = [
     // surface whose unfaulted submission does not conflict on its own, so the
     // sentence below can only be the injected conflict — and the raise happens
     // in the administration wiring's own session step, before the command runs,
-    // so a passing case leaves no invitation behind.
+    // so a passing case leaves no invitation behind. The form opens in a
+    // dialog from the header's "Invite member" (ruling 259), and its submit is
+    // "Send invitation"; the pending case drives the same form.
     conflictMessage: "That canonical value is already in use.",
-    conflictSubmit: "Invite member",
+    conflictSubmit: "Send invitation",
+    formOpener: "Invite member",
     id: "route:/settings/members",
     landmark: heading("Members"),
     path: "/settings/members",
-    segment: "app",
+    segment: "app-settings",
   },
   {
+    // The new retention hold opens in a dialog from its panel's "Add hold"
+    // (ruling 259); it is the form the pending case holds.
+    formOpener: "Add hold",
     id: "route:/settings/operations",
     landmark: heading("Operations"),
     path: "/settings/operations",
-    segment: "app",
+    segment: "app-settings",
   },
   {
     id: "route:/settings/operators",
     landmark: heading("Operator credentials"),
     path: "/settings/operators",
-    segment: "app",
+    segment: "app-settings",
   },
   {
     id: "route:/settings/organization",
     landmark: heading("Organization"),
     path: "/settings/organization",
-    segment: "app",
+    segment: "app-settings",
   },
   {
     id: "route:/settings/projects",
     landmark: heading("Projects"),
     path: "/settings/projects",
-    segment: "app",
+    segment: "app-settings",
   },
   {
     conflictMessage: "That value is already registered in this organization.",
     id: "route:/settings/projects/[projectId]",
     landmark: { from: "project", kind: "seeded-heading" },
     path: "/settings/projects/:project",
-    segment: "app",
+    segment: "app-settings",
   },
   {
     conflictMessage: "That canonical value is already in use.",
     id: "route:/settings/projects/new",
     landmark: heading("Create project"),
     path: "/settings/projects/new",
-    segment: "app",
+    segment: "app-settings",
   },
   {
     id: "route:/settings/routing",
     landmark: heading("Routing policy"),
     path: "/settings/routing",
-    segment: "app",
+    segment: "app-settings",
   },
   {
     id: "route:/sign-in",

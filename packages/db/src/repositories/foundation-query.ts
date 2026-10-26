@@ -243,6 +243,7 @@ export function createFoundationQueryRepository(
               email: user.email,
               role: organizationMembers.role,
               version: organizationMembers.version,
+              joinedAt: organizationMembers.joinedAt,
             })
             .from(organizationMembers)
             .innerJoin(user, eq(user.id, organizationMembers.userId))
@@ -278,6 +279,7 @@ export function createFoundationQueryRepository(
               email: row.email,
               role: row.role as OrganizationMember["role"],
               version: row.version,
+              joinedAt: row.joinedAt,
             }),
           );
         },

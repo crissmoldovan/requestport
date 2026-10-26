@@ -13,10 +13,11 @@ import { appearanceOrganizationCommandName } from "./appearance-commands.js";
 /*
   Plan 13, F.2.7's registry half: the organisation appearance command takes
   the acting member from `memberAuthority(context)` (F3-2). An operator
-  credential acts with its issuing member's live role, so only an owner's
-  operator writes; its audit row records it as the service it is, and its
-  event carries its actor. The defaults row names the member as its last
-  updater, because that column references the organisation's memberships.
+  credential acts with its issuing member's live role, so only an owner's or
+  an admin's operator writes (ruling 255); its audit row records it as the
+  service it is, and its event carries its actor. The defaults row names the
+  member as its last updater, because that column references the
+  organisation's memberships.
   Every row here is the organisation's, so a context bound to a project is
   refused before the organisation or membership is locked.
 */
@@ -26,7 +27,7 @@ const memberUserId = "user_01JQ0000000000000000000021";
 const organizationId = "8f6b0f2a-0000-4000-8000-000000000021";
 const lineageId = "8f6b0f2a-0000-4000-8000-000000000022";
 
-function environment(role: "owner" | "admin" = "owner") {
+function environment(role: "owner" | "admin" | "member" = "owner") {
   return new InMemoryAppearanceEnvironment({
     organizations: [{ id: organizationId }],
     memberships: [{ organizationId, userId: memberUserId, role }],
@@ -96,14 +97,34 @@ describe("organisation appearance, for an operator credential", () => {
     expect(target.events[0]?.actor).toEqual(context.actor);
   });
 
-  test("an admin's operator is refused, as its member is", async () => {
+  test("an admin's operator writes, as its member may (ruling 255)", async () => {
     const target = environment("admin");
+    const context = operatorContext();
+
+    await expect(update(target, context, "admin")).resolves.toMatchObject({
+      version: 2,
+    });
+    const row = target.organizationRow(organizationId);
+    expect(row?.version).toBe(2);
+    expect(row?.lastUpdatedByUserId).toBe(memberUserId);
+    expect(target.audits).toEqual([
+      expect.objectContaining({
+        actor: { type: "service", id: `operator:${lineageId}` },
+        action: "appearance.organization_defaults_updated",
+      }),
+    ]);
+    expect(target.events[0]?.actor).toEqual(context.actor);
+  });
+
+  test("a member's operator is refused, as its member is", async () => {
+    const target = environment("member");
 
     await expect(
-      update(target, operatorContext(), "admin"),
+      update(target, operatorContext(), "member"),
     ).rejects.toMatchObject({
       code: "forbidden",
-      message: "Organization appearance ownership is required",
+      message:
+        "An owner or admin is required to change the organization's appearance",
     });
     expect(target.organizationRow(organizationId)?.version).toBe(1);
     expect(target.events).toEqual([]);

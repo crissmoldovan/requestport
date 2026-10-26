@@ -26,14 +26,14 @@ export type UserAppearanceMenu = {
   /**
    * Whether this viewer may change the organization's defaults.
    *
-   * The panel edits one layer and names the other, so an owner needs to be told
-   * the other is theirs. Decided by `canEditOrganizationAppearance`, which the
+   * The panel edits one layer and names the other, so an owner or an admin
+   * needs to be told the other is theirs. Decided by `canEditOrganizationAppearance`, which the
    * settings page uses to decide whether to render the form at all — one
    * authority, two views of it.
    */
   canEditOrganizationDefaults: boolean;
   /**
-   * What an owner needs to offer their own choice to everyone.
+   * What an owner or an admin needs to offer their own choice to everyone.
    *
    * Supplied only alongside the authority above, and separately from it because
    * it carries a different render context and a different command — the panel
@@ -201,8 +201,24 @@ export function UserControl({
        * no wrapping rule one long unbroken token overflows the popover's own
        * box: `Popover.Popup` caps its width at `calc(100vw-2rem)`, so the panel
        * keeps looking correctly sized while its content scrolls sideways inside
-       * it, out of reach of a pointer that has nothing to drag. */}
-      <Popover.Content align="end" className="break-words" side="bottom">
+       * it, out of reach of a pointer that has nothing to drag.
+       *
+       * The height has no cap of its own: `Popover.Popup` sets a width limit
+       * and no height limit. Six appearance fields, each with its inherited
+       * line, run past the bottom of a phone's viewport at normal density, so
+       * the panel is held to Base UI's `--available-height` — the room its
+       * positioner measured between the trigger and the viewport's edge — and
+       * scrolls inside that. It is a `style` prop, one of the reviewed inline
+       * styles the native audit and the framework boundary pin (ruling 255),
+       * because the class audit admits only `--cue-*` properties and no height
+       * family at all: those rungs belong to density, and this cap is the
+       * viewport's, not a rung. */}
+      <Popover.Content
+        align="end"
+        className="overflow-y-auto break-words"
+        side="bottom"
+        style={{ maxHeight: "var(--available-height)" }}
+      >
         <Stack direction="column" gap={3}>
           <Stack direction="column" gap={1}>
             <Popover.Title>{name}</Popover.Title>

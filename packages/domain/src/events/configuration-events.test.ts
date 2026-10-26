@@ -16,7 +16,7 @@ const themes = [
   "luma",
   "snuffle",
 ];
-const densities = ["ultra-compact", "normal", "large"];
+const densities = ["ultra-compact", "compact", "normal", "large"];
 const modes = ["system", "dark", "light"];
 
 describe("configuration event registry", () => {

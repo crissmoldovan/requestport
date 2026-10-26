@@ -32,6 +32,7 @@ import {
 import {
   answerQuestionAction,
   askQuestionAction,
+  assignRequestAction,
   attachArtifactAction,
   closeQuestionAction,
   createRequestAction,
@@ -60,7 +61,7 @@ import {
  * that cannot be undone asks in a modal `AlertDialog`.
  */
 
-type Option = { label: string; value: string };
+type Option = { disabled?: boolean; label: string; value: string };
 
 const requestTypeOptions: Option[] = [
   { label: "Feature", value: "feature" },
@@ -930,6 +931,84 @@ export function RequestEditForm({
             variant="secondary"
           >
             Save request
+          </Button>
+        </Stack>
+      </Stack>
+    </form>
+  );
+}
+
+const assignFields = ["assigneeUserId"] as const;
+
+/**
+ * Who the request is assigned to, beside its next step (ruling 262): a Select
+ * of the organisation's active members, with Unassign first, posted through
+ * `assignRequestAction`. A current assignee who is not among the active
+ * members (a person since removed, or an agent) is shown as the selection,
+ * greyed out, so the control never claims the request is unassigned when it
+ * is not.
+ */
+export function AssignRequestForm({
+  idempotencyKey,
+  members,
+  request,
+}: {
+  idempotencyKey: string;
+  members: ReadonlyArray<{ userId: string; name: string; email: string }>;
+  request: Pick<
+    RequestDetail,
+    "assigneeDisplayName" | "assigneeId" | "assigneeType" | "id" | "version"
+  >;
+}) {
+  const [state, action, pending] = useActionState(
+    assignRequestAction,
+    initialRequestActionState,
+  );
+  const current = request.assigneeId;
+  const listed = members.some(
+    (member) => request.assigneeType === "user" && member.userId === current,
+  );
+  const items: Option[] = [
+    { label: "Unassign", value: "" },
+    ...(current && !listed
+      ? [
+          {
+            label: `${request.assigneeDisplayName ?? `${request.assigneeType}:${current.slice(0, 12)}`} (not an active member)`,
+            value: current,
+            disabled: true,
+          },
+        ]
+      : []),
+    ...members.map((member) => ({
+      label: member.name.trim() || member.email,
+      value: member.userId,
+    })),
+  ];
+  return (
+    <form action={action} aria-label="Assign request">
+      <input name="requestId" type="hidden" value={request.id} />
+      <input name="expectedVersion" type="hidden" value={request.version} />
+      <input name="idempotencyKey" type="hidden" value={idempotencyKey} />
+      <Stack direction="column" gap={3}>
+        <Field name="assigneeUserId">
+          <FieldLabel>Assignee</FieldLabel>
+          <Select
+            defaultValue={current ?? ""}
+            items={items}
+            name="assigneeUserId"
+            size="sm"
+          />
+          <FieldError issues={requestFieldIssues(state, "assigneeUserId")} />
+        </Field>
+        <ActionResult fields={assignFields} state={state} />
+        <Stack direction="row" gap={2} wrap>
+          <Button
+            disabled={pending}
+            size="sm"
+            type="submit"
+            variant="secondary"
+          >
+            Assign
           </Button>
         </Stack>
       </Stack>

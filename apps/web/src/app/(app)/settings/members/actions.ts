@@ -2,6 +2,7 @@
 
 import {
   DomainError,
+  resendOrganizationInvitationCommandName,
   revokeOrganizationInvitationCommandName,
   setOrganizationMemberCommandName,
   utf16Max,
@@ -184,6 +185,31 @@ export async function revokeInvitationAction(
     });
     revalidatePath("/settings/members");
     return { status: "success", message: "Invitation revoked." };
+  } catch (error) {
+    unstable_rethrow(error);
+    return mapError(error);
+  }
+}
+
+/**
+ * Re-issues a pending invitation (ruling 260): a new token, the lifetime a new
+ * invitation gets, and the same email, through the invitation's own event. The
+ * same session, organisation, limiter, key and version as revoking one; the
+ * command applies revoking's role rule, so an owner invitation is an owner's
+ * to resend.
+ */
+export async function resendInvitationAction(
+  _state: MemberActionState,
+  formData: FormData,
+): Promise<MemberActionState> {
+  try {
+    const current = await mutationContext();
+    const input = invitationSchema.parse(Object.fromEntries(formData));
+    await dispatch(current, resendOrganizationInvitationCommandName, input, {
+      invitationId: input.invitationId,
+    });
+    revalidatePath("/settings/members");
+    return { status: "success", message: "Invitation resent." };
   } catch (error) {
     unstable_rethrow(error);
     return mapError(error);

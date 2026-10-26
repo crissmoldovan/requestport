@@ -116,6 +116,7 @@ vi.mock("../../../lib/server-core-commands.js", () => ({
 import { DomainError } from "@requestport/domain";
 import {
   answerQuestionAction,
+  assignRequestAction,
   createRequestAction,
   previewRequestRouteAction,
   updateRequestAction,
@@ -436,5 +437,93 @@ describe("previewing a route", () => {
     });
     expect(await preview()).toEqual({ status: "rate_limited" });
     expect(database.withTransaction).not.toHaveBeenCalled();
+  });
+});
+
+/*
+  Ruling 262: Assign runs `assign_request` on the bus, as the signed-in
+  person, with an empty choice meaning nobody.
+*/
+describe("assigning a request", () => {
+  const assigneeUserId = "00000000-0000-4000-8000-0000000000ab";
+
+  function assignForm(overrides: Record<string, string> = {}) {
+    return formData({
+      assigneeUserId,
+      expectedVersion: "4",
+      idempotencyKey,
+      requestId,
+      ...overrides,
+    });
+  }
+
+  test("runs assign_request for the member chosen, then refreshes the record and the list", async () => {
+    server.execute.mockResolvedValue({ id: requestId, version: 5 });
+    const state = await assignRequestAction(
+      initialRequestActionState,
+      assignForm(),
+    );
+
+    expect(state).toEqual({ status: "success", message: "Request assigned." });
+    expect(server.execute).toHaveBeenCalledWith({
+      name: "assign_request",
+      context: expect.objectContaining({
+        actor: { type: "user", id: memberUserId },
+        organizationId: organization.id,
+      }),
+      meta: { expectedVersion: 4, idempotencyKey },
+      input: {
+        organizationId: organization.id,
+        requestId,
+        assigneeUserId,
+      },
+    });
+    expect(server.revalidatePath.mock.calls).toEqual([
+      [`/requests/${requestId}`],
+      ["/requests"],
+    ]);
+  });
+
+  test("sends nobody for Unassign", async () => {
+    server.execute.mockResolvedValue({ id: requestId, version: 5 });
+    const state = await assignRequestAction(
+      initialRequestActionState,
+      assignForm({ assigneeUserId: "" }),
+    );
+
+    expect(state).toEqual({
+      status: "success",
+      message: "Request unassigned.",
+    });
+    expect(server.execute.mock.calls[0]?.[0]?.input).toEqual({
+      organizationId: organization.id,
+      requestId,
+      assigneeUserId: null,
+    });
+  });
+
+  test("answers the command's refusal in the form's own words, and a malformed submission without running it", async () => {
+    server.execute.mockRejectedValue(
+      new DomainError("forbidden", "Target triage authority is required"),
+    );
+    expect(
+      await assignRequestAction(initialRequestActionState, assignForm()),
+    ).toEqual({
+      status: "error",
+      code: "forbidden",
+      message: "You do not have permission to complete that action.",
+    });
+    server.execute.mockClear();
+
+    const malformed = await assignRequestAction(
+      initialRequestActionState,
+      assignForm({ requestId: "not-a-request" }),
+    );
+    expect(malformed).toMatchObject({
+      status: "error",
+      code: "validation_failed",
+      field: "requestId",
+    });
+    expect(server.execute).not.toHaveBeenCalled();
   });
 });

@@ -68,8 +68,9 @@ vi.mock("./actions.js", () => {
 import OperatorCredentialsPage from "./page.js";
 
 /*
-  Plan 13, F.3: `/settings/operators`, linked from the primary navigation
-  since F.3.1. While F3-14's answer is off it draws the
+  Plan 13, F.3: `/settings/operators`, linked from the settings section
+  navigation (ruling 256; from the primary navigation between F.3.1 and that
+  ruling). While F3-14's answer is off it draws the
   unavailable state and reads nothing else — before the migration there is no
   table to read. Once on, it lists the organisation's credentials (a person
   who is not an owner or admin sees only their own), offers rotation to each
@@ -129,12 +130,13 @@ describe("the operator credentials page", () => {
       expect(html).toContain("Operator credentials");
       expect(html).toContain(says);
       expect(html).not.toContain("Issue one-time key");
+      expect(html).not.toContain("Issue key");
       expect(page.list).not.toHaveBeenCalled();
       expect(page.projects).not.toHaveBeenCalled();
     },
   );
 
-  test("lists the organisation's credentials and draws the issuance form once available", async () => {
+  test("lists the organisation's credentials and offers issuance from the header once available", async () => {
     page.availability.mockResolvedValue({ available: true });
     page.list.mockResolvedValue([
       credential(),
@@ -158,7 +160,11 @@ describe("the operator credentials page", () => {
     expect(html).toContain("Someone else&#x27;s import");
     expect(html).toContain("Retired");
     expect(html).toContain("rpo_abcd");
-    expect(html).toContain("Issue one-time key");
+    // The header's one primary action opens the issuance form in a dialog
+    // (ruling 259); the form itself is not on the page until it is opened.
+    expect(html).toContain('data-slot="dialog-trigger"');
+    expect(html).toContain("Issue key");
+    expect(html).not.toContain("Issue one-time key");
     // Rotation for the issuer's own live credential only; revocation for
     // both live ones; nothing for the revoked one.
     expect(html.match(/Rotate key/gu)).toHaveLength(1);
@@ -184,7 +190,7 @@ describe("the operator credentials page", () => {
     const html = await markup();
     expect(html).toContain("Nightly deploy");
     expect(html).not.toContain("Someone else");
-    expect(html).toContain("Issue one-time key");
+    expect(html).toContain("Issue key");
   });
 
   test("an empty list says so", async () => {

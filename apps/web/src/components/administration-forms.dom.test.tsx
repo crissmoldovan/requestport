@@ -7,10 +7,14 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { AdministrationActionState } from "../lib/administration-actions.js";
 import { ORGANIZATION_CREATE_ENDPOINT } from "../lib/organization-create.js";
 import {
+  CreateProjectDialog,
   InvitationForm,
+  InviteMemberDialog,
   OrganizationForm,
   ProjectForm,
 } from "./administration-forms.js";
+import { MembersView } from "./administration-views.js";
+import { ConsoleToasts } from "./console-toasts.js";
 
 /**
  * The organization, project and invitation forms, driven the way a person
@@ -35,6 +39,16 @@ function mount(node: ReactNode) {
       {node}
     </ThemeProvider>,
   );
+}
+
+/**
+ * A confirmation, found in the toast viewport rather than in the form's own
+ * result line, which is drawn in the dialog until it closes.
+ */
+async function toastSaying(text: string) {
+  return within(
+    screen.getByRole("region", { name: "Notifications" }),
+  ).findByText(text);
 }
 
 /** The FormData one mocked action received, keyed by field name. */
@@ -357,7 +371,7 @@ describe("inviting a member", () => {
 
     await user.type(screen.getByLabelText("Email address"), "new@example.com");
     await choose(user, "Role", "Admin");
-    await user.click(screen.getByRole("button", { name: "Invite member" }));
+    await user.click(screen.getByRole("button", { name: "Send invitation" }));
 
     await waitFor(() => expect(action).toHaveBeenCalled());
     expect(submitted(action)).toEqual({
@@ -377,7 +391,7 @@ describe("inviting a member", () => {
     mount(<InvitationForm action={action} canInviteOwner={false} />);
 
     await user.type(screen.getByLabelText("Email address"), "new@example.com");
-    await user.click(screen.getByRole("button", { name: "Invite member" }));
+    await user.click(screen.getByRole("button", { name: "Send invitation" }));
 
     await waitFor(() => expect(action).toHaveBeenCalled());
     expect(
@@ -404,11 +418,179 @@ describe("inviting a member", () => {
       screen.getByLabelText("Email address"),
       "known@example.com",
     );
-    await user.click(screen.getByRole("button", { name: "Invite member" }));
+    await user.click(screen.getByRole("button", { name: "Send invitation" }));
 
     const line = await screen.findByText(message);
     expect(line).toHaveAttribute("data-slot", "field-error");
     expect(line).toHaveAttribute("data-code", "conflict");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The forms a settings page opens from its header (ruling 259): the trigger is
+ * the header's one primary action, the form is in a non-modal dialog, and a
+ * write that succeeds closes the dialog and is confirmed in a toast.
+ */
+describe("a form opened from a page's action", () => {
+  function mountOnPage(node: ReactNode) {
+    return mount(<ConsoleToasts>{node}</ConsoleToasts>);
+  }
+
+  test("opens the invitation in a dialog from Invite member, not on the page", async () => {
+    const user = userEvent.setup();
+    mountOnPage(<InviteMemberDialog action={action} canInviteOwner={false} />);
+
+    expect(screen.queryByLabelText("Email address")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Invite member" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Invite member" });
+    expect(within(dialog).getByLabelText("Email address")).toBeInTheDocument();
+    // The acceptance drivers find a form's dialog through this: the trigger
+    // names the dialog it opened, so a toast (a `dialog` too) is never taken
+    // for it.
+    expect(
+      screen.getByRole("button", { name: "Invite member" }),
+    ).toHaveAttribute("aria-controls", dialog.id);
+    expect(
+      within(dialog).getByRole("button", { name: "Send invitation" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Cancel" }),
+    ).toBeInTheDocument();
+  });
+
+  test("closes on a sent invitation and says so in a toast", async () => {
+    const user = userEvent.setup();
+    action.mockResolvedValue({
+      message: "Invitation created and queued for email.",
+      status: "success",
+    } satisfies AdministrationActionState);
+    mountOnPage(<InviteMemberDialog action={action} canInviteOwner={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Invite member" }));
+    const dialog = await screen.findByRole("dialog", { name: "Invite member" });
+    await user.type(
+      within(dialog).getByLabelText("Email address"),
+      "new@example.com",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Send invitation" }),
+    );
+
+    expect(
+      await toastSaying("Invitation created and queued for email."),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Invite member" }),
+      ).toBeNull(),
+    );
+  });
+
+  test("stays open on a refusal, with the refusal on its field", async () => {
+    const user = userEvent.setup();
+    action.mockResolvedValue({
+      code: "validation_failed",
+      field: "email",
+      message: "Check the highlighted field and try again.",
+      status: "error",
+    } satisfies AdministrationActionState);
+    mountOnPage(<InviteMemberDialog action={action} canInviteOwner={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Invite member" }));
+    const dialog = await screen.findByRole("dialog", { name: "Invite member" });
+    await user.type(
+      within(dialog).getByLabelText("Email address"),
+      "new@example.com",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Send invitation" }),
+    );
+
+    expect(
+      await within(dialog).findByText(
+        "Check the highlighted field and try again.",
+      ),
+    ).toHaveAttribute("data-slot", "field-error");
+    expect(
+      screen.getByRole("dialog", { name: "Invite member" }),
+    ).toBeInTheDocument();
+  });
+
+  test("opens a choice in the dialog as a listbox assistive technology can reach", async () => {
+    // A modal dialog hides every other child of <body>, and a cue-ui Select
+    // portals through a <body> child it appended when it mounted — with the
+    // dialog — so its listbox would open inside an aria-hidden subtree.
+    const user = userEvent.setup();
+    mountOnPage(<InviteMemberDialog action={action} canInviteOwner />);
+
+    await user.click(screen.getByRole("button", { name: "Invite member" }));
+    const dialog = await screen.findByRole("dialog", { name: "Invite member" });
+    await user.click(within(dialog).getByRole("combobox", { name: "Role" }));
+
+    const roles = await screen.findByRole("listbox");
+    expect(roles.closest('[aria-hidden="true"]')).toBeNull();
+    await user.click(within(roles).getByRole("option", { name: "Admin" }));
+    expect(
+      within(dialog).getByRole("combobox", { name: "Role" }),
+    ).toHaveTextContent("Admin");
+  });
+
+  /**
+   * The members page hands its invitation the Owner role for an owner only:
+   * the role the server refuses to an admin is not offered to one.
+   */
+  async function invitationRolesFor(role: "owner" | "admin") {
+    const user = userEvent.setup();
+    mountOnPage(
+      <MembersView
+        currentUserId="user_1"
+        invitationAction={action}
+        invitations={[]}
+        members={[]}
+        organization={{
+          id: "00000000-0000-4000-8000-000000000001",
+          name: "CUE++",
+          role,
+          slug: "example-org",
+        }}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Invite member" }));
+    const dialog = await screen.findByRole("dialog", { name: "Invite member" });
+    await user.click(within(dialog).getByRole("combobox", { name: "Role" }));
+    const roles = await screen.findByRole("listbox");
+    return within(roles)
+      .getAllByRole("option")
+      .map((option) => option.textContent);
+  }
+
+  test("offers an owner the Owner role in the members page's invitation", async () => {
+    expect(await invitationRolesFor("owner")).toEqual([
+      "Member",
+      "Admin",
+      "Owner",
+    ]);
+  });
+
+  test("never offers an admin the Owner role in the members page's invitation", async () => {
+    expect(await invitationRolesFor("admin")).toEqual(["Member", "Admin"]);
+  });
+
+  test("opens project registration in a dialog from New project", async () => {
+    const user = userEvent.setup();
+    mountOnPage(<CreateProjectDialog action={action} />);
+
+    expect(screen.queryByLabelText("Project name")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "New project" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Create project",
+    });
+    expect(within(dialog).getByLabelText("Project name")).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Create project" }),
+    ).toBeInTheDocument();
   });
 });

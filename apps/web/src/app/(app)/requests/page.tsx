@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   createFoundationQueryRepository,
   createRequestQueryRepository,
@@ -50,7 +52,11 @@ export default async function RequestsPage({
     updatedAfterRaw && !Number.isNaN(Date.parse(updatedAfterRaw))
       ? new Date(updatedAfterRaw)
       : undefined;
+  // The date as written, only when it was read: one the page cannot parse
+  // filters nothing, so it is neither drawn as a chip nor kept in a link.
+  const updatedAfterKept = updatedAfter ? updatedAfterRaw : undefined;
   const unanswered = one(query.unanswered) === "true";
+  const cursor = one(query.cursor);
   const selectedRequestId = z.uuid().safeParse(one(query.requestId));
   const filters: RequestFilters = { mode };
   if (state) filters.state = [state];
@@ -64,41 +70,69 @@ export default async function RequestsPage({
   if (assigneeId) filters.assigneeId = assigneeId;
   if (updatedAfter) filters.updatedAfter = updatedAfter;
   if (unanswered) filters.unanswered = true;
+  // Each view tab's count, read under the filters its own address keeps:
+  // every view drops `unanswered`, which "Waiting on an answer" alone sets
+  // (`requestViews` in request-workflow.tsx).
+  const { mode: _mode, unanswered: _unanswered, ...viewFilters } = filters;
+  const views = {
+    all: { ...viewFilters, mode: "all" },
+    inbox: { ...viewFilters, mode: "inbox" },
+    my_work: { ...viewFilters, mode: "my_work" },
+    waiting: { ...viewFilters, mode: "all", unanswered: true },
+  } satisfies Record<string, RequestFilters>;
   const storage = webStorage();
   const requestQueries = createRequestQueryRepository(storage.db);
   const foundationQueries = createFoundationQueryRepository(storage.db);
-  const [page, projects, lanes, selectedRequest, selectedTimeline] =
-    await Promise.all([
-      requestQueries.listRequests({
-        userId: context.session.user.id,
-        organizationId: context.currentOrganization.id,
-        filters,
-        cursor: one(query.cursor),
-      }),
-      foundationQueries.listOrganizationProjects(
-        context.session.user.id,
-        context.currentOrganization.id,
-      ),
-      foundationQueries.listOrganizationLanes(
-        context.session.user.id,
-        context.currentOrganization.id,
-      ),
-      selectedRequestId.success
-        ? requestQueries.getRequest({
-            userId: context.session.user.id,
-            organizationId: context.currentOrganization.id,
-            requestId: selectedRequestId.data,
-          })
-        : null,
-      selectedRequestId.success
-        ? requestQueries.listTimeline({
-            userId: context.session.user.id,
-            organizationId: context.currentOrganization.id,
-            requestId: selectedRequestId.data,
-            limit: 20,
-          })
-        : null,
-    ]);
+  const [
+    page,
+    counts,
+    projects,
+    lanes,
+    selectedRequest,
+    selectedTimeline,
+    members,
+  ] = await Promise.all([
+    requestQueries.listRequests({
+      userId: context.session.user.id,
+      organizationId: context.currentOrganization.id,
+      filters,
+      cursor,
+    }),
+    requestQueries.countRequests({
+      userId: context.session.user.id,
+      organizationId: context.currentOrganization.id,
+      views,
+    }),
+    foundationQueries.listOrganizationProjects(
+      context.session.user.id,
+      context.currentOrganization.id,
+    ),
+    foundationQueries.listOrganizationLanes(
+      context.session.user.id,
+      context.currentOrganization.id,
+    ),
+    selectedRequestId.success
+      ? requestQueries.getRequest({
+          userId: context.session.user.id,
+          organizationId: context.currentOrganization.id,
+          requestId: selectedRequestId.data,
+        })
+      : null,
+    selectedRequestId.success
+      ? requestQueries.listTimeline({
+          userId: context.session.user.id,
+          organizationId: context.currentOrganization.id,
+          requestId: selectedRequestId.data,
+          limit: 20,
+        })
+      : null,
+    // Whom the filter sheet offers as reporter and assignee (ruling 264),
+    // and whom the selected request can be assigned to.
+    foundationQueries.listOrganizationMembers(
+      context.session.user.id,
+      context.currentOrganization.id,
+    ),
+  ]);
   if (selectedRequest && selectedTimeline) {
     await requestQueries.markRequestRead({
       userId: context.session.user.id,
@@ -119,16 +153,20 @@ export default async function RequestsPage({
     label,
     reporterId,
     assigneeId,
-    updatedAfter: updatedAfterRaw,
+    updatedAfter: updatedAfterKept,
   }))
     if (value) retained.set(key, value);
   if (unanswered) retained.set("unanswered", "true");
   return (
     <RequestListView
+      counts={counts}
+      cursor={cursor}
       mode={mode}
+      now={new Date()}
       page={page}
       projects={projects}
       lanes={lanes}
+      members={members}
       query={{
         assigneeId,
         label,
@@ -144,12 +182,25 @@ export default async function RequestsPage({
           : undefined,
         type,
         unanswered,
-        updatedAfter: updatedAfterRaw,
+        updatedAfter: updatedAfterKept,
       }}
       queryString={retained.toString()}
       selected={
         selectedRequest && selectedTimeline
-          ? { request: selectedRequest, timeline: selectedTimeline }
+          ? {
+              keys: {
+                answers: Object.fromEntries(
+                  selectedRequest.questions.map((question) => [
+                    question.id,
+                    `web:answer:${randomUUID()}`,
+                  ]),
+                ),
+                assign: `web:assign:${randomUUID()}`,
+                transition: `web:transition:${randomUUID()}`,
+              },
+              request: selectedRequest,
+              timeline: selectedTimeline,
+            }
           : null
       }
     />

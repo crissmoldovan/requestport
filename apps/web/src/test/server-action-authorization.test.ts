@@ -93,6 +93,7 @@ const delegatingModules: readonly string[] = [
 /** Every module the sweep has to keep finding, with its actions. */
 const orderedModules: readonly string[] = [
   "src/app/(app)/agents/actions.ts",
+  "src/app/(app)/overview-actions.ts",
   "src/app/(app)/imports/actions.ts",
   "src/app/(app)/requests/actions.ts",
   "src/app/(app)/settings/members/actions.ts",

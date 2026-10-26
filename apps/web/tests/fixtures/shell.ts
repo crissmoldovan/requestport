@@ -16,6 +16,20 @@ import { scenarioNavigationAttempts } from "./scenario-navigation.js";
  */
 const switcherLabel = "Current organization";
 
+/**
+ * The account menu's panel: the dialog that holds Sign out.
+ *
+ * Not the first `dialog` on the page. A settings page confirms a write in a
+ * toast (ruling 259), and Base UI's `Toast.Root` has the role `dialog` too, so
+ * while a toast is up a bare `getByRole("dialog")` resolves to two elements
+ * and a strict locator refuses it.
+ */
+export function accountMenuPanel(page: Page): Locator {
+  return page.getByRole("dialog").filter({
+    has: page.getByRole("button", { name: /^Sign(?:ing)? out/u }),
+  });
+}
+
 export function organizationSwitcher(page: Page): Locator {
   return page.getByRole("combobox", { name: switcherLabel });
 }
@@ -60,19 +74,21 @@ export async function chooseOption(
  * moves it into place — to the next frame
  * for the document's first reveal, otherwise to 300 ms after the previous one,
  * or to the 2.3 s mark when that falls between 2 and 2.3 s (the React 19.3
- * canary Next ships). cue-ui#232: `@cueplusplus/ui`'s `ThemeProvider` changes
- * its context in the commit that hydrates the shell for a reader on `system`
- * who prefers light — Playwright's default — and React then renders any
- * boundary whose reveal is still queued on the client, leaving the server's
- * copy hidden in `<body>` until the reveal runs. In that window every locator
- * that does not skip hidden elements — CSS, `getByText`, `getByLabel`,
- * `getByPlaceholder`, `getByTestId`, `getByTitle`, `getByAltText` — resolves
- * to both copies, and a strict action or assertion on it throws at once.
- * `getByRole` skips hidden elements and needs no wrapping.
+ * canary Next ships). If a context above that boundary changes in the commit
+ * that hydrates the shell, React renders the boundary on the client while its
+ * reveal is still queued, leaving the server's copy hidden in `<body>` until
+ * the reveal runs. In that window every locator that does not skip hidden
+ * elements — CSS, `getByText`, `getByLabel`, `getByPlaceholder`,
+ * `getByTestId`, `getByTitle`, `getByAltText` — resolves to both copies, and a
+ * strict action or assertion on it throws at once. `getByRole` skips hidden
+ * elements and needs no wrapping.
  *
- * Filtering to visible elements keeps strict mode for two copies a person can
- * see, and a missing or wrong element still fails. The double render itself is
- * pinned by `src/app/streamed-page-hydration.dom.test.tsx`, not by this suite.
+ * cue-ui#232 was such a context: `@cueplusplus/ui`'s `ThemeProvider` changed
+ * it for a reader on `system` who prefers light — Playwright's default — until
+ * 0.17.0, which moves no context value while the page hydrates.
+ * `src/app/streamed-page-hydration.dom.test.tsx` pins that such a page is now
+ * hydrated once. Filtering to visible elements keeps strict mode for two
+ * copies a person can see, and a missing or wrong element still fails.
  * Measured on `route-state-0168` (2026-09-29): see `docs/implementation/gotchas.md`.
  */
 export function onScreen(locator: Locator): Locator {

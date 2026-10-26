@@ -26,6 +26,8 @@ export type OrganizationMember = {
   email: string;
   role: OrganizationRole;
   version: number;
+  /** When the membership began: `organization_members.joined_at`. */
+  joinedAt: Date;
 };
 
 export type OrganizationLane = {

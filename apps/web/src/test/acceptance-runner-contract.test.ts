@@ -8,6 +8,7 @@ import {
 import {
   isHydrationMismatch,
   refuseErrorBoundary,
+  refuseTenantNotFound,
 } from "../../tests/fixtures/acceptance-run.js";
 import { appearanceStorageKey } from "../lib/appearance-script.js";
 import {
@@ -74,9 +75,11 @@ function read(file: string) {
  *
  * Named here rather than derived, because the point of the check below is to
  * compare the table against the components: a mapping the table produced would
- * agree with the table by construction. The appearance route declares no
- * not-found file of its own and every segment shares one global boundary, so
- * two entries deliberately name a file another segment also names.
+ * agree with the table by construction. Every segment shares one global
+ * boundary; the settings segment writes no loading file and inherits the
+ * authenticated segment's; and the appearance route writes no not-found file
+ * and inherits the settings segment's (ruling 260). So those entries
+ * deliberately name a file another segment also names.
  */
 const boundaryFiles: Readonly<
   Record<string, Readonly<Record<string, string>>>
@@ -91,7 +94,13 @@ const boundaryFiles: Readonly<
     error: "src/app/(app)/settings/appearance/error.tsx",
     "global-error": "src/app/global-error.tsx",
     loading: "src/app/(app)/settings/appearance/loading.tsx",
-    "not-found": "src/app/(app)/not-found.tsx",
+    "not-found": "src/app/(app)/settings/not-found.tsx",
+  },
+  "app-settings": {
+    error: "src/app/(app)/settings/error.tsx",
+    "global-error": "src/app/global-error.tsx",
+    loading: "src/app/(app)/loading.tsx",
+    "not-found": "src/app/(app)/settings/not-found.tsx",
   },
   auth: {
     error: "src/app/(auth)/error.tsx",
@@ -158,7 +167,7 @@ const driverSources = [
  * over the whole table; each case runs on exactly one engine, so the executed
  * figure is what CI runs across both shards.
  */
-const declaredExecution = { executed: 177, skipped: 48, total: 225 };
+const declaredExecution = { executed: 252, skipped: 48, total: 300 };
 
 function applicationModule(candidate: string): string | undefined {
   return [
@@ -276,17 +285,17 @@ const stateAffordance: Readonly<Record<string, (source: string) => boolean>> = {
  */
 const declaredStateExecution: Readonly<Record<string, number>> = {
   conflict: 5,
-  default: 73,
+  default: 142,
   destructive: 0,
   disabled: 0,
   empty: 13,
-  error: 34,
+  error: 36,
   loading: 18,
   member_denied: 7,
-  not_found: 12,
+  not_found: 14,
   pending: 10,
   provider_unavailable: 2,
-  success: 3,
+  success: 5,
 };
 
 /**
@@ -406,29 +415,84 @@ describe("the acceptance runner", () => {
     expect([...new Set(shared)].sort()).toEqual([]);
   });
 
-  test("keeps each boundary's sentence unique among the segments that own one", () => {
+  test("keeps each boundary's sentence unique to the one file that prints it", () => {
     // A boundary assertion is only evidence while the sentence it waits for is
-    // printed by exactly one boundary; two segments sharing a line would let a
-    // case pass on the wrong one.
-    const owned = acceptanceSegments.flatMap((segment) =>
-      (["error", "loading"] as const)
-        .map((kind) => acceptanceBoundaryText[segment][kind])
-        .filter((text) => text !== undefined),
+    // printed by exactly one boundary file; two files sharing a line would let
+    // a case pass on the wrong one. A segment that writes no file of a kind
+    // inherits its parent's, and with it the parent's line, so the sentence
+    // and the file must name each other exactly: one line per file, one file
+    // per line. This replaced a comparison that left the inherited lines out
+    // by hand (ruling 260).
+    const linesOfFile = new Map<string, Set<string>>();
+    const filesOfLine = new Map<string, Set<string>>();
+    for (const segment of acceptanceSegments) {
+      for (const [kind, text] of Object.entries(
+        acceptanceBoundaryText[segment],
+      )) {
+        const file = boundaryFiles[segment]?.[kind];
+        if (text === undefined || file === undefined) continue;
+        linesOfFile.set(file, (linesOfFile.get(file) ?? new Set()).add(text));
+        filesOfLine.set(text, (filesOfLine.get(text) ?? new Set()).add(file));
+      }
+    }
+
+    expect(
+      [
+        ...[...linesOfFile]
+          .filter(([, lines]) => lines.size !== 1)
+          .map(([file]) => `file ${file}`),
+        ...[...filesOfLine]
+          .filter(([, files]) => files.size !== 1)
+          .map(([line]) => `line ${line}`),
+      ].sort(),
+    ).toEqual([]);
+  });
+
+  test("gives the settings pages a segment of their own, whose boundaries draw inside the settings layout (ruling 260)", () => {
+    const settings = acceptanceSurfaces.filter((entry) =>
+      entry.id.startsWith("route:/settings/"),
     );
 
-    expect(new Set(owned).size).toBe(owned.length);
-
-    // The appearance route declares an error and a loading boundary of its own
-    // and no not-found file, so it inherits the authenticated segment's — which
-    // is why its not-found line is deliberately the same one and is left out of
-    // the comparison above.
-    const notFound = (["app", "auth", "root"] as const).map(
-      (segment) => acceptanceBoundaryText[segment]["not-found"],
+    expect(settings.map((entry) => [entry.id, entry.segment])).toEqual(
+      settings.map((entry) => [
+        entry.id,
+        entry.id === "route:/settings/appearance"
+          ? "app-appearance"
+          : "app-settings",
+      ]),
     );
-
-    expect(new Set(notFound).size).toBe(notFound.length);
-    expect(acceptanceBoundaryText["app-appearance"]["not-found"]).toBe(
-      acceptanceBoundaryText.app["not-found"],
+    // Driven at a settings page, so the boundary that answers the fault is
+    // the settings segment's and not the authenticated segment's.
+    expect(
+      acceptanceSurfaces
+        .filter((entry) => entry.id.endsWith(":(app)/settings"))
+        .map(({ boundary, id, path, segment }) => ({
+          boundary,
+          id,
+          path,
+          segment,
+        })),
+    ).toEqual([
+      {
+        boundary: "error",
+        id: "boundary:error:(app)/settings",
+        path: "/settings/organization",
+        segment: "app-settings",
+      },
+      {
+        boundary: "not-found",
+        id: "boundary:not-found:(app)/settings",
+        path: "/settings/organization",
+        segment: "app-settings",
+      },
+    ]);
+    // A member denied routing or operations is answered not-found, now by the
+    // settings segment's boundary, which is the line that denial waits for.
+    expect(boundarySentence("app-settings", "not-found")).not.toBe(
+      boundarySentence("app", "not-found"),
+    );
+    expect(boundarySentence("app-settings", "error")).not.toBe(
+      boundarySentence("app", "error"),
     );
   });
 
@@ -714,10 +778,16 @@ describe("the acceptance runner", () => {
       resolve(webRoot, "node_modules/@cueplusplus/tokens/dist/axes.css"),
       "utf8",
     );
-    const branch =
-      /@media \(pointer: coarse\) \{\s*\[data-density="([a-z-]+)"\]/u.exec(
-        stylesheet,
-      );
+    // Since `@cueplusplus/tokens` 0.17.0 the rule's selector list opens with
+    // the line that reaches an island still following the root's density
+    // (`:where(:root[data-density="…"]) [data-cue-follows~="density"]`), so
+    // the density is the one its plain `[data-density="…"]` selector names.
+    const selectors =
+      /@media \(pointer: coarse\) \{([^{}]*)\{/u.exec(stylesheet)?.[1] ?? "";
+    const branch = selectors
+      .split(",")
+      .map((selector) => /^\s*\[data-density="([a-z-]+)"\]\s*$/u.exec(selector))
+      .find((match) => match !== null);
 
     expect(branch?.[1]).toBeDefined();
     const accommodated = branch?.[1];
@@ -837,6 +907,47 @@ describe("the acceptance runner", () => {
     expect({ absent, unused }).toEqual({ absent: [], unused: [] });
   });
 
+  test("names a form opener the application really draws, on a surface a form case drives, and hands it to the chooser", () => {
+    // A settings page opens a form that used to sit under its list in a
+    // dialog (ruling 259), so the pending and conflicting-write drivers press
+    // the opener first. Its label has to be one the application prints, and a
+    // case has to reach it, or it is a name kept past its reason.
+    const drawn = componentSources();
+    const openers = acceptanceSurfaces.filter(
+      (entry) => entry.formOpener !== undefined,
+    );
+    const absent = openers
+      .filter((entry) => !drawn.includes(`"${entry.formOpener}"`))
+      .map((entry) => `${entry.id}: ${entry.formOpener}`);
+    const unused = openers
+      .filter(
+        (entry) =>
+          !matrix.cases.some(
+            (testCase) =>
+              testCase.surface === entry.id &&
+              (testCase.state === "pending" || testCase.state === "conflict") &&
+              acceptanceSkipReason(
+                testCase.surface,
+                testCase.state,
+                testCase.fixtureOwner,
+              ) === null,
+          ),
+      )
+      .map((entry) => entry.id);
+    // Both form drivers pass it on: the conflicting write and the held one.
+    const drivers = read("tests/fixtures/acceptance-drivers.ts");
+
+    expect({
+      absent,
+      handed: drivers.match(/input\.entry\.formOpener/gu)?.length ?? 0,
+      unused,
+    }).toEqual({ absent: [], handed: 2, unused: [] });
+    expect(openers.map((entry) => entry.id).sort()).toEqual([
+      "route:/settings/members",
+      "route:/settings/operations",
+    ]);
+  });
+
   test("spells the appearance key the document really writes", () => {
     // The browser fixtures cannot import the appearance module: it reaches
     // `@cueplusplus/ui/system`, whose published entry point is TypeScript, and
@@ -915,7 +1026,7 @@ describe("a page that hit its error boundary says so", () => {
 
   const surface = (
     id: string,
-    segment: "app" | "app-appearance" | "auth" | "root",
+    segment: "app" | "app-appearance" | "app-settings" | "auth" | "root",
     landmark: { kind: "heading"; text: string },
     boundary?: "error",
   ) =>
@@ -949,10 +1060,15 @@ describe("a page that hit its error boundary says so", () => {
   });
 
   test("refuses on every segment's own sentence, because boundaries nest", async () => {
-    // Looking only for the app segment's sentence left every appearance, auth
-    // and root surface uncovered: one of those throwing renders *its* sentence
-    // and the app's never appears.
-    for (const segment of ["app-appearance", "auth", "root"] as const) {
+    // Looking only for the app segment's sentence left every appearance,
+    // settings, auth and root surface uncovered: one of those throwing renders
+    // *its* sentence and the app's never appears.
+    for (const segment of [
+      "app-appearance",
+      "app-settings",
+      "auth",
+      "root",
+    ] as const) {
       await expect(
         refuseErrorBoundary(
           pageShowing([boundarySentence(segment, "error")]),
@@ -999,6 +1115,51 @@ describe("a page that hit its error boundary says so", () => {
     expect(runSource).toMatch(
       /export async function expectLandmark[\s\S]*?await refuseErrorBoundary\(/u,
     );
+  });
+});
+
+describe("a page that answered the tenant's not-found says so (ruling 260)", () => {
+  /** The little of a Page this refusal touches. */
+  const pageShowing = (texts: readonly string[]) =>
+    ({
+      getByText: (text: string) => ({
+        count: async () => (texts.includes(text) ? 1 : 0),
+      }),
+      getByRole: () => ({ textContent: async () => "Acceptance tenant" }),
+      context: () => ({ cookies: async () => [] }),
+    }) as unknown as Parameters<typeof refuseTenantNotFound>[0];
+
+  test("refuses a settings page that drew the settings segment's not-found line", async () => {
+    // A settings page's not-found renders the settings boundary's own line,
+    // so a detector that looked only for the authenticated segment's would
+    // let a settings case wait out its whole timeout instead.
+    await expect(
+      refuseTenantNotFound(
+        pageShowing([boundarySentence("app-settings", "not-found")]),
+        { kind: "heading", text: "Members" },
+      ),
+    ).rejects.toThrow(/tenant not-found page/u);
+    await expect(
+      refuseTenantNotFound(
+        pageShowing([boundarySentence("app", "not-found")]),
+        { kind: "heading", text: "Overview" },
+      ),
+    ).rejects.toThrow(/tenant not-found page/u);
+  });
+
+  test("exempts a case whose landmark is that line, and a page that drew its own content", async () => {
+    await expect(
+      refuseTenantNotFound(
+        pageShowing([boundarySentence("app-settings", "not-found")]),
+        { kind: "text", text: boundarySentence("app-settings", "not-found") },
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      refuseTenantNotFound(pageShowing(["Members"]), {
+        kind: "heading",
+        text: "Members",
+      }),
+    ).resolves.toBeUndefined();
   });
 });
 

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
+import * as domain from "@requestport/domain";
 import { expect, test } from "vitest";
 
 const migrations = new URL("../migrations/", import.meta.url);
@@ -123,6 +124,14 @@ const immutableHashes = new Map([
     "224e64885e030e50b002939eea176feb6996ee8e1c4255271523e5166deffa1b",
   ],
   [
+    "0026_requestport_appearance_six_axes.sql",
+    "65710f45cf6782b8b4f5ecced0b1453774bb99ae24fb13cde34ff856e9c0dcdc",
+  ],
+  [
+    "0027_agent_oauth_grant_last_used.sql",
+    "87068fe58b0bb78a3095e8ad1fddd68604ddd590d9650bcc0298a1f5a63a74ec",
+  ],
+  [
     "meta/0000_snapshot.json",
     "8fbfa4ca3eb1bb5286eff7fee229a83a892faf637e0a47f2afdb2d286707c904",
   ],
@@ -226,6 +235,14 @@ const immutableHashes = new Map([
     "meta/0025_snapshot.json",
     "1d0b3d893e56b046c2da089fc4fcfbd91085afd60aca93a692ec48e2d145faf9",
   ],
+  [
+    "meta/0026_snapshot.json",
+    "4c8b2523ec643bdc104f89653a23422d661010698672e6184f4243e9179da011",
+  ],
+  [
+    "meta/0027_snapshot.json",
+    "0556cefb25b65aad659eaaf2e733f93c2f6a94e799af3cdf43713839fac50570",
+  ],
 ]);
 
 const journalTags = [
@@ -255,6 +272,8 @@ const journalTags = [
   "0023_worker_execute_contract",
   "0024_command_receipts_row_security",
   "0025_row_security_contract",
+  "0026_requestport_appearance_six_axes",
+  "0027_agent_oauth_grant_last_used",
 ];
 
 test("creates citext before the Better Auth identity tables without destructive SQL", async () => {
@@ -1319,4 +1338,190 @@ test("contracts row-level security: the fourteen functions 0019 and 0021 granted
     id: undefined,
     prevId: undefined,
   });
+});
+
+test("expands appearance to six axes: three columns per table with their checks, the theme and density checks widened under their names, the trigger's seed and a backfill of the untouched 0014 seed, and nothing removed (ruling 255)", async () => {
+  const sql = await file("0026_requestport_appearance_six_axes.sql");
+  const chunks = sql
+    .split("--> statement-breakpoint")
+    .map((chunk) => chunk.replace(/^\s*--[^\n]*$/gmu, "").trim())
+    .filter((chunk) => chunk.length > 0);
+
+  // It holds its locks to the commit, so it must be last in its transaction.
+  expect(sql.split("\n")[0]).toBe(
+    "-- requestport: this migration must be the last one applied in its transaction",
+  );
+  // Bounded waits, then the membership lock 0014 took, before any table change.
+  expect(chunks[0]).toBe("SET LOCAL lock_timeout = '5s';");
+  expect(chunks[1]).toBe(
+    'LOCK TABLE "public"."organization_members" IN SHARE ROW EXCLUSIVE MODE;',
+  );
+
+  // Expand-only: no table, column or row removed; the only DROPs are the two
+  // theme checks and the two density checks, each re-added at once under the
+  // same name, wider.
+  expect(sql).not.toMatch(
+    /\b(?:DROP\s+(?:TABLE|COLUMN|TRIGGER|FUNCTION|POLICY|INDEX)|DELETE\s+FROM|TRUNCATE)\b/iu,
+  );
+  const drops = chunks.filter((chunk) => /\bDROP\b/u.test(chunk));
+  expect(drops).toEqual([
+    'ALTER TABLE "organization_appearance_defaults" DROP CONSTRAINT "organization_appearance_defaults_theme_check";',
+    'ALTER TABLE "user_appearance_preferences" DROP CONSTRAINT "user_appearance_preferences_theme_check";',
+    'ALTER TABLE "organization_appearance_defaults" DROP CONSTRAINT "organization_appearance_defaults_density_check";',
+    'ALTER TABLE "user_appearance_preferences" DROP CONSTRAINT "user_appearance_preferences_density_check";',
+  ]);
+  for (const drop of drops) {
+    const next = chunks[chunks.indexOf(drop) + 1] ?? "";
+    const name = /DROP CONSTRAINT ("[a-z_]+")/u.exec(drop)?.[1] ?? "";
+    expect(next).toContain(`ADD CONSTRAINT ${name} CHECK`);
+  }
+
+  // Three columns on each table.
+  for (const axis of ["font", "look", "paint"]) {
+    expect(chunks).toContain(
+      `ALTER TABLE "organization_appearance_defaults" ADD COLUMN "${axis}" text DEFAULT 'match' NOT NULL;`,
+    );
+    expect(chunks).toContain(
+      `ALTER TABLE "user_appearance_preferences" ADD COLUMN "${axis}" text;`,
+    );
+  }
+
+  // Each check 0026 adds names exactly the domain's vocabulary for its axis,
+  // in the domain's order: every theme, every density (`compact` among them),
+  // and `match` with every typeface, Look and surface. A person's column also
+  // admits NULL. A later migration that widens one of these checks moves this
+  // comparison to that migration.
+  const checkValues = (table: string, axis: string) => {
+    const column = `"${table}"."${axis}"`;
+    const nullable = table === "user_appearance_preferences";
+    const check = chunks.filter((chunk) =>
+      chunk.includes(`ADD CONSTRAINT "${table}_${axis}_check" CHECK (`),
+    );
+    expect(check, `${table}_${axis}_check`).toHaveLength(1);
+    const prefix = `ALTER TABLE "${table}" ADD CONSTRAINT "${table}_${axis}_check" CHECK (${
+      nullable ? `${column} is null or ` : ""
+    }${column} in (`;
+    const statement = check[0] ?? "";
+    expect(statement.startsWith(prefix), `${table}_${axis}_check`).toBe(true);
+    expect(statement.endsWith("));"), `${table}_${axis}_check`).toBe(true);
+    return statement
+      .slice(prefix.length, -"));".length)
+      .split(", ")
+      .map((value) => /^'([a-z-]+)'$/u.exec(value)?.[1] ?? `<${value}>`);
+  };
+  for (const table of [
+    "organization_appearance_defaults",
+    "user_appearance_preferences",
+  ]) {
+    expect(checkValues(table, "theme"), `${table} theme`).toEqual([
+      ...domain.appearanceThemes,
+    ]);
+    expect(checkValues(table, "density"), `${table} density`).toEqual([
+      ...domain.appearanceDensities,
+    ]);
+    expect(checkValues(table, "font"), `${table} font`).toEqual([
+      ...domain.appearanceFonts,
+    ]);
+    expect(checkValues(table, "look"), `${table} look`).toEqual([
+      ...domain.appearanceLooks,
+    ]);
+    expect(checkValues(table, "paint"), `${table} paint`).toEqual([
+      ...domain.appearancePaints,
+    ]);
+  }
+
+  // The trigger function keeps 0019's definer shape and seeds the new values.
+  const body = chunks.find((chunk) =>
+    chunk.startsWith(
+      "CREATE OR REPLACE FUNCTION public.requestport_initialize_organization_appearance()",
+    ),
+  );
+  expect(body).toBeDefined();
+  expect(body).toContain("SECURITY DEFINER");
+  expect(body).toContain("SET search_path = pg_catalog, pg_temp");
+  expect(body).toContain(
+    "(NEW.\"organization_id\", 'cue', 'normal', 'system', 'match', 'match',",
+  );
+  expect(body).not.toMatch(/'requestport'|'ultra-compact'/u);
+  expect(sql).not.toMatch(
+    /\bCREATE\s+TRIGGER\b|\bALTER\s+FUNCTION\b|\bGRANT\b|\bREVOKE\b/u,
+  );
+
+  // The backfill moves only a version-1 row still exactly 0014's seed, the
+  // way the command writes an update: version + 1, one event, one outbox row.
+  const backfill = chunks.at(-1) ?? "";
+  expect(backfill).toMatch(
+    /^WITH "reseeded" AS \(\s*UPDATE "public"\."organization_appearance_defaults"/u,
+  );
+  expect(backfill.replace(/\s+/gu, " ")).toContain(
+    `WHERE "d"."version" = 1 AND "d"."theme" = 'requestport' AND "d"."density" = 'ultra-compact' AND "d"."mode" = 'system' AND "d"."font" = 'match' AND "d"."look" = 'match' AND "d"."paint" = 'match' AND NOT EXISTS (`,
+  );
+  // A stream already past version 1 is left alone: its version-2 event would
+  // collide with the one there.
+  expect(backfill.replace(/\s+/gu, " ")).toContain(
+    `AND "e"."aggregate_version" > 1)`,
+  );
+  expect(backfill).toContain('"version" = "d"."version" + 1');
+  expect(backfill).toContain("'appearance.organization_defaults_updated.v1'");
+  expect(backfill).toContain('INSERT INTO "public"."outbox" ("event_id")');
+  expect(backfill).not.toContain("user_appearance_preferences");
+});
+
+test("adds agent_oauth_grants.last_used_at, nullable and without a default, behind a lock bound, and nothing else (ruling 261)", async () => {
+  const sql = await file("0027_agent_oauth_grant_last_used.sql");
+  const chunks = sql
+    .split("--> statement-breakpoint")
+    .map((chunk) => chunk.replace(/^\s*--[^\n]*$/gmu, "").trim())
+    .filter((chunk) => chunk.length > 0);
+
+  // Its first statement bounds the lock it waits for, as 0017's and 0022's
+  // do: ADD COLUMN takes ACCESS EXCLUSIVE on agent_oauth_grants, which every
+  // OAuth request reads.
+  expect(sql.split("--> statement-breakpoint")[0]).toMatch(
+    /^(?:--[^\n]*\n)*SET LOCAL lock_timeout = '5s';$/u,
+  );
+  // Then the one column, nullable and with no default, so no row is
+  // rewritten; no data statement, no other table, no grant.
+  expect(chunks).toEqual([
+    "SET LOCAL lock_timeout = '5s';",
+    'ALTER TABLE "agent_oauth_grants" ADD COLUMN "last_used_at" timestamp with time zone;',
+  ]);
+  // No last-in-transaction marker: the one table it locks it holds in
+  // ACCESS EXCLUSIVE until commit, as 0022 does.
+  expect(sql).not.toContain("must be the last one applied");
+
+  // The snapshot says the same: 0026's, and agent_oauth_grants with one more
+  // column.
+  type Snapshot = {
+    id: string;
+    prevId: string;
+    tables: Record<string, { columns: Record<string, unknown> }>;
+  };
+  const snapshot = async (tag: string) =>
+    JSON.parse(await file(`meta/${tag}_snapshot.json`)) as Snapshot;
+  const before = await snapshot("0026");
+  const after = await snapshot("0027");
+  expect(after.prevId).toBe(before.id);
+  const { last_used_at: added, ...kept } =
+    after.tables["public.agent_oauth_grants"]?.columns ?? {};
+  expect(added).toEqual({
+    name: "last_used_at",
+    type: "timestamp with time zone",
+    primaryKey: false,
+    notNull: false,
+  });
+  expect(kept).toEqual(before.tables["public.agent_oauth_grants"]?.columns);
+  const withoutGrantColumns = (whole: Snapshot) => ({
+    ...whole,
+    id: undefined,
+    prevId: undefined,
+    tables: {
+      ...whole.tables,
+      "public.agent_oauth_grants": {
+        ...whole.tables["public.agent_oauth_grants"],
+        columns: undefined,
+      },
+    },
+  });
+  expect(withoutGrantColumns(after)).toEqual(withoutGrantColumns(before));
 });

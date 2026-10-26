@@ -124,6 +124,14 @@ const updateSchema = z
     },
   );
 
+const assignSchema = z.object({
+  requestId: z.uuid(),
+  expectedVersion: z.coerce.number().int().positive(),
+  // Empty for Unassign.
+  assigneeUserId: z.string().trim().check(utf16Max(255)),
+  idempotencyKey: z.string().trim().check(utf16Min(16)).check(utf16Max(200)),
+});
+
 const relationshipSchema = z.object({
   fromRequestId: z.uuid(),
   toRequestId: z.uuid(),
@@ -556,6 +564,49 @@ export async function updateRequestAction(
   revalidatePath(`/requests/${parsed.data.requestId}`);
   revalidatePath("/requests");
   return { status: "success", message: "Request content updated." };
+}
+
+/**
+ * Assigns the request to a member, or unassigns it (ruling 262), through
+ * `assign_request`: who may is the command's rule, which for the signed-in
+ * person is an owner or an admin, or a maintainer of the request's target
+ * project — and the guards, the receipt and the version check are the ones
+ * every action here takes.
+ */
+export async function assignRequestAction(
+  _previous: RequestActionState,
+  formData: FormData,
+): Promise<RequestActionState> {
+  const gate = await authorized();
+  if (!gate.ok) return gate.state;
+  const { context, organization } = gate.current;
+  const parsed = assignSchema.safeParse(strings(formData));
+  if (!parsed.success) return validationError(parsed.error);
+  try {
+    await coreCommandBus.execute({
+      name: "assign_request",
+      context,
+      meta: {
+        expectedVersion: parsed.data.expectedVersion,
+        idempotencyKey: parsed.data.idempotencyKey,
+      },
+      input: {
+        organizationId: organization.id,
+        requestId: parsed.data.requestId,
+        assigneeUserId: parsed.data.assigneeUserId || null,
+      },
+    });
+  } catch (error) {
+    return actionError(error);
+  }
+  revalidatePath(`/requests/${parsed.data.requestId}`);
+  revalidatePath("/requests");
+  return {
+    status: "success",
+    message: parsed.data.assigneeUserId
+      ? "Request assigned."
+      : "Request unassigned.",
+  };
 }
 
 export async function linkRequestsAction(

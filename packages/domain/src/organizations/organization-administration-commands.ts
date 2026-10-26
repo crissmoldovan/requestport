@@ -20,6 +20,7 @@ import type { UnitOfWork } from "../shared/unit-of-work.js";
 import { utf16Max } from "../shared/zod-compat.js";
 import {
   createOrganizationInvitation,
+  defaultInvitationExpirySeconds,
   defaultInvitationTokenHash,
   invitationCreatedEventData,
   organizationInvitationCreatedEvent,
@@ -33,6 +34,9 @@ import {
   pending invitation. The members page's forms dispatch these, and so does
   `/api/v1`, for an operator credential only: each has a capability registry
   entry naming `credentialKinds: ["operator"]` and no MCP tool.
+  Resending a pending invitation (ruling 260) is a fourth, dispatched by the
+  members page alone: it has no registry entry, so no machine credential
+  reaches it.
 
   Each one checks `members:manage`, the organisation, the member whose
   authority it runs with (`memberAuthority`: the signed-in person, or an
@@ -56,11 +60,17 @@ import {
   `organization.invitation_created.v1` event of a creation or a renewal to the
   bus: the bus writes it and its outbox row, and its after-commit dispatch
   starts the invitation's email.
-  The other two write through the organisation management repository, which
-  records its own audit row, event and outbox row, as it did when the forms
-  called it directly; they return no event, and the scheduled outbox repair
-  delivers theirs. Every audit row and event records who acted: a person as
-  `user`, an operator as the `service` actor `operator:<lineage>` (F3-2).
+  Changing a member and revoking an invitation write through the
+  organisation management repository, which records its own audit row, event
+  and outbox row, as it did when the forms called it directly; they return no
+  event, and the scheduled outbox repair delivers theirs. Resending writes
+  through the same repository, which re-issues the invitation and records its
+  audit row; the command returns the invitation's
+  `organization.invitation_created.v1` event to the bus, as inviting does, so
+  the bus writes it and its outbox row and its after-commit dispatch starts
+  the same email a new invitation sends. Every audit row and event records
+  who acted: a person as `user`, an operator as the `service` actor
+  `operator:<lineage>` (F3-2).
 */
 
 /** The scope every organisation administration command requires. */
@@ -76,6 +86,8 @@ export const inviteOrganizationMemberCommandName = "invite_organization_member";
 export const setOrganizationMemberCommandName = "set_organization_member";
 export const revokeOrganizationInvitationCommandName =
   "revoke_organization_invitation";
+export const resendOrganizationInvitationCommandName =
+  "resend_organization_invitation";
 
 const organizationRole = z.enum(["owner", "admin", "member"]);
 
@@ -105,6 +117,7 @@ export const organizationAdministrationCommandInputSchemas = {
   [inviteOrganizationMemberCommandName]: inviteInput,
   [setOrganizationMemberCommandName]: memberInput,
   [revokeOrganizationInvitationCommandName]: invitationInput,
+  [resendOrganizationInvitationCommandName]: invitationInput,
 } as const;
 
 /** Whose authority a write runs under (`userId`, a person), and where. */
@@ -127,13 +140,32 @@ export interface OrganizationManagementMutation
 }
 
 /**
+ * What a resend issues in place of the invitation's current token: a fresh
+ * token hash, and the lifetime the new token runs for from the moment of the
+ * write.
+ */
+export interface InvitationReissue {
+  tokenHash: string;
+  expiresInSeconds: number;
+}
+
+/** The invitation a resend re-issued: no address, and no token. */
+export interface ReissuedInvitation {
+  id: string;
+  role: OrganizationRole;
+  expiresAt: Date;
+  version: number;
+}
+
+/**
  * The organisation management repository, as the commands reach it through the
  * unit of work. Each `authorize…` throws unless the acting person
  * (`target.userId`) may make the change: an active owner or admin of the
  * active organisation, and an owner where the change concerns an owner. It
  * throws `not_found` for a member or invitation the organisation does not
  * hold. Each write checks the same again, then the version and the write's own
- * rules, before it writes.
+ * rules, before it writes. Resending an invitation follows revoking one's
+ * rule: an owner invitation is an owner's to resend.
  */
 export interface OrganizationManagementPort {
   authorizeMemberChange(
@@ -156,6 +188,23 @@ export interface OrganizationManagementPort {
     mutation: OrganizationManagementMutation,
     invitationId: string,
   ): Promise<{ id: string; version: number }>;
+  authorizeInvitationResend(
+    target: OrganizationManagementTarget,
+    invitationId: string,
+  ): Promise<void>;
+  /**
+   * Re-issues a pending invitation: its token hash replaced by
+   * `reissue.tokenHash`, issued now for `reissue.expiresInSeconds`, at the
+   * next version, with any email its earlier issue still has scheduled
+   * suppressed and the audit row written. Throws `invalid_transition` for an
+   * invitation that is accepted, revoked or expired. Writes no event: the
+   * command returns the invitation's own to the bus.
+   */
+  resendInvitation(
+    mutation: OrganizationManagementMutation,
+    invitationId: string,
+    reissue: InvitationReissue,
+  ): Promise<ReissuedInvitation>;
 }
 
 function management(uow: UnitOfWork) {
@@ -359,5 +408,55 @@ export function createOrganizationAdministrationCommandDefinitions(dependencies:
     },
   };
 
-  return [invite, setMember, revokeInvitation];
+  const resendInvitation: CommandDefinition<unknown, JsonObject> = {
+    name: resendOrganizationInvitationCommandName,
+    parse: (input) => invitationInput.parse(input),
+    async authorize(context, rawInput, uow) {
+      const input = invitationInput.parse(rawInput);
+      await management(uow).authorizeInvitationResend(
+        administrationTarget(context, input.organizationId),
+        input.invitationId,
+      );
+    },
+    async execute(uow, context, rawInput, meta) {
+      const input = invitationInput.parse(rawInput);
+      const target = administrationTarget(context, input.organizationId);
+      // A new token, and the lifetime the members page's own invitation gets:
+      // to the recipient, a resend is a newly issued invitation.
+      const invitation = await management(uow).resendInvitation(
+        mutation(context, target, meta),
+        input.invitationId,
+        {
+          tokenHash: tokenHash(),
+          expiresInSeconds: defaultInvitationExpirySeconds,
+        },
+      );
+      return {
+        // No address and no token: the result is stored as the receipt.
+        result: {
+          id: invitation.id,
+          role: invitation.role,
+          expiresAt: invitation.expiresAt.toISOString(),
+          version: invitation.version,
+        },
+        aggregateId: invitation.id,
+        // The event a new invitation's email is sent for, at the invitation's
+        // new version and with exactly a new invitation's payload: every
+        // worker already deployed sends for it (`invitationCreatedEventData`).
+        events: [
+          dependencies.events.create(context, {
+            type: organizationInvitationCreatedEvent,
+            schemaVersion: 1,
+            aggregateType: "invitation",
+            aggregateId: invitation.id,
+            aggregateVersion: invitation.version,
+            causationId: context.correlationId,
+            data: invitationCreatedEventData(invitation),
+          }),
+        ],
+      };
+    },
+  };
+
+  return [invite, setMember, revokeInvitation, resendInvitation];
 }

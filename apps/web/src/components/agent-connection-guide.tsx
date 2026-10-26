@@ -1,4 +1,8 @@
+import { Panel, PanelHeader, Row } from "@cueplusplus/ui/chrome";
+import { CopyButton } from "@cueplusplus/ui/instruments";
 import { DescriptionList, Stack } from "@cueplusplus/ui/layout";
+
+import { sectionHeadingClasses } from "./section-heading.js";
 
 type AgentConnectionGuideProps = {
   baseUrl: string;
@@ -64,5 +68,57 @@ export function AgentConnectionGuide({
         command argument. A one-time key is shown only after issue or rotation.
       </p>
     </Stack>
+  );
+}
+
+/** This deployment's three agent-facing addresses, from its own base URL. */
+export type AgentEndpointSet = {
+  mcp: string;
+  rest: string;
+  metadata: string;
+};
+
+export function agentEndpoints(baseUrl: string): AgentEndpointSet {
+  return {
+    mcp: endpoint(baseUrl, "/mcp"),
+    rest: endpoint(baseUrl, "/api/v1"),
+    metadata: endpoint(baseUrl, "/.well-known/oauth-protected-resource/mcp"),
+  };
+}
+
+/**
+ * The endpoints panel of the agents page (ruling 258): one row per address,
+ * each with a copy control named for what it copies. Addresses only — no
+ * credential is ever part of one.
+ */
+export function AgentEndpoints({ endpoints }: { endpoints: AgentEndpointSet }) {
+  const rows = [
+    { label: "MCP endpoint", value: endpoints.mcp },
+    { label: "REST base URL", value: endpoints.rest },
+    { label: "OAuth resource metadata", value: endpoints.metadata },
+  ];
+  return (
+    <Panel>
+      <PanelHeader>
+        <h2 className={sectionHeadingClasses} id="agent-endpoints-heading">
+          This server’s endpoints
+        </h2>
+        <span className="text-fg-subtle">
+          Clients that support OAuth discovery need only the MCP endpoint.
+        </span>
+      </PanelHeader>
+      {rows.map((row) => (
+        <Row key={row.label}>
+          <span className="shrink-0 text-fg-subtle">{row.label}</span>
+          <code className="min-w-0 flex-1 truncate font-mono">{row.value}</code>
+          <CopyButton
+            aria-label={`Copy the ${row.label}`}
+            size="sm"
+            value={row.value}
+            variant="ghost"
+          />
+        </Row>
+      ))}
+    </Panel>
   );
 }

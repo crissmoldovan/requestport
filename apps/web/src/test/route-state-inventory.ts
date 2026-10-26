@@ -94,6 +94,14 @@ export const routeStateInventory: readonly RouteStateEntry[] = [
   },
   {
     area: "framework",
+    id: "boundary:error:(app)/settings",
+    kind: "error",
+    pattern: "/settings",
+    source: "(app)/settings/error.tsx",
+    states: ["error"],
+  },
+  {
+    area: "framework",
     id: "boundary:error:(app)/settings/appearance",
     kind: "error",
     pattern: "/settings/appearance",
@@ -162,6 +170,14 @@ export const routeStateInventory: readonly RouteStateEntry[] = [
     kind: "not-found",
     pattern: "/",
     source: "(app)/not-found.tsx",
+    states: ["not_found"],
+  },
+  {
+    area: "framework",
+    id: "boundary:not-found:(app)/settings",
+    kind: "not-found",
+    pattern: "/settings",
+    source: "(app)/settings/not-found.tsx",
     states: ["not_found"],
   },
   {
@@ -312,9 +328,24 @@ export const routeStateInventory: readonly RouteStateEntry[] = [
     kind: "route",
     pattern: "/requests",
     source: "(app)/requests/page.tsx",
-    // No `disabled`: the list draws a filter toolbar and links to the request
-    // it lists. Nothing on it is a control the application refuses — the
-    // submissions that can be refused live on the request itself.
+    // These are the states of the list with nothing selected, the address
+    // this row's acceptance cases open (`/requests`, acceptance-surfaces.ts):
+    // views and filters drawn as links, and a filter sheet whose form only
+    // navigates, so no `disabled`. With `?requestId=` the page also draws the
+    // selected request's next step, its Assign form for a reader who may
+    // assign (ruling 262), and its open questions' answer forms —
+    // `RequestTransitionForm`, `AssignRequestForm` and `AnswerQuestionForm`,
+    // the record's own — which can be pending, succeed, conflict, or ask
+    // before a destructive transition. This row does not declare those, because none of its cases
+    // selects a request. `route:/requests/[requestId]` declares all four; its
+    // `conflict` and `pending` cases run on the first form the record draws
+    // with a visible submit, the comment composer while the seeded request
+    // has no question, and its `success` and `destructive` are declined in
+    // acceptance-skip-rules.ts. So the transition form's confirmation and
+    // stale-version conflict, and the answer form's failures, are exercised
+    // by request-forms.dom.test.tsx, not by an acceptance case on either
+    // surface. Declaring the four here, with drivers that select a request,
+    // is a question for the driver (track-j.md, ruling 257's review round).
     states: ["default", "empty", "error", "loading"],
   },
   {
@@ -399,7 +430,8 @@ export const routeStateInventory: readonly RouteStateEntry[] = [
     ],
   },
   {
-    // Plan 13, F.3, linked from the primary navigation since F.3.1. It
+    // Plan 13, F.3, linked from the settings section navigation (ruling 256;
+    // from the primary navigation between F.3.1 and that ruling). It
     // draws its unavailable notice as its default content while operator
     // credentials are off, which is every local acceptance run: the switch is
     // unset there. Its list, form and actions are pinned by its own suites.

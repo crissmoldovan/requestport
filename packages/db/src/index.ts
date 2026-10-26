@@ -78,6 +78,13 @@ export {
 } from "./queries/agent-query-repository.js";
 export { createOperationsQueryRepository } from "./queries/operations-query-repository.js";
 export {
+  type AgentConnection,
+  createOverviewQueryRepository,
+  type FailedDeliveryItem,
+  type OverviewSummary,
+  type TriageRequestItem,
+} from "./queries/overview-query-repository.js";
+export {
   createProjectSettingsCommandRepository,
   createProjectSettingsRepository,
 } from "./queries/project-settings-repository.js";
